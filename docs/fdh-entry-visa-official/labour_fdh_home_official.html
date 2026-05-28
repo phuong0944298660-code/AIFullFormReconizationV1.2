@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<!-- METADATA -->
+	<title>Foreign Domestic Helpers - Home</title>
+	<meta charset="utf-8">
+	<meta http-equiv="X-UA-Compatible" content="IE=Edge,chrome=1" />
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+
+	<!-- CSS LIBRARIES -->
+	<link rel="stylesheet" href="/libs/bootstrap/css/bootstrap.min.css">
+
+	<!-- JAVASCRIPT LIBRARIES -->
+	<script src="/libs/jquery/jquery.min.js"></script>
+	<script src="/libs/jquery/jquery-migrate.min.js"></script>
+	<script src="/libs/bootstrap/js/bootstrap.min.js"></script>
+
+	<!-- CUSTOM CSS - GENERAL -->
+	<link rel="stylesheet" href="css/general/header.css">
+	<link rel="stylesheet" href="css/general/navigation_bar.css">
+	<link rel="stylesheet" href="css/general/footer.css">
+	<link rel="stylesheet" href="css/general/general.css">
+	<link rel="stylesheet" href="/css/common.css">
+		
+	<!-- CUSTOM CSS - THIS PAGE ONLY -->
+	<link rel="stylesheet" href="css/pages/home.css">
+
+
+	<!-- CUSTOM JAVASCRIPT -->
+	<script src="js/general/initial.js"></script>
+	<script src="js/page/home_news.js"></script>
+	<script>
+		function importantMessage(obj){
+			var currObj = obj.parent().parent();
+			currObj.hide();
+			currObj.next().show();
+		}
+
+		// Mark the latest review date to footer.
+		var lrd = "20 May 2026";
+	</script>
+	
+	<style type="text/css" id="changeFont"></style>
+	<Style>
+		sup.newTag:after{
+			content: "New";
+		}
+	</Style>
+
+	<!--[if lt IE 9]>
+	<script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+	<script src="libs/Respond-master/dest/respond.min.js"></script>
+	<![endif]-->
+</head>
+
+<body>
+	<!-- HEADER & BANNER & NAVIGATION BAR -->
+	<div id="includedHeader"></div>
+
+	<!-- MAIN CONTAINER -->
+	<div class="container">
+		<div style="position: relative;">
+			
+			<img src="/res/img/fdh_banner.jpg" class="img-responsive visible-lg" style="width: 100%;" alt="Foreign Domestic Helpers' Corner" title="Foreign Domestic Helpers' Corner" />
+			<img src="/res/img/fdh_banner.jpg" id="fdh_banner_mb" class="img-responsive visible-md visible-sm visible-xs" style="width: 100%;" alt="Foreign Domestic Helpers' Corner" title="Foreign Domestic Helpers' Corner" />
+			<div id="container_absolute_fdhc" style="background-clip: content-box; background:rgba(51,51,51,.5);">
+				<div class="row">
+					<div class="col-lg-2 col-md-1 visible-lg visible-md" style="top: 25px; left: 25px;"><img src="../res/img/caption_home_banner.gif"></img></div>
+					<div class="col-lg-10 col-md-12 col-xs-12" style="padding: 1.5em 2em 1em 2em; ">
+						<div class="row">
+							<div class="col-xs-6 col-md-6 col-lg-1_6">
+								<a href="../en/fdh_corner.html" class="btn btn-default btn-md btn-block inner_btn0" title="English"><span class="glyphicon glyphicon-arrow-right"></span> HELLO</a>
+							</div>
+							<div class="col-xs-6 col-md-6 col-lg-1_6">
+								<a href="../tagalog/fdh_corner.html" class="btn btn-default btn-md btn-block inner_btn0" title="Tagalog"><span class="glyphicon glyphicon-arrow-right"></span> KAMUSTA</a>
+							</div>
+							<div class="col-xs-6 col-md-6 col-lg-1_6">
+								<a href="../indonesia/fdh_corner.html" class="btn btn-default btn-md btn-block inner_btn0" title="Bahasa Indonesia"><span class="glyphicon glyphicon-arrow-right"></span> HALO</a>
+							</div>
+							<div class="col-xs-6 col-md-6 col-lg-1_6">
+								<a href="../thai/fdh_corner.html" class="btn btn-default btn-md btn-block inner_btn0" title="Thai"><span class="glyphicon glyphicon-arrow-right"></span> สวัสดี</a>
+							</div>
+							<div class="col-xs-6 col-md-6 col-lg-1_6">
+								<a href="../khmer/fdh_corner.html" class="btn btn-default btn-md btn-block inner_btn0" title="Khmer"><span class="glyphicon glyphicon-arrow-right"></span> សួស្តី</a>
+							</div>
+							<div class="col-xs-6 col-md-6 col-lg-1_6">
+								<a href="../urdu/fdh_corner.html" class="btn btn-default btn-md btn-block inner_btn0" title="Urdu"><span class="glyphicon glyphicon-arrow-right"></span> ہیلو</a>
+							</div>
+							<div class="col-xs-6 col-md-6 col-lg-1_6">
+								<a href="../myanmar/fdh_corner.html" class="btn btn-default btn-md btn-block inner_btn0" title="Myanmar language"><span class="glyphicon glyphicon-arrow-right"></span> ဟယ်လို</a>
+							</div>
+							<div class="col-xs-6 col-md-6 col-lg-1_6">
+								<a href="../hindi/fdh_corner.html" class="btn btn-default btn-md btn-block inner_btn0" title="Hindi"><span class="glyphicon glyphicon-arrow-right"></span> नमस्ते (हिंदी)</a>
+							</div>
+							<div class="col-xs-6 col-md-6 col-lg-1_6">
+								<a href="../bengali/fdh_corner.html" class="btn btn-default btn-md btn-block inner_btn0" title="Bengali"><span class="glyphicon glyphicon-arrow-right"></span> হ্যালো</a>
+							</div>
+							<div class="col-xs-6 col-md-6 col-lg-1_6">
+								<a href="../nepali/fdh_corner.html" class="btn btn-default btn-md btn-block inner_btn0" title="Nepali"><span class="glyphicon glyphicon-arrow-right"></span> नमस्ते (नेपाली)</a>
+							</div>
+							<div class="col-xs-6 col-md-6 col-lg-1_6">
+								<a href="../sinhala/fdh_corner.html" class="btn btn-default btn-md btn-block inner_btn0" title="Sinhala"><span class="glyphicon glyphicon-arrow-right"></span> හෙලෝ</a>
+							</div>
+							<div class="col-xs-6 col-md-6 col-lg-1_6">
+							  <a href="../punjabi/fdh_corner.html" class="btn btn-default btn-md btn-block inner_btn0" title="Punjabi"><span class="glyphicon glyphicon-arrow-right"></span> ਹੈਲੋ</a>
+							</div>
+							<div class="col-xs-6 col-md-6 col-lg-1_6">
+								<a href="../tc/fdh_corner.html" class="btn btn-default btn-md btn-block inner_btn0" title="繁"><span class="glyphicon glyphicon-arrow-right"></span> 你好 (繁)</a>
+							</div>
+							<div class="col-xs-6 col-md-6 col-lg-1_6">
+								<a href="../sc/fdh_corner.html" class="btn btn-default btn-md btn-block inner_btn0" title="简"><span class="glyphicon glyphicon-arrow-right"></span> 你好 (简)</a>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+		
+		<div class="row" style="padding-top: 2em;padding-bottom: 1em;">
+			<div class="lg-col-6 md-col-6 col-sm-6 col-xs-12">
+				<div class="blog-post-justify">
+					<p>
+						<h4 class="title"><strong>WELCOME MESSAGE</strong></h4>
+					</p>	
+
+					<p>
+						This portal provides information relating to employment of foreign domestic helpers (FDHs) in Hong Kong, including the policy on importation of FDHs, as well as the publication and publicity materials on the rights and obligations of FDHs and their employers under the labour laws and the <a href="../res/pdf/SEC_Eng.pdf">Standard Employment Contract</a> for hiring FDHs. Both FDHs and their employers are encouraged to read the information in this website as well as the relevant materials before entering into a contract, or during the course of employment. 
+					</p>
+					<p>
+						While it is not a requirement by the Hong Kong Special Administrative Region Government that employers must recruit FDHs through, or FDHs to obtain employment from, employment agencies (EAs), it is a very common channel through which Hong Kong people employ FDHs. Respective home countries of FDHs may also have such requirement and they vary across countries. FDHs and employers are also encouraged to read the <a href="engaging_ea.html">"Engaging an employment agency" section</a> for the points to note when using the service of EAs. They may also use the search engine in the page for <a href="http://www.eaa.labour.gov.hk/en/disclaimer.html" target="_blank">identifying EA(s)</a> with valid licence in Hong Kong. 
+					</p>
+					<p>
+						For matters relating to the eligibility criteria and procedures for applying for employment of FDHs, please visit the website of the <a href="http://www.immd.gov.hk/eng/services/visas/foreign_domestic_helpers.html" target="_blank">Immigration Department</a>.
+					</p>
+					
+				</div>
+				
+			</div>
+
+			<div class="col-lg-6 col-md-6 col-sm-6 visible-lg visible-md visible-sm" id="newsGlimpse">
+				<div style="padding: 7px 20px 10px 20px;" class="blog-post">
+					<div>
+						<p>
+							<h4 class="title"><strong>WHAT'S NEW </strong>
+								<div class="row pull-right" id="newsGlimpsePagination">
+									<div style="display: inline-block;"><img class="img-responsive" src="../res/img/btn_previous.png" id="previousHomeNews" style="display: none;" alt="Previous" title="Previous" /></div>
+									<div style="display: inline-block;"><img class="img-responsive" src="../res/img/btn_next.png" id="nextHomeNews" style="display: none;" alt="Next" title="Next" /></div>
+									<div style="display: inline-block;">&nbsp;&nbsp;&nbsp;&nbsp;</div>
+								</div>
+							</h4>
+						</p>
+					</div>
+
+					<div id="newsGlimpseContent"></div>
+				</div>		
+				
+			</div>
+		</div>
+
+		<div class="blog-post-justify" id="general_policy">
+		  <p>
+			<h4 class="title"><strong>GENERAL POLICY</strong></h4>
+		  </p>				
+          <p>
+            The Government has permitted the importation of foreign domestic helpers (FDHs) since the 1970's for meeting the shortage of local full-time live-in domestic helpers.  The arrangement is in line with the fundamental principle of the Government's labour policy that local workers should enjoy priority in employment.  Employers can only import workers if they have difficulty in recruiting suitable local workers in Hong Kong.
+          </p>
+          <p>
+            The Government has prescribed the <a href="../res/pdf/SEC_Eng.pdf">Standard Employment Contract (SEC)</a> (form ID 407) to protect the interests of FDHs and their employers. If you would like to obtain “Employment Contract for a Domestic Helper Recruited from Outside Hong Kong” (ID 407), please send your correspondence address and contact number by email to <a href="mailto:enquiry@immd.gov.hk" target="_blank">enquiry@immd.gov.hk</a> or by post to Information and Liaison Section, Upper Ground Floor, Administration Tower, Immigration Headquarters, 61 Po Yap Road, Tseung Kwan O, New Territories.
+          </p>
+          <p>
+            In addition to protection offered by labour legislations, FDHs enjoy additional protection, such as free accommodation, free food and free medical care by employers, as set out in the <a href="../res/pdf/SEC_Eng.pdf">SEC</a>. FDHs and their employers also have access to the free consultation and conciliation service provided by the Labour Department  (<a href="http://www.labour.gov.hk/eng/tele/lr1.htm" target="_blank">click here</a> for the addresses and contact details of offices of the Labour Relations Division of the Labour Department) in case of disputes. If no settlement could be reached by conciliation, the cases would be referred to the Labour Tribunal or the Minor Employment Claims Adjudication Board for adjudication.
+          </p>
+          <p>
+            To protect employers as well as the job opportunities of local workers, FDHs are not allowed to take up any other employment including part-time work, or to work at any places other than their employers’ addresses as specified in the signed contracts.
+          </p>
+          <p>
+            To provide a quick reference on the rights and obligations of employers and FDHs, the Labour Department has issued the <a href="../res/pdf/FDHguideEnglish.pdf">"Practical Guide for Employment of Foreign Domestic Helpers - What foreign domestic helpers and their employers should know"</a>, covering answers to some of the common questions raised by the FDHs and their employers. You may also visit the “Publicity Materials and related Publications” section for more materials relating to rights and obligations of FDHs and employers under the labour laws and SEC.
+          </p>
+          <p>
+            For FAQs on contractual and statutory entitlements of FDHs, please <a href="faq.html" >click here</a>.
+          </p>
+          <p>Related link: <a href="https://www.gov.hk/en/theme/guidebook/employment/family/foreigndomestichelper.htm" target="_blank">Hiring Foreign Domestic Helpers</a></p>			
+		</div>
+		<br/>
+		<div class="blog-post-justify">
+			<p>
+			  <h4 class="title"><strong>MINIMUM ALLOWABLE WAGE (MAW)</strong></h4>
+			</p>				
+			<p>
+				The MAW is the wage protection offered to FDHs. Employers must pay FDHs a salary that is not less than the prevailing MAW at the time of signing the contract. This safeguards FDHs against exploitation on the one hand, and protects local workers from competition with cheap foreign labour. The MAW will be reviewed regularly by the Hong Kong Special Administrative Region Government, having regard to the general economic and employment situation in Hong Kong.
+			</p>
+			<p>
+				With effect from 30 September 2025, the MAW for FDHs is $5,100 per month, which is applicable to employment contracts signed on or after 30 September 2025. The previous MAW was $4,990, applicable to contracts signed between 28 September 2024 to 29 September 2025.
+			</p>  
+		</div>		
+
+		<div id="important-messages">
+			<br>
+			<p>
+				<h4 class="title force_orange"><strong>IMPORTANT MESSAGES</strong></h4>
+			</p>		
+ 			<div class="covid19 covid19-quarantine-arrangements">		
+                <!-- <div class="briefing2" style="text-align:justify">
+                    <p><b>Labour Department to hold online briefing for employers of foreign domestic helpers</b></p>
+					<p>The Labour Department will hold an online briefing on the employment of foreign domestic helpers (FDHs) at 7pm on 10 October 2025 (Friday). 
+						Enrolment is now open.  The briefing will provide an overview of the employment rights and obligations of employers of FDHs.  
+						A representative from the Equal Opportunities Commission will also share the best practices for creating an inclusive workplace for FDHs.  
+						The briefing will be conducted in Cantonese and admission is free of charge.  FDH employers, especially first-time employers, are welcome to attend. 
+						Please click <a href="./news_detail.php?fromPage=news&year=briefing&n_id=1" target="_blank">here</a> for details.
+                    </p>
+                    <div style="clear:both"></div>
+                </div> -->
+			<div class="briefing">
+				<p><b>Labour Department to hold briefing for employers of foreign domestic helpers</b></p>
+				<p>The Labour Department (LD) will hold a briefing on the employment of foreign domestic helpers (FDHs) on 20 May 2026 (Wednesday), at 7pm at the Hall of Moreton Terrace Activities Centre, 20 Tung Lo Wan Drive, Causeway Bay. Enrolment is now open.  The briefing will provide an overview of the employment rights and obligations of employers of FDHs.  A representative from the Office of the Privacy Commissioner for Personal Data will also speak on the protection of personal data privacy for employers and FDHs.  The briefing will be conducted in Cantonese and admission is free.  FDH employers, especially first-time employers, are welcome to attend.  Please click <a href="./news_detail.php?fromPage=news&year=briefing&n_id=2" target="_blank">here</a> for details.</p>
+				<div style="clear:both"></div>
+			</div>
+            <div class="covid19 covid19-vaccination" >
+                <p><b>Labour Department highly concerned about the safety of foreign domestic helpers when cleaning outward-facing windows</b>&nbsp;</p>
+				<p>The Labour Department (LD) is highly concerned about the fatal accident that happened earlier on when a foreign domestic helper (FDH) was cleaning an outward-facing window.  LD reminds employers that the following two conditions must be complied with before requiring an FDH to clean the outside of any window which is not located on the ground level or adjacent to a balcony (on which it must be reasonably safe for the helper to work) or common corridor:</p>
+				<p>1. the window being cleaned is fitted with a grille which is locked or secured in a manner that prevents the grille from being opened; and</p>
+				<p>2. no part of the FDH’s body extends beyond the window ledge except the arms.</p>
+				<p>The above requirement is clearly stated in the Standard Employment Contract for FDHs which should be complied with by employers and FDHs.  If an employer requests an FDH to clean outward-facing windows in breach of the contract, the FDH should refuse such request.  FDHs can also seek assistance from LD through the dedicated FDH hotline at 2157 9537.</p>
+				<p>LD appeals to any member of the public who has witnessed an FDH performing duties in an unsafe situation (e.g. work or stand at height without safety support) or in face of immediate danger to report the matter to the Police immediately.</p>
+                <div style="clear:both"></div>
+            </div>				
+			<div class="increase-holidays">
+				<p><b>Increase of Statutory Holidays</b></p>
+				<p>Starting from 2026, Easter Monday will be a newly added statutory holiday under the Employment Ordinance. For details, please visit: <a href="https://www.labour.gov.hk/eng/news/EAO2021.htm" target="_blank">https://www.labour.gov.hk/eng/news/EAO2021.htm</a></p>
+				<div style="clear:both"></div>
+			</div>
+		</div>				
+		</div>
+		
+		<div id="useful_telephone" style="padding-bottom: 3em;"></div>
+
+		<div class="row" style="padding-bottom: 3em;">
+			<div class="col-lg-12 col-sm-12 col-xs-12" style="background-color:white;">
+				<div class="col-lg-2 col-md-2 col-sm-4 col-xs-6 buttonIconArea">
+					<div class="buttonName"><a href="news.html">What's New</a></div>
+					<div class="">
+						<a href="news.html">
+							<img class="img-responsive center-block buttonIcon" src="../res/img/btn_new.png" alt="Button link to What's New page" title="Button link to What's new page" />
+						</a>
+					</div>
+				</div>
+				<div class="col-lg-2 col-md-2 col-sm-4 col-xs-6 buttonIconArea">
+					<div class="buttonName"><a href="publication.html">Publicity Materials and Related Publications</a></div>
+					<div class="">				
+						<a href="publication.html">
+							<img class="img-responsive center-block buttonIcon" src="../res/img/btn_publicity.png" alt="Button link to Publicity materials and related publications page" title="Button link to Publicity materials and related publications page" />
+						</a>
+					</div>
+				</div>
+				<div class="col-lg-2 col-md-2 col-sm-4 col-xs-6 buttonIconArea">
+					<div class="buttonName"><a href="engaging_ea.html">Engaging an Employment Agency</a></div>
+					<div class="">
+						<a href="engaging_ea.html">
+							<img class="img-responsive center-block buttonIcon" src="../res/img/btn_engaging.png" alt="Button link to Engaging an employment agency page" title="Button link to Engaging an employment agency page" />
+						</a>
+					</div>
+				</div>
+				<div class="col-lg-2 col-md-2 col-sm-4 col-xs-6 buttonIconArea">
+					<div class="buttonName"><a href="faq.html">Frequently Asked Questions</a></div>
+					<div class="">
+						<a href="faq.html">
+							<img class="img-responsive center-block buttonIcon" src="../res/img/btn_faq.png" alt="Button link to FAQ page" title="Button link to FAQ page" />
+						</a>
+					</div>
+				</div>				
+				<div class="col-lg-2 col-md-2 col-sm-4 col-xs-6 buttonIconArea">
+					<div class="buttonName"><a href="links.html">Links</a></div>
+					<div class="">
+						<a href="links.html">
+							<img class="img-responsive center-block buttonIcon" src="../res/img/btn_links.png" alt="Button link to Links page" title="Button link to Links page" />
+						</a>
+					</div>
+				</div>
+				<div class="col-lg-2 col-md-2 col-sm-4 col-xs-6 buttonIconArea">
+					<div class="buttonName"><a href="contact_us.html">Contact Us</a></div>
+					<div class="">
+						<a href="contact_us.html">
+							<img class="img-responsive center-block buttonIcon" src="../res/img/btn_contact_us.png" alt="Button link to Contact us page" title="Button link to Contact us page" />
+						</a>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<hr>
+
+		
+			<div class="col-xs-12 col-sm-12" id="departmentalBanner">
+				<!-- DEPARTMENTAL BANNER -->
+				<div class="col-lg-2 col-md-2 col-sm-4 col-xs-6">
+					<div class="panel-body panel-body-custom-iconList">
+						<a href="http://www.lwb.gov.hk"  target="_blank">
+							<img src="../res/img/logo_labour_bureau.png" class="img-responsive" 
+								alt="Labour and Welfare Bureau of the Government of the Hong Kong Special Administrative Region" 
+								title="Labour and Welfare Bureau of the Government of the Hong Kong Special Administrative Region" />
+						</a>
+					</div>
+				</div>
+
+				<div class="col-lg-2 col-md-2 col-sm-4 col-xs-6">
+					<div class="panel-body panel-body-custom-iconList">
+						<a href="http://www.labour.gov.hk" target="_blank">
+							<img src="../res/img/logo_labour_department.png" class="img-responsive" 
+								alt="Labour Department of the Government of the Hong Kong Special Administrative Region" 
+								title="Labour Department of the Government of the Hong Kong Special Administrative Region"/>
+						</a>
+					</div>
+				</div>
+
+				<div class="col-lg-2 col-md-2 col-sm-4 col-xs-6">
+					<div class="panel-body panel-body-custom-iconList">
+						<a href="http://www.immd.gov.hk"  target="_blank">
+							<img src="../res/img/logo_immigration_department.png" class="img-responsive" 
+								alt="Immigration Department of the Hong Kong Special Administrative Region" 
+								title="Immigration Department of the Hong Kong Special Administrative Region" />
+						</a>
+					</div>
+				</div>
+
+				<div class="col-lg-2 col-md-2 col-sm-4 col-xs-6">
+					<div class="panel-body panel-body-custom-iconList">
+						<center>
+							<a href="http://www.sb.gov.hk/eng/special/pdfs/Action%20Plan%20to%20Tackle%20TIP%20and%20to%20Protection%20FDHs.pdf"  target="_blank">
+								<img src="../res/img/TIP_Action_Plan_button_eng.jpg" class="img-responsive" 
+									alt="Action Plan to Tackle Trafficking in Persons and to Enhance Protection of Foreign Domestic Helpers" 
+									title="Action Plan to Tackle Trafficking in Persons and to Enhance Protection of Foreign Domestic Helpers" />
+							</a>
+						</center>
+					</div>
+				</div>
+
+				<div class="col-lg-2 col-md-2 col-sm-4 col-xs-6">
+					<div class="panel-body panel-body-custom-iconList">
+						<a href="http://www.oshc.org.hk/eng/main/news/"  target="_blank">
+							<img src="../res/img/logo_oshc.png" class="img-responsive" 
+								alt="Occupational Safety and Health Council" 
+								title="Occupational Safety and Health Council" />
+						</a>
+					</div>
+				</div>
+
+				<div class="col-lg-2 col-md-2 col-sm-4 col-xs-6">
+					<div class="panel-body panel-body-custom-iconList">
+						<a href="http://www.eaa.labour.gov.hk/en/home.html"  target="_blank">
+							<img src="../res/img/logo_eaa_en.png" class="img-responsive" 
+								alt="Labour Department Employment Agencies Portal" 
+								title="Labour Department Employment Agencies Portal" />
+						</a>
+					</div>
+				</div>
+				<!-- END OF DEPARTMENTAL BANNER -->
+			</div>
+		</div>
+	</div> 
+	<!-- END OF MAIN CONTAINER -->
+			
+	<!-- POP-UP MSG -->
+
+	<div class="modal fade urgent-popup-message" id="urgent-popup-message" tabindex="-1" role="dialog" aria-labelledby="myLargeModalLabel" aria-hidden="true">
+		<div class="modal-dialog modal-lg">
+			<div class="modal-content">
+				<div class="modal-header">
+					<button type="button" class="close" data-dismiss="modal" aria-label="Close">
+					<span aria-hidden="true">&times;</span>
+					</button><br/>
+				</div>
+				<div class="modal-body row">
+					
+					<a href="news_detail.php?fromPage=news&year=briefing&n_id=1" target="_blank">
+						<img src="/res/img/briefing_EN.jpg" alt="Briefing for Foreign Domestic Helpers on their Employment Rights" style="display: block; max-width: 60%; width:60%; height: auto; margin-left: auto; margin-right: auto;" />
+					</a>
+
+				</div>
+			</div>
+		</div>
+	</div>
+	
+	<!-- <div class="modal fade urgent-popup-message" id="urgent-popup-message" tabindex="-1" role="dialog" aria-labelledby="myLargeModalLabel" aria-hidden="true">
+		<div class="modal-dialog modal-lg">
+			<div class="modal-content">
+				<div class="modal-header">
+					<button type="button" class="close" data-dismiss="modal" aria-label="Close">
+					<span aria-hidden="true">&times;</span>
+					</button><br/>
+				</div>
+				<div class="modal-body row">
+					<a href="news_detail.php?fromPage=news&year=briefing&n_id=2" target="_blank">
+						<img src="/res/img/ER_briefing_EN.jpg" alt="Briefing on Employment of Foreign Domestic Helpers for Employers" style="display: block; max-width: 60%; width:60%; height: auto; margin-left: auto; margin-right: auto;" />
+					</a>
+				</div>
+			</div>
+		</div>
+	</div> -->
+
+	
+			 <!-- <div class="modal fade urgent-popup-message" id="urgent-popup-message2" tabindex="-1" role="dialog"
+            aria-labelledby="myLargeModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button><br />
+                    </div>
+                    <div class="modal-body row">
+                        <a href="https://www.labour.gov.hk/eng/news/EAO2021.htm" target="_blank">
+                            <img src="\res\img\Increase_Of_Statutory_Holidays.jpg" alt="Increase_Of_Statutory_Holidays"
+                                style="display: block; max-width: 60%; width:auto; height: auto; margin-left: auto; margin-right: auto;" />
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>	 -->
+        <script>
+            $(document).ready(function () {
+                if ($('#urgent-popup-message') != undefined) {
+                    $('#urgent-popup-message').modal();
+                }
+                $("#urgent-popup-message").click(function(e){
+                    if(e.target.id == "urgent-popup-message"){
+                        $('#urgent-popup-message2').modal();
+                    }
+                });
+                $("#urgent-popup-message2").click(function(e){
+                    if(e.target.id == "urgent-popup-message2"){
+                        $('#urgent-popup-message3').modal();
+                    }
+                });
+            })
+        </script>
+	
+	<!-- END OF POP-UP MSG -->
+
+	<!-- FOOTER -->
+	<div id="includedFooter"></div>
+</body>
+
+</html>

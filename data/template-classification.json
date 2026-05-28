@@ -6,9 +6,9 @@
     "pageCount" : 4,
     "matchSource" : "visual_layout_footer",
     "confidence" : 90,
-    "structureHash" : "d293e05326f3eb82",
+    "structureHash" : "fec483b166b46dce",
     "firstSeenAt" : "2026-05-25 15:14:07",
-    "lastSeenAt" : "2026-05-25 15:50:27"
+    "lastSeenAt" : "2026-05-28 17:55:39"
   }, {
     "filename" : "陈丽萍-A.pdf",
     "templateId" : "id988a_2024_06",
@@ -16,9 +16,9 @@
     "pageCount" : 5,
     "matchSource" : "visual_layout_footer",
     "confidence" : 92,
-    "structureHash" : "1480f3a692fa70aa",
+    "structureHash" : "280f6f677211b755",
     "firstSeenAt" : "2026-05-25 15:14:18",
-    "lastSeenAt" : "2026-05-25 20:13:07"
+    "lastSeenAt" : "2026-05-28 17:57:58"
   }, {
     "filename" : "陈丽萍-B.pdf",
     "templateId" : "id988b_2024_06",
@@ -26,9 +26,9 @@
     "pageCount" : 4,
     "matchSource" : "visual_layout_footer",
     "confidence" : 90,
-    "structureHash" : "7ef0dd11322fea72",
+    "structureHash" : "5a6cfd2df0b2bd60",
     "firstSeenAt" : "2026-05-25 15:14:28",
-    "lastSeenAt" : "2026-05-25 15:14:28"
+    "lastSeenAt" : "2026-05-28 17:54:05"
   }, {
     "filename" : "陈志萍-B.pdf",
     "templateId" : "id988b_2024_06",
@@ -38,7 +38,7 @@
     "confidence" : 90,
     "structureHash" : "b549ae634026313f",
     "firstSeenAt" : "2026-05-25 15:14:37",
-    "lastSeenAt" : "2026-05-25 15:14:37"
+    "lastSeenAt" : "2026-05-28 10:32:26"
   }, {
     "filename" : "何嘉萱-A测试.pdf",
     "templateId" : "id988a_2024_06",
@@ -118,7 +118,7 @@
     "confidence" : 92,
     "structureHash" : "391b96550b318251",
     "firstSeenAt" : "2026-05-25 15:15:48",
-    "lastSeenAt" : "2026-05-25 15:15:48"
+    "lastSeenAt" : "2026-05-26 09:23:09"
   }, {
     "filename" : "梁静娴-B-V7(P1转换雇工聘用).pdf",
     "templateId" : "id988b_2024_06",
@@ -168,6 +168,16 @@
     "confidence" : 90,
     "structureHash" : "a5b17035d8321f6c",
     "firstSeenAt" : "2026-05-25 15:16:04",
-    "lastSeenAt" : "2026-05-25 15:16:04"
+    "lastSeenAt" : "2026-05-26 10:06:48"
+  }, {
+    "filename" : "ID988A_06-2024.pdf",
+    "templateId" : "id988a_2024_06",
+    "footerId" : "ID 988A (06/2024)",
+    "pageCount" : 5,
+    "matchSource" : "pdf_text_footer",
+    "confidence" : 98,
+    "structureHash" : "7d6a34999d16b577",
+    "firstSeenAt" : "2026-05-28 11:26:55",
+    "lastSeenAt" : "2026-05-28 11:26:55"
   } ]
 }

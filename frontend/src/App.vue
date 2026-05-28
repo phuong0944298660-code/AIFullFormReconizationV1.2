@@ -1,615 +1,659 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
-  visibleOcrPages,
-  responseJsonPreview,
-  structuredJsonPreview,
-  pageStructuredFieldCount,
-  structuredFieldRows,
-  pageFieldConclusion,
-  documentFieldConclusion,
-  cropPlaceholderText
-} from './ocrPresentation.js'
-import { pageProgressItems, recognitionProgressState } from './progressState.js'
-import {
-  extractionModeDisplayLabel,
-  LOCAL_MODEL_LABEL,
-  modelDisplayLabel,
-  normalizeModelOptions
-} from './modelDisplay.js'
+  applicationTypes,
+  buildReviewResult,
+  buildUploadedFiles,
+  materials,
+  scenarios
+} from './fdhMockData.js'
 
-const apiBase = import.meta.env.VITE_API_BASE || ''
-const runtimeState = getRuntimeState()
-
-const file = ref(null)
+const selectedApplicationTypeId = ref(applicationTypes[0].id)
+const selectedScenarioId = ref('missing_core')
+const uploadedFiles = ref([])
+const uploadedFileObjects = ref([])
+const reviewResult = ref(null)
+const processing = ref(false)
+const fieldFilter = ref('all')
 const fileInput = ref(null)
-const response = ref(runtimeState.response || null)
-const activePage = ref(runtimeState.activePage || 1)
-const resultTab = ref(runtimeState.resultTab || 'fields')
-const loading = ref(runtimeState.loading || false)
-const error = ref(runtimeState.error || '')
-const progress = ref(runtimeState.progress || 0)
-const progressStage = ref(runtimeState.progressStage || '')
-const progressDetail = ref(runtimeState.progressDetail || '')
-const jobStatus = ref(runtimeState.jobStatus || null)
-const activeJobId = ref(runtimeState.activeJobId || '')
-const modelOptions = ref(normalizeModelOptions(runtimeState.modelOptions || []))
-const selectedModelId = ref(
-  modelOptions.value.some((model) => model.id === runtimeState.selectedModelId)
-    ? runtimeState.selectedModelId
-    : ''
-)
-let activeRunId = 0
+const jobStatus = ref(null)
+const apiError = ref('')
+const dragActive = ref(false)
+let uploadSequence = 0
+let uploadBatchSequence = 0
+const FDH_JOB_POLL_INTERVAL_MS = 1000
+const FDH_JOB_POLL_LIMIT = 1500
 
-const pages = computed(() => response.value?.pages || [])
-const documentPages = computed(() => visibleOcrPages(pages.value))
-const currentPage = computed(() => {
-  return pages.value.find((page) => page.page === activePage.value) || pages.value[0] || null
+const selectedApplicationType = computed(() => {
+  return applicationTypes.find((item) => item.id === selectedApplicationTypeId.value) || applicationTypes[0]
 })
-const currentPageIndex = computed(() => {
-  const index = pages.value.findIndex((page) => page.page === activePage.value)
-  return index >= 0 ? index + 1 : 0
+
+const selectedScenario = computed(() => {
+  return scenarios.find((item) => item.id === selectedScenarioId.value) || scenarios[0]
 })
-const totalVisibleLineCount = computed(() => {
-  return documentPages.value.reduce((total, page) => total + page.visibleLines.length, 0)
+
+const checklistPreview = computed(() => {
+  return buildReviewResult(selectedApplicationTypeId.value, selectedScenarioId.value).materials
 })
-const totalHighlightedLineCount = computed(() => {
-  return documentPages.value.reduce((total, page) => total + page.highlightedLineCount, 0)
+
+const fieldRows = computed(() => reviewResult.value?.fields || [])
+
+const filteredFields = computed(() => {
+  const rows = fieldRows.value
+  if (fieldFilter.value === 'issues') return rows.filter((field) => field.status === 'fail')
+  if (fieldFilter.value === 'review') return rows.filter((field) => field.status === 'review')
+  if (fieldFilter.value === 'required') return rows.filter((field) => field.required)
+  return rows
 })
-const totalFilteredLineCount = computed(() => {
-  return documentPages.value.reduce((total, page) => total + page.filteredLineCount, 0)
+
+const blockingFindings = computed(() => {
+  if (!reviewResult.value) return []
+  const materialFindings = reviewResult.value.materials
+    .filter((item) => item.blocking && (item.status === 'fail' || item.status === 'review'))
+    .map((item) => ({
+      id: `material:${item.id}`,
+      status: item.status,
+      title: item.status === 'fail' ? `缺少核心材料：${item.shortName}` : `材料需复核：${item.shortName}`,
+      text: item.statusText,
+      source: `${item.shortName} · ${item.templateId}`
+    }))
+
+  const fieldFindings = reviewResult.value.fields
+    .filter((field) => field.blocking && (field.status === 'fail' || field.status === 'review'))
+    .map((field) => ({
+      id: `field:${field.key}`,
+      status: field.status,
+      title: field.label,
+      text: field.issue || field.rule,
+      source: field.sources.length
+        ? field.sources.map((source) => `${source.documentName} · ${source.section} · ${source.fieldName}`).join('；')
+        : '未取得可用字段证据'
+    }))
+
+  return [...materialFindings, ...fieldFindings]
 })
-const jsonPreview = computed(() => responseJsonPreview(response.value))
-const structuredPreview = computed(() => structuredJsonPreview(response.value))
-const currentPageFieldRows = computed(() => {
-  if (!currentPage.value) return []
-  return structuredFieldRows(response.value, currentPage.value.page)
+
+const nonBlockingMaterialHints = computed(() => {
+  if (!reviewResult.value) return []
+  return reviewResult.value.materials.filter((item) => !item.blocking && item.status === 'warn')
 })
-const currentPageConclusion = computed(() => pageFieldConclusion(currentPageFieldRows.value))
-const globalFieldConclusion = computed(() => documentFieldConclusion(response.value))
-const selectedModel = computed(() => {
-  return modelOptions.value.find((model) => model.id === selectedModelId.value) || modelOptions.value[0] || null
-})
-const selectedModelLabel = computed(() => modelDisplayLabel(selectedModel.value, LOCAL_MODEL_LABEL))
-const selectedModelUnavailableReason = computed(() => {
-  if (!selectedModel.value || selectedModel.value.available !== false) return ''
-  return selectedModel.value.unavailableReason || '该模型未配置 API Key'
-})
-const responseExtractionMode = computed(() => extractionModeDisplayLabel(response.value))
-const currentPageFieldSections = computed(() => {
-  const groups = new Map()
-  for (const row of currentPageFieldRows.value) {
-    const section = row.section || '未分组字段'
-    if (!groups.has(section)) groups.set(section, [])
-    groups.get(section).push(row)
+
+watch([selectedApplicationTypeId, selectedScenarioId], () => {
+  fieldFilter.value = 'all'
+  apiError.value = ''
+  if (uploadedFiles.value.length && !uploadedFileObjects.value.length) {
+    uploadedFiles.value = buildUploadedFiles(selectedScenarioId.value)
   }
-  return Array.from(groups, ([title, rows]) => ({ title, rows }))
+  if (reviewResult.value?.scenarioId) {
+    reviewResult.value = buildReviewResult(selectedApplicationTypeId.value, selectedScenarioId.value)
+  }
 })
-const jobProgressItems = computed(() => pageProgressItems(jobStatus.value))
-
-watch(
-  [
-    response,
-    activePage,
-    resultTab,
-    loading,
-    error,
-    progress,
-    progressStage,
-    progressDetail,
-    jobStatus,
-    activeJobId,
-    modelOptions,
-    selectedModelId
-  ],
-  persistRuntimeState,
-  { deep: false }
-)
-
-function onFileChange(event) {
-  setFile(event.target.files?.[0])
-}
-
-function onDrop(event) {
-  setFile(event.dataTransfer.files?.[0])
-}
-
-async function setFile(selected) {
-  if (!selected) return
-  activeRunId += 1
-  await cancelActiveJob()
-  file.value = selected
-  response.value = null
-  activePage.value = 1
-  resultTab.value = 'fields'
-  error.value = ''
-  loading.value = false
-  jobStatus.value = null
-  clearLastJobId()
-  persistRuntimeState()
-}
 
 function openFilePicker() {
   fileInput.value?.click()
 }
 
-async function submitOcr() {
-  if (!file.value || loading.value) return
-  await cancelActiveJob()
-  loading.value = true
-  error.value = ''
-  response.value = null
-  const runId = activeRunId + 1
-  activeRunId = runId
-  applyJobStatus({
-    status: 'uploading',
-    progress: 0,
-    message: '正在上传并创建识别任务。',
-    pages: []
-  })
-
-  try {
-    const body = new FormData()
-    body.append('file', file.value)
-    if (selectedModelId.value) body.append('modelId', selectedModelId.value)
-    const startResult = await fetch(`${apiBase}/api/ocr/jobs`, { method: 'POST', body })
-    if (!startResult.ok) {
-      const text = await startResult.text()
-      throw new Error(text || `HTTP ${startResult.status}`)
-    }
-    const startedJob = await startResult.json()
-    rememberJobId(startedJob.jobId)
-    applyJobStatus(startedJob)
-    const completedJob = await pollJobUntilComplete(startedJob.jobId, runId)
-    applyCompletedJob(completedJob, runId)
-  } catch (exception) {
-    if (runId === activeRunId) {
-      clearLastJobId()
-      error.value = `LLM 结构化识别未完成：${exception.message || '请确认后端已启动并配置 LLM_API_KEY'}`
-      applyJobStatus({
-        status: 'failed',
-        progress: 0,
-        message: exception.message || '识别任务失败。',
-        error: exception.message || '识别任务失败。',
-        pages: jobStatus.value?.pages || []
-      })
-    }
-  } finally {
-    if (runId === activeRunId) {
-      loading.value = false
-    }
-  }
+function handleFileSelection(event) {
+  const files = Array.from(event.target.files || [])
+  handleSelectedFiles(files)
 }
 
-async function fetchModelOptions() {
-  try {
-    const result = await fetch(`${apiBase}/api/llm/models`)
-    if (!result.ok) throw new Error(`HTTP ${result.status}`)
-    const payload = await result.json()
-    const models = Array.isArray(payload.models) ? payload.models : []
-    modelOptions.value = models.length ? normalizeModelOptions(models) : fallbackModelOptions()
-    ensureSelectedModel(payload.defaultModelId)
-  } catch {
-    modelOptions.value = fallbackModelOptions()
-    ensureSelectedModel()
-  }
+function handleFileDrop(event) {
+  dragActive.value = false
+  if (processing.value) return
+  const files = Array.from(event.dataTransfer?.files || [])
+  handleSelectedFiles(files)
 }
 
-function ensureSelectedModel(defaultModelId = '') {
-  const models = modelOptions.value
-  if (!models.length) return
-  const current = models.find((model) => model.id === selectedModelId.value && model.available !== false)
-  if (current) return
-  const preferred = models.find((model) => model.id === defaultModelId && model.available !== false)
-  const selected = preferred || models.find((model) => model.selected && model.available !== false) || models.find((model) => model.available !== false) || models[0]
-  selectedModelId.value = selected.id
-}
-
-function fallbackModelOptions() {
-  return [
-    {
-      id: 'local-qwen3.6-35b-a3b',
-      label: LOCAL_MODEL_LABEL,
-      model: 'Qwen3.6-35B-A3B',
-      provider: 'OpenAI-compatible local gateway',
-      available: true,
-      selected: true,
-      unavailableReason: ''
-    }
+function handleSelectedFiles(files) {
+  if (!files.length) return
+  const batchNo = uploadBatchSequence + 1
+  uploadBatchSequence = batchNo
+  const entries = files.map((file) => ({
+    uploadId: `upload-${Date.now()}-${uploadSequence += 1}`,
+    batchNo,
+    file
+  }))
+  uploadedFileObjects.value = [...uploadedFileObjects.value, ...entries]
+  uploadedFiles.value = [
+    ...uploadedFiles.value,
+    ...entries.map((entry) => ({
+      uploadId: entry.uploadId,
+      batchNo: entry.batchNo,
+      materialId: 'pending',
+      documentName: '待识别',
+      filename: entry.file.name,
+      pages: '待识别',
+      footerId: '等待开始识别',
+      size: entry.file.size
+    }))
   ]
-}
-
-async function pollJobUntilComplete(jobId, runId) {
-  if (!jobId) throw new Error('后端没有返回识别任务 ID。')
-  while (runId === activeRunId) {
-    await wait(1000)
-    if (runId !== activeRunId) break
-    const status = await fetchJobStatus(jobId)
-    if (runId !== activeRunId) break
-    applyJobStatus(status)
-    if (status.status === 'completed') return status
-    if (status.status === 'canceled') {
-      throw new Error(status.message || '识别任务已取消。')
-    }
-    if (status.status === 'failed') {
-      throw new Error(status.error || status.message || '识别任务失败。')
-    }
-  }
-  throw new Error('识别任务已取消。')
-}
-
-async function fetchJobStatus(jobId) {
-  const result = await fetch(`${apiBase}/api/ocr/jobs/${encodeURIComponent(jobId)}`)
-  if (!result.ok) {
-    const text = await result.text()
-    throw new Error(text || `HTTP ${result.status}`)
-  }
-  return result.json()
-}
-
-async function restoreLastJob() {
-  const jobId = activeJobId.value
-  if (!jobId || response.value) return
-  const runId = activeRunId + 1
-  activeRunId = runId
-  loading.value = true
-  error.value = ''
-  applyJobStatus({
-    status: 'queued',
-    progress: 0,
-    message: '正在恢复上一次识别结果。',
-    pages: []
-  })
-  try {
-    const status = await fetchJobStatus(jobId)
-    if (runId !== activeRunId) return
-    applyJobStatus(status)
-    if (status.status === 'completed') {
-      applyCompletedJob(status, runId)
-      return
-    }
-    if (status.status === 'failed' || status.status === 'canceled') {
-      clearLastJobId()
-      return
-    }
-    const completedJob = await pollJobUntilComplete(jobId, runId)
-    applyCompletedJob(completedJob, runId)
-  } catch {
-    if (runId === activeRunId) {
-      clearLastJobId()
-    }
-  } finally {
-    if (runId === activeRunId) {
-      loading.value = false
-    }
-  }
-}
-
-function applyCompletedJob(completedJob, runId) {
-  if (runId !== activeRunId) return
-  if (!completedJob?.result) {
-    throw new Error('后端返回完成状态，但没有返回识别结果。')
-  }
-  response.value = completedJob.result
-  activePage.value = response.value?.pages?.[0]?.page || 1
-  resultTab.value = 'fields'
-  applyJobStatus(completedJob)
-  persistRuntimeState()
-}
-
-function applyJobStatus(status) {
-  jobStatus.value = status
-  const state = recognitionProgressState(status)
-  progress.value = state.percent
-  progressStage.value = state.stage
-  progressDetail.value = state.detail
-  persistRuntimeState()
-}
-
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-function selectPage(page) {
-  activePage.value = page
-  persistRuntimeState()
-}
-
-function pageSignalCount(page) {
-  const documentPage = documentPages.value.find((item) => item.page === page.page)
-  return pageStructuredFieldCount(response.value, page.page) || documentPage?.visibleLines.length || 0
-}
-
-function confidenceClass(confidence) {
-  if (confidence >= 85) return 'confidence-high'
-  if (confidence >= 70) return 'confidence-medium'
-  return 'confidence-low'
-}
-
-function characterTitle(segment) {
-  if (!segment?.reviewFlag) return ''
-  const reasons = []
-  if (segment.status.includes('low_confidence')) reasons.push(`综合置信度 ${segment.confidence}%`)
-  if (segment.status.includes('qwen_low_confidence')) reasons.push('Qwen 字符置信度低')
-  if (segment.status.includes('no_bbox_evidence')) reasons.push('缺少清晰字符坐标证据')
-  if (segment.status.includes('format_invalid')) reasons.push('字段格式校验未通过')
-  return reasons.join('；')
-}
-
-async function reset() {
-  activeRunId += 1
-  await cancelActiveJob()
-  file.value = null
-  response.value = null
-  activePage.value = 1
-  resultTab.value = 'fields'
-  error.value = ''
-  progress.value = 0
-  progressStage.value = ''
-  progressDetail.value = ''
+  reviewResult.value = null
   jobStatus.value = null
-  loading.value = false
-  clearLastJobId()
-  if (fileInput.value) fileInput.value.value = ''
-  persistRuntimeState()
-}
-
-function formatSize(bytes) {
-  if (!bytes) return ''
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
-}
-
-function rememberJobId(jobId) {
-  activeJobId.value = jobId || ''
-}
-
-function clearLastJobId() {
-  activeJobId.value = ''
-}
-
-async function cancelActiveJob() {
-  const jobId = activeJobId.value
-  if (!jobId) return
-  clearLastJobId()
-  try {
-    await fetch(`${apiBase}/api/ocr/jobs/${encodeURIComponent(jobId)}`, { method: 'DELETE' })
-  } catch {
-    // Cancellation is best effort; the next run should not be blocked by it.
+  apiError.value = ''
+  if (fileInput.value) {
+    fileInput.value.value = ''
   }
 }
 
-function getRuntimeState() {
-  if (typeof window === 'undefined') return {}
-  window.__AIFULLFORMRECONIZATION_STATE__ ||= {}
-  return window.__AIFULLFORMRECONIZATION_STATE__
+function handleDragEnter() {
+  if (!processing.value) {
+    dragActive.value = true
+  }
 }
 
-function persistRuntimeState() {
-  runtimeState.response = response.value
-  runtimeState.activePage = activePage.value
-  runtimeState.resultTab = resultTab.value
-  runtimeState.loading = loading.value
-  runtimeState.error = error.value
-  runtimeState.progress = progress.value
-  runtimeState.progressStage = progressStage.value
-  runtimeState.progressDetail = progressDetail.value
-  runtimeState.jobStatus = jobStatus.value
-  runtimeState.activeJobId = activeJobId.value
-  runtimeState.modelOptions = modelOptions.value
-  runtimeState.selectedModelId = selectedModelId.value
+function handleDragLeave(event) {
+  if (!event.currentTarget.contains(event.relatedTarget)) {
+    dragActive.value = false
+  }
 }
 
-onMounted(() => {
-  fetchModelOptions()
-  restoreLastJob()
-})
+function simulateUpload() {
+  uploadedFileObjects.value = []
+  uploadBatchSequence = 0
+  uploadedFiles.value = buildUploadedFiles(selectedScenarioId.value)
+  reviewResult.value = null
+  jobStatus.value = null
+  apiError.value = ''
+}
 
-onBeforeUnmount(() => {
-  activeRunId += 1
-})
+async function startRecognition() {
+  if (processing.value) return
+  if (uploadedFileObjects.value.length) {
+    await startBackendRecognition()
+    return
+  }
+  if (!uploadedFiles.value.length) simulateUpload()
+  processing.value = true
+  reviewResult.value = null
+  window.setTimeout(() => {
+    reviewResult.value = buildReviewResult(selectedApplicationTypeId.value, selectedScenarioId.value)
+    processing.value = false
+  }, 700)
+}
+
+async function startBackendRecognition() {
+  processing.value = true
+  reviewResult.value = null
+  jobStatus.value = null
+  apiError.value = ''
+  try {
+    const form = new FormData()
+    for (const entry of uploadedFileObjects.value) {
+      const file = entry.file || entry
+      form.append('files', file, file.name)
+    }
+    form.append('applicationTypeId', selectedApplicationTypeId.value)
+
+    const started = await requestJson('/api/fdh/review/jobs', {
+      method: 'POST',
+      body: form
+    })
+    jobStatus.value = started
+    const completed = await pollFdhJob(started.jobId)
+    jobStatus.value = completed
+    if (completed.status !== 'completed') {
+      throw new Error(completed.error || completed.message || '识别任务未完成。')
+    }
+    reviewResult.value = completed.result
+    uploadedFiles.value = completed.result?.uploadedFiles || uploadedFiles.value
+  } catch (error) {
+    apiError.value = error?.message || '后端识别失败。'
+  } finally {
+    processing.value = false
+  }
+}
+
+function removeUploadedFile(uploadId) {
+  if (processing.value) return
+  uploadedFileObjects.value = uploadedFileObjects.value.filter((entry) => entry.uploadId !== uploadId)
+  uploadedFiles.value = uploadedFiles.value.filter((file) => file.uploadId !== uploadId)
+  reviewResult.value = null
+  jobStatus.value = null
+  apiError.value = ''
+}
+
+function clearUploadedFiles() {
+  if (processing.value) return
+  uploadedFileObjects.value = []
+  uploadedFiles.value = []
+  uploadBatchSequence = 0
+  reviewResult.value = null
+  jobStatus.value = null
+  apiError.value = ''
+  if (fileInput.value) {
+    fileInput.value.value = ''
+  }
+}
+
+function fileSizeLabel(size) {
+  if (!Number.isFinite(size) || size <= 0) return ''
+  if (size >= 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`
+  if (size >= 1024) return `${Math.round(size / 1024)} KB`
+  return `${size} B`
+}
+
+function uploadedFileProgressLabel() {
+  const progress = Number(jobStatus.value?.progress)
+  if (processing.value && Number.isFinite(progress)) {
+    return `${Math.max(0, Math.min(100, Math.round(progress)))}%`
+  }
+  return '待识别'
+}
+
+async function pollFdhJob(jobId) {
+  let latest = jobStatus.value
+  for (let attempt = 0; attempt < FDH_JOB_POLL_LIMIT; attempt += 1) {
+    await delay(FDH_JOB_POLL_INTERVAL_MS)
+    latest = await requestJson(`/api/fdh/review/jobs/${jobId}`)
+    jobStatus.value = latest
+    if (['completed', 'failed', 'canceled'].includes(latest.status)) {
+      return latest
+    }
+  }
+  throw new Error('识别任务仍在处理中，请稍后刷新任务状态或检查后端日志。')
+}
+
+async function requestJson(url, options = {}) {
+  const response = await fetch(url, options)
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(text || `HTTP ${response.status}`)
+  }
+  return response.json()
+}
+
+function delay(milliseconds) {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds))
+}
+
+function resetDemo() {
+  uploadedFiles.value = []
+  uploadedFileObjects.value = []
+  uploadBatchSequence = 0
+  reviewResult.value = null
+  processing.value = false
+  fieldFilter.value = 'all'
+  jobStatus.value = null
+  apiError.value = ''
+  dragActive.value = false
+  if (fileInput.value) {
+    fileInput.value.value = ''
+  }
+}
+
+function statusLabel(status) {
+  return {
+    pass: 'PASS',
+    fail: 'FAIL',
+    review: 'REVIEW',
+    warn: 'WARN',
+    muted: 'N/A'
+  }[status] || status
+}
+
+function decisionLabel(decision) {
+  return {
+    PASS: '允许通过',
+    REVIEW: '需人工复核',
+    FAIL: '不允许通过'
+  }[decision] || decision
+}
+
+function materialRequirementLabel(material) {
+  if (!material.applicable) return '不适用'
+  if (material.core) return '核心必交'
+  if (material.conditional) return '条件应交'
+  return '官方应交'
+}
 </script>
 
 <template>
-  <main class="ocr-app">
+  <main class="fdh-app">
     <header class="app-header">
       <div class="brand-block">
-        <p class="eyebrow">Full-page OCR Demo</p>
-        <h1>申请材料整页结构化识别演示</h1>
-        <p class="header-copy">识别材料，左侧展示每页快照，右侧对应展示结构化识别结果。</p>
+        <p class="eyebrow">FDH Entry Visa Review Demo</p>
+        <h1>外籍家庭傭工入境簽證材料核验</h1>
+        <p class="header-copy">
+          先用纯前端模拟多文件上传、材料分类、字段核验和审批结论；后续后端可替换同一数据结构。
+        </p>
       </div>
-      <div class="model-pill">
-        <label for="llm-model-select">识别模型</label>
-        <select id="llm-model-select" v-model="selectedModelId" :disabled="loading">
-          <option
-            v-for="model in modelOptions"
-            :key="model.id"
-            :value="model.id"
-            :disabled="model.available === false"
-          >
-            {{ model.label }}{{ model.available === false ? `（${model.unavailableReason || '未配置'}）` : '' }}
+
+      <label class="scenario-pill" for="scenario-select">
+        <span>模拟结果</span>
+        <select id="scenario-select" v-model="selectedScenarioId" :disabled="processing">
+          <option v-for="scenario in scenarios" :key="scenario.id" :value="scenario.id">
+            {{ scenario.label }}
           </option>
         </select>
-      </div>
+      </label>
     </header>
 
-    <section v-if="!response" class="upload-stage">
-      <div class="upload-panel">
-        <div class="upload-heading">
-          <h2>上传源文件</h2>
-          <p>支持 PDF、PNG、JPG。系统保留每页快照，不使用预设坐标框或裁剪区域。</p>
-        </div>
-
-        <button class="dropzone" type="button" @click="openFilePicker" @drop.prevent="onDrop" @dragover.prevent>
-          <input
-            ref="fileInput"
-            type="file"
-            accept="application/pdf,image/png,image/jpeg,image/jpg,image/webp"
-            @change="onFileChange"
-          />
-          <span class="upload-glyph" aria-hidden="true">
-            <svg viewBox="0 0 24 24">
-              <path d="M12 16V4" />
-              <path d="m7 9 5-5 5 5" />
-              <path d="M5 20h14" />
-            </svg>
-          </span>
-          <strong>{{ file?.name || '选择或拖入申请材料' }}</strong>
-          <small v-if="file">{{ formatSize(file.size) }}</small>
-          <small v-else>PDF / PNG / JPG</small>
-        </button>
-
-        <div class="capability-row" aria-label="识别能力">
-          <span>整页识别</span>
-          <span>中文</span>
-          <span>English</span>
-          <span>手写内容</span>
-        </div>
-        <p v-if="selectedModelUnavailableReason" class="hint-text">{{ selectedModelUnavailableReason }}</p>
-
-        <div v-if="loading" class="progress-box" aria-live="polite">
-          <div class="progress-track">
-            <div class="progress-fill" :style="{ width: `${progress}%` }" />
+    <section v-if="!reviewResult" class="upload-stage">
+      <div class="review-upload-panel">
+        <section class="case-section" aria-labelledby="case-title">
+          <div class="section-heading">
+            <div>
+              <h2 id="case-title">选择申请类别</h2>
+              <p>用户只能选择所属类别；材料清单中的勾选状态不可交互。</p>
+            </div>
+            <span class="selected-case">{{ selectedApplicationType.checklistKey }}</span>
           </div>
-          <div class="progress-meta">
-            <span>{{ progressStage }}</span>
-            <strong>{{ progress.toFixed(0) }}%</strong>
-          </div>
-          <p class="progress-detail">{{ progressDetail }}</p>
-          <div v-if="jobProgressItems.length" class="job-page-progress" aria-label="每页识别进度">
-            <span
-              v-for="item in jobProgressItems"
-              :key="item.page"
-              class="job-page-pill"
-              :class="`job-page-${item.status}`"
-              :title="item.message"
+
+          <div class="case-grid">
+            <button
+              v-for="applicationType in applicationTypes"
+              :key="applicationType.id"
+              type="button"
+              class="case-card"
+              :class="{ active: selectedApplicationTypeId === applicationType.id }"
+              :disabled="processing"
+              @click="selectedApplicationTypeId = applicationType.id"
             >
-              <strong>Page {{ item.page }}</strong>
-              <small>{{ item.label }}<span v-if="item.diagnostic"> · {{ item.diagnostic }}</span></small>
-            </span>
+              <strong>{{ applicationType.label }}</strong>
+              <span>{{ applicationType.description }}</span>
+            </button>
           </div>
-        </div>
+        </section>
 
-        <button v-else class="primary-action" type="button" :disabled="!file || !!selectedModelUnavailableReason" @click="submitOcr">
-          开始识别
-        </button>
-        <p v-if="error" class="error-text">{{ error }}</p>
+        <section class="checklist-section" aria-labelledby="checklist-title">
+          <div class="section-heading">
+            <div>
+              <h2 id="checklist-title">该类别官方材料清单</h2>
+              <p>材料 1-3 纳入最终判定；材料 4-12 只展示是否上传，不阻断本 demo 结论。</p>
+            </div>
+          </div>
+
+          <div class="material-checklist">
+            <article
+              v-for="material in checklistPreview"
+              :key="material.id"
+              class="material-row"
+              :class="[`status-${material.status}`, { core: material.core }]"
+            >
+              <span class="fake-checkbox" :class="{ checked: material.applicable }" aria-hidden="true"></span>
+              <div class="material-main">
+                <strong>{{ material.no }}. {{ material.name }}</strong>
+                <span>{{ material.shortName }} · {{ material.templateId }} · {{ material.expectedPages }}{{ material.note ? ` · ${material.note}` : '' }}</span>
+              </div>
+              <span class="requirement-badge" :class="{ core: material.core }">
+                {{ materialRequirementLabel(material) }}
+              </span>
+            </article>
+          </div>
+        </section>
+
+        <section class="upload-section" aria-labelledby="upload-title">
+          <div class="section-heading">
+            <div>
+              <h2 id="upload-title">上传申请材料包</h2>
+              <p>当前阶段点击上传会生成模拟多文件列表；文件内容暂不解析。</p>
+            </div>
+            <span class="scenario-note">{{ selectedScenario.shortLabel }}</span>
+          </div>
+
+          <div class="upload-grid">
+            <button
+              class="dropzone"
+              type="button"
+              :class="{ active: dragActive }"
+              :disabled="processing"
+              @click="openFilePicker"
+              @drop.prevent.stop="handleFileDrop"
+              @dragover.prevent.stop="handleDragEnter"
+              @dragenter.prevent.stop="handleDragEnter"
+              @dragleave.prevent.stop="handleDragLeave"
+            >
+              <span class="upload-glyph" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="M12 16V4" />
+                  <path d="m7 9 5-5 5 5" />
+                  <path d="M5 20h14" />
+                </svg>
+              </span>
+              <strong>选择并上传多份申请材料</strong>
+              <small>PDF / PNG / JPG · 支持 ID 988A、ID 988B、ID 407 与其他证明材料</small>
+            </button>
+            <input
+              ref="fileInput"
+              class="file-input"
+              type="file"
+              multiple
+              accept=".pdf,.png,.jpg,.jpeg,.webp,.bmp,application/pdf,image/*"
+              @change="handleFileSelection"
+            >
+
+            <div class="uploaded-panel">
+              <div class="uploaded-header">
+                <div>
+                  <strong>已选择材料</strong>
+                  <span>{{ uploadedFiles.length }} 份{{ uploadedFiles.length > 3 ? ' · 列表可滚动' : '' }}</span>
+                </div>
+                <button
+                  v-if="uploadedFiles.length"
+                  class="clear-files-button"
+                  type="button"
+                  :disabled="processing"
+                  @click="clearUploadedFiles"
+                >
+                  清空全部
+                </button>
+              </div>
+
+              <div v-if="uploadedFiles.length" class="uploaded-list" :class="{ scrollable: uploadedFiles.length > 6 }">
+                <article
+                  v-for="file in uploadedFiles"
+                  :key="file.uploadId || `${file.filename}:${file.materialId}`"
+                  class="uploaded-file"
+                >
+                  <button
+                    v-if="file.uploadId"
+                    class="remove-file-icon"
+                    type="button"
+                    :disabled="processing"
+                    :aria-label="`删除 ${file.filename}`"
+                    @click="removeUploadedFile(file.uploadId)"
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M18 6 6 18" />
+                      <path d="m6 6 12 12" />
+                    </svg>
+                  </button>
+                  <div>
+                    <strong>{{ file.filename }}</strong>
+                    <span>
+                      {{ fileSizeLabel(file.size) || '大小未知' }} · {{ uploadedFileProgressLabel() }}
+                    </span>
+                  </div>
+                </article>
+              </div>
+              <div v-else class="empty-panel">尚未选择材料。可上传真实文件；如直接开始识别，将使用右上角模拟结果。</div>
+            </div>
+          </div>
+
+          <div v-if="processing" class="progress-box" aria-live="polite">
+            <div class="progress-track">
+              <div class="progress-fill" :style="{ width: uploadedFileObjects.length ? `${jobStatus?.progress || 8}%` : '72%' }"></div>
+            </div>
+            <div class="progress-meta">
+              <span>{{ jobStatus?.message || '正在识别页尾标识、页面结构和字段证据' }}</span>
+              <strong>{{ uploadedFileObjects.length ? `${jobStatus?.progress || 0}%` : '模拟中' }}</strong>
+            </div>
+          </div>
+
+          <div v-if="apiError" class="api-error" role="alert">
+            {{ apiError }}
+          </div>
+
+          <button v-else class="primary-action" type="button" @click="startRecognition">
+            开始识别
+          </button>
+        </section>
       </div>
     </section>
 
     <section v-else class="result-stage">
       <div class="result-toolbar">
         <div class="file-summary">
-          <span class="file-label">源文件</span>
-          <strong>{{ response.filename }}</strong>
-          <span>{{ response.pageCount }} 页</span>
+          <span class="file-label">申请类别</span>
+          <strong>{{ selectedApplicationType.label }}</strong>
+          <span>{{ reviewResult.uploadedFiles.length }} 份上传材料</span>
         </div>
         <div class="toolbar-actions">
-          <span class="status-chip">{{ responseExtractionMode }}</span>
-          <button class="secondary-action" type="button" @click="reset">重新上传</button>
+          <span class="status-chip" :class="`decision-${reviewResult.decision.toLowerCase()}`">
+            {{ reviewResult.decision }} · {{ decisionLabel(reviewResult.decision) }}
+          </span>
+          <button class="secondary-action" type="button" @click="resetDemo">重新上传</button>
         </div>
       </div>
 
-      <nav class="page-strip" aria-label="分页">
-        <button
-          v-for="page in pages"
-          :key="page.page"
-          type="button"
-          :class="{ active: page.page === activePage }"
-          @click="selectPage(page.page)"
-        >
-          <span>Page {{ page.page }}</span>
-          <strong>{{ pageSignalCount(page) }}</strong>
-        </button>
-        <div class="document-conclusion" aria-live="polite">{{ globalFieldConclusion }}</div>
-      </nav>
+      <div class="review-workspace">
+        <aside class="review-sidebar">
+          <section class="decision-card" :class="`decision-${reviewResult.decision.toLowerCase()}`">
+            <span>整体结论</span>
+            <strong>{{ reviewResult.decision }}</strong>
+            <p>{{ reviewResult.decisionText }}</p>
+          </section>
 
-      <div class="split-workspace">
-        <section class="source-pane" aria-label="源文件快照">
-          <div class="pane-header">
-            <div>
-              <h2>源文件快照</h2>
-              <p>第 {{ currentPageIndex }} / {{ pages.length }} 页</p>
+          <section class="side-panel">
+            <div class="panel-heading">
+              <h2>材料完整性</h2>
+              <p>1-3 为最终判定范围；4-12 为展示项。</p>
             </div>
-          </div>
-          <div class="document-canvas">
-            <div v-if="currentPage?.sourceImageDataUrl" class="document-image-frame">
-              <img :src="currentPage.sourceImageDataUrl" alt="源文件页面快照" />
-            </div>
-            <div v-else class="empty-panel">该页没有可显示的快照</div>
-          </div>
-        </section>
-
-        <section class="ocr-pane" aria-label="结构化识别结果">
-          <div class="pane-header ocr-header">
-            <div>
-              <h2>
-                {{
-                  resultTab === 'json'
-                    ? '接口响应 JSON'
-                    : resultTab === 'structured'
-                      ? '结构化识别结果'
-                      : '字段提取结果'
-                }}
-              </h2>
-              <p v-if="resultTab === 'fields'">
-                当前页约 {{ currentPage ? pageSignalCount(currentPage) : 0 }} 个字段；字段名称和值由模型按整页自动判断。
-              </p>
-              <p v-else-if="resultTab === 'structured'">
-                右侧展示模型按页面生成的完整结构化 JSON。
-              </p>
-              <p v-else>已隐藏每页快照的长 Base64 内容，便于调试接口响应。</p>
-            </div>
-            <div class="segmented-control" role="tablist" aria-label="结果视图">
-              <button type="button" :class="{ active: resultTab === 'fields' }" @click="resultTab = 'fields'">字段提取</button>
-              <button type="button" :class="{ active: resultTab === 'structured' }" @click="resultTab = 'structured'">结构化</button>
-              <button type="button" :class="{ active: resultTab === 'json' }" @click="resultTab = 'json'">JSON</button>
-            </div>
-          </div>
-
-          <div v-if="resultTab === 'fields'" class="fields-document">
-            <div class="page-conclusion">{{ currentPageConclusion }}</div>
-            <div v-if="currentPageFieldRows.length" class="field-sections">
-              <section v-for="section in currentPageFieldSections" :key="section.title" class="field-section">
-                <h3>{{ section.title }}</h3>
-                <div class="field-table">
-                  <article
-                    v-for="row in section.rows"
-                    :key="row.id"
-                    class="field-row"
-                    :class="{ 'field-row-empty': row.rawValue === null || row.rawValue === undefined || row.rawValue === '' }"
-                  >
-                    <div class="field-label">
-                      <strong>{{ row.fieldName }}</strong>
-                      <span>{{ row.path }}</span>
-                    </div>
-                    <div class="field-crop">
-                      <img v-if="row.snapshotDataUrl" :src="row.snapshotDataUrl" alt="字段识别区域快照" />
-                      <span v-else>{{ cropPlaceholderText(row) }}</span>
-                    </div>
-                    <div class="field-value">
-                      <strong class="field-value-text">
-                        <span
-                          v-for="segment in row.charSegments"
-                          :key="`${row.id}:${segment.index}`"
-                          :class="{ 'char-review': segment.reviewFlag }"
-                          :title="characterTitle(segment)"
-                        >{{ segment.text }}</span>
-                      </strong>
-                    </div>
-                    <div class="field-confidence" :class="confidenceClass(row.confidence)">
-                      {{ row.confidence }}%
-                    </div>
-                  </article>
+            <div class="compact-material-list">
+              <article
+                v-for="material in reviewResult.materials"
+                :key="material.id"
+                class="compact-material"
+                :class="[`status-${material.status}`, { core: material.core }]"
+              >
+                <div>
+                  <strong>{{ material.no }}. {{ material.shortName }}</strong>
+                  <span>{{ material.scopeText }}</span>
                 </div>
-              </section>
+                <span class="status-badge" :class="material.status">{{ material.statusText }}</span>
+              </article>
             </div>
-            <div v-else class="empty-panel">本页暂未识别到字段</div>
-          </div>
+          </section>
 
-          <pre v-else-if="resultTab === 'structured'" class="json-panel structured-json">{{ structuredPreview }}</pre>
+          <section class="side-panel">
+            <div class="panel-heading">
+              <h2>上传文件</h2>
+              <p>当前场景生成的模拟材料包。</p>
+            </div>
+            <div class="sidebar-file-list">
+              <article v-for="file in reviewResult.uploadedFiles" :key="file.filename">
+                <strong>{{ file.documentName }}</strong>
+                <span>{{ file.filename }}</span>
+              </article>
+            </div>
+          </section>
+        </aside>
 
-          <pre v-else class="json-panel">{{ jsonPreview }}</pre>
+        <section class="review-main">
+          <section class="findings-panel">
+            <div class="panel-heading">
+              <h2>逐条结论与出处</h2>
+              <p>先列阻断或待复核问题；出处精确到材料名称、章节和字段名称。</p>
+            </div>
+
+            <div v-if="blockingFindings.length" class="finding-list">
+              <article v-for="finding in blockingFindings" :key="finding.id" class="finding-item" :class="finding.status">
+                <span class="status-badge" :class="finding.status">{{ statusLabel(finding.status) }}</span>
+                <div>
+                  <strong>{{ finding.title }}</strong>
+                  <p>{{ finding.text }}</p>
+                  <small>出处：{{ finding.source }}</small>
+                </div>
+              </article>
+            </div>
+            <div v-else class="finding-pass">
+              核心材料和关键字段未发现阻断或待人工复核问题。
+            </div>
+
+            <div v-if="nonBlockingMaterialHints.length" class="nonblocking-box">
+              <strong>非阻断提示</strong>
+              <span>
+                {{ nonBlockingMaterialHints.map((item) => `${item.shortName}：${item.statusText}`).join('；') }}
+              </span>
+            </div>
+          </section>
+
+          <section class="fields-panel">
+            <div class="panel-heading fields-heading">
+              <div>
+                <h2>标准化字段核验</h2>
+                <p>字段按统一 key 聚合；同一字段可展示多份材料的局部快照证据。</p>
+              </div>
+              <div class="field-metrics" aria-label="字段统计">
+                <span><strong>{{ reviewResult.stats.total }}</strong>全部字段</span>
+                <span><strong>{{ reviewResult.stats.pass }}</strong>通过</span>
+                <span><strong>{{ reviewResult.stats.fail }}</strong>问题</span>
+                <span><strong>{{ reviewResult.stats.review }}</strong>待复核</span>
+              </div>
+            </div>
+
+            <div class="filter-row" role="tablist" aria-label="字段筛选">
+              <button type="button" :class="{ active: fieldFilter === 'all' }" @click="fieldFilter = 'all'">全部字段</button>
+              <button type="button" :class="{ active: fieldFilter === 'issues' }" @click="fieldFilter = 'issues'">仅看问题</button>
+              <button type="button" :class="{ active: fieldFilter === 'review' }" @click="fieldFilter = 'review'">仅看待人工审核</button>
+              <button type="button" :class="{ active: fieldFilter === 'required' }" @click="fieldFilter = 'required'">仅看必填字段</button>
+            </div>
+
+            <div class="field-card-list">
+              <article v-for="field in filteredFields" :key="field.key" class="standard-field-card" :class="field.status">
+                <header class="field-card-header">
+                  <div>
+                    <span>{{ field.category }}</span>
+                    <h3>{{ field.label }}</h3>
+                    <code>{{ field.key }}</code>
+                  </div>
+                  <div class="field-card-actions">
+                    <span v-if="field.required" class="required-pill">必填</span>
+                    <span class="status-badge" :class="field.status">{{ statusLabel(field.status) }}</span>
+                  </div>
+                </header>
+
+                <div class="field-card-body">
+                  <div class="evidence-column">
+                    <article v-for="source in field.sources" :key="`${field.key}:${source.documentName}:${source.fieldName}`" class="evidence-card">
+                    <div class="snapshot-card" :class="{ empty: !source.value && !source.snapshotDataUrl }">
+                      <img v-if="source.snapshotDataUrl" :src="source.snapshotDataUrl" :alt="`${source.documentName} ${source.fieldName}`">
+                      <span v-else>{{ source.snapshotText }}</span>
+                    </div>
+                      <div class="evidence-meta">
+                        <strong>{{ source.documentName }}</strong>
+                        <span>{{ source.section }}</span>
+                        <span>{{ source.fieldName }}</span>
+                        <small>置信度 {{ source.confidence }}%</small>
+                      </div>
+                    </article>
+                    <article v-if="!field.sources.length" class="evidence-card">
+                      <div class="snapshot-card empty"><span>missing</span></div>
+                      <div class="evidence-meta">
+                        <strong>未取得材料证据</strong>
+                        <span>材料未上传或模板无法识别</span>
+                      </div>
+                    </article>
+                  </div>
+
+                  <div class="field-value-panel">
+                    <div>
+                      <span>归一化结果</span>
+                      <strong>{{ field.normalizedValue }}</strong>
+                    </div>
+                    <div>
+                      <span>核查标准</span>
+                      <p>{{ field.rule }}</p>
+                    </div>
+                    <div v-if="field.issue" class="issue-box" :class="field.status">
+                      {{ field.issue }}
+                    </div>
+                  </div>
+                </div>
+              </article>
+            </div>
+          </section>
         </section>
       </div>
     </section>

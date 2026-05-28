@@ -1,0 +1,1665 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FDH 材料提交与审核 Demo 方案</title>
+  <style>
+    :root {
+      --ink: #17212b;
+      --muted: #66717d;
+      --line: #d8e0e6;
+      --soft: #f5f8fa;
+      --paper: #ffffff;
+      --teal: #006a73;
+      --teal-2: #0b8891;
+      --blue: #234c73;
+      --red: #b73434;
+      --amber: #b56a00;
+      --green: #23744b;
+      --shadow: 0 18px 48px rgba(23, 33, 43, 0.09);
+      --radius: 8px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: #eef3f5;
+      color: var(--ink);
+      font-family: "Microsoft JhengHei", "Microsoft YaHei", "Noto Sans CJK TC", "PingFang TC", sans-serif;
+      line-height: 1.62;
+    }
+
+    a { color: var(--teal); }
+
+    .topbar {
+      background: var(--paper);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .topbar-inner,
+    .wrap {
+      width: min(1180px, calc(100vw - 48px));
+      margin: 0 auto;
+    }
+
+    .topbar-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      min-height: 72px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-width: 0;
+    }
+
+    .mark {
+      display: grid;
+      place-items: center;
+      width: 46px;
+      height: 46px;
+      border: 2px solid var(--teal);
+      border-radius: 50%;
+      color: var(--teal);
+      font-weight: 800;
+      letter-spacing: 0.03em;
+    }
+
+    .brand strong {
+      display: block;
+      font-size: 18px;
+      line-height: 1.2;
+    }
+
+    .brand span {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .nav {
+      display: flex;
+      gap: 18px;
+      color: var(--teal);
+      font-size: 14px;
+      white-space: nowrap;
+    }
+
+    .hero {
+      background:
+        linear-gradient(90deg, rgba(0, 106, 115, 0.92), rgba(35, 76, 115, 0.82)),
+        linear-gradient(135deg, #d5e4e8, #f7fbfc 54%, #ced9dc);
+      color: #fff;
+      padding: 54px 0 46px;
+      border-bottom: 5px solid #00a0a8;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1.25fr 0.75fr;
+      gap: 36px;
+      align-items: end;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(34px, 4.2vw, 58px);
+      line-height: 1.08;
+      font-weight: 780;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      margin: 18px 0 0;
+      max-width: 760px;
+      color: rgba(255, 255, 255, 0.88);
+      font-size: 18px;
+    }
+
+    .hero-meta {
+      display: grid;
+      gap: 10px;
+      padding: 18px;
+      background: rgba(255, 255, 255, 0.13);
+      border: 1px solid rgba(255, 255, 255, 0.24);
+      border-radius: var(--radius);
+      backdrop-filter: blur(8px);
+    }
+
+    .hero-meta div {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+      padding-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .hero-meta div:last-child {
+      border-bottom: 0;
+      padding-bottom: 0;
+    }
+
+    main {
+      padding: 34px 0 70px;
+    }
+
+    section {
+      margin: 0 0 26px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .section-head {
+      padding: 24px 26px 12px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .section-head h2 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.28;
+      color: var(--teal);
+    }
+
+    .section-head p {
+      margin: 8px 0 0;
+      color: var(--muted);
+    }
+
+    .section-body {
+      padding: 24px 26px 28px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .tile,
+    .note,
+    .result-box {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+    }
+
+    .tile {
+      padding: 18px;
+      min-height: 148px;
+    }
+
+    .tile h3,
+    .note h3 {
+      margin: 0 0 8px;
+      font-size: 17px;
+      color: var(--blue);
+    }
+
+    .tile p,
+    .note p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .timeline {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .step {
+      padding: 18px 14px;
+      background: #fff;
+      border-right: 1px solid var(--line);
+      min-height: 132px;
+    }
+
+    .step:last-child { border-right: 0; }
+
+    .step .num {
+      display: inline-grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      margin-bottom: 10px;
+      border-radius: 50%;
+      background: var(--teal);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .step strong {
+      display: block;
+      font-size: 15px;
+      margin-bottom: 6px;
+    }
+
+    .step span {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      background: #fff;
+    }
+
+    th {
+      background: #075f67;
+      color: #fff;
+      text-align: left;
+      font-weight: 650;
+    }
+
+    th,
+    td {
+      border: 1px solid var(--line);
+      padding: 10px 11px;
+      vertical-align: top;
+    }
+
+    tbody tr:nth-child(even) td {
+      background: #f9fbfc;
+    }
+
+    .center { text-align: center; }
+    .tick { color: var(--green); font-weight: 800; }
+    .dash { color: #a2abb3; }
+    .conditional { color: var(--amber); font-weight: 700; }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 5px 10px;
+      background: #fff;
+      color: var(--muted);
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .simulator {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      gap: 20px;
+      align-items: start;
+    }
+
+    .control-band {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+
+    button,
+    select {
+      font: inherit;
+    }
+
+    .seg {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 12px 10px;
+      background: #fff;
+      color: var(--ink);
+      cursor: pointer;
+      text-align: left;
+      min-height: 66px;
+    }
+
+    .seg[aria-pressed="true"] {
+      border-color: var(--teal);
+      background: #e8f6f7;
+      color: var(--teal);
+      box-shadow: inset 0 0 0 2px rgba(0, 106, 115, 0.13);
+    }
+
+    .seg strong {
+      display: block;
+      font-size: 14px;
+    }
+
+    .seg span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 3px;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .checkline {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      font-size: 14px;
+    }
+
+    .checkline input {
+      margin-top: 4px;
+      width: 16px;
+      height: 16px;
+      accent-color: var(--teal);
+    }
+
+    .doc-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .doc-row {
+      display: grid;
+      grid-template-columns: 28px 1fr 98px;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+    }
+
+    .doc-row input {
+      width: 17px;
+      height: 17px;
+      accent-color: var(--teal);
+    }
+
+    .doc-title {
+      display: block;
+      font-size: 14px;
+      line-height: 1.35;
+    }
+
+    .doc-note {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 2px;
+    }
+
+    .tag {
+      justify-self: end;
+      border-radius: 999px;
+      padding: 4px 8px;
+      font-size: 12px;
+      font-weight: 650;
+      background: #eef3f5;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .tag.required { background: #e9f7ef; color: var(--green); }
+    .tag.conditional { background: #fff4df; color: var(--amber); }
+    .tag.waived { background: #edf2ff; color: var(--blue); }
+    .tag.none { background: #f2f2f2; color: #8a929a; }
+
+    .scenario-buttons {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .scenario-buttons button {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 9px 10px;
+      background: #fff;
+      cursor: pointer;
+      color: var(--blue);
+      font-size: 13px;
+      text-align: left;
+    }
+
+    .result-panel {
+      position: sticky;
+      top: 16px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .score {
+      padding: 18px;
+      border-radius: var(--radius);
+      background: #103b46;
+      color: #fff;
+    }
+
+    .score strong {
+      display: block;
+      font-size: 28px;
+      line-height: 1.1;
+    }
+
+    .score span {
+      display: block;
+      margin-top: 8px;
+      color: rgba(255, 255, 255, 0.78);
+      font-size: 13px;
+    }
+
+    .result-box {
+      padding: 14px;
+    }
+
+    .result-box h3 {
+      margin: 0 0 10px;
+      font-size: 16px;
+      color: var(--blue);
+    }
+
+    .finding-list {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .finding {
+      padding: 10px;
+      border-radius: var(--radius);
+      border-left: 4px solid var(--line);
+      background: var(--soft);
+      font-size: 13px;
+    }
+
+    .finding.fail { border-left-color: var(--red); }
+    .finding.review { border-left-color: var(--amber); }
+    .finding.warn { border-left-color: var(--blue); }
+    .finding.pass { border-left-color: var(--green); }
+
+    .finding b {
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    .field-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .field-group {
+      padding: 15px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+    }
+
+    .field-group h3 {
+      margin: 0 0 9px;
+      color: var(--blue);
+      font-size: 16px;
+    }
+
+    .field-group ul {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .rule-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .note {
+      padding: 16px;
+      background: #fbfcfd;
+    }
+
+    .code {
+      overflow: auto;
+      margin: 0;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #12232c;
+      color: #d9edf0;
+      font-family: Consolas, "SFMono-Regular", monospace;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .source-list {
+      display: grid;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .field-table-wrap {
+      overflow-x: auto;
+      margin-top: 20px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+    }
+
+    .field-table-wrap table {
+      min-width: 1320px;
+      border: 0;
+    }
+
+    .field-table-wrap th:first-child,
+    .field-table-wrap td:first-child {
+      width: 210px;
+    }
+
+    .field-key {
+      color: var(--blue);
+      font-family: Consolas, "SFMono-Regular", monospace;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .field-table-wrap .tag {
+      display: inline-flex;
+      justify-self: auto;
+    }
+
+    .category-badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 4px 9px;
+      font-size: 12px;
+      font-weight: 650;
+      white-space: nowrap;
+      background: #e8f6f7;
+      color: var(--teal);
+    }
+
+    .category-badge.helper { background: #eef3ff; color: var(--blue); }
+    .category-badge.employer { background: #eef8f0; color: var(--green); }
+    .category-badge.contract { background: #fff4df; color: var(--amber); }
+    .category-badge.proof { background: #f2f2f2; color: #68737d; }
+
+    .field-table-note {
+      margin: 20px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .basis-box {
+      margin-top: 14px;
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--teal);
+      border-radius: var(--radius);
+      background: #f9fcfd;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .basis-box strong {
+      color: var(--ink);
+    }
+
+    .basis-box ul {
+      margin: 8px 0 0;
+      padding-left: 18px;
+    }
+
+    @media (max-width: 980px) {
+      .hero-grid,
+      .simulator,
+      .grid-3,
+      .grid-2,
+      .timeline,
+      .field-grid,
+      .rule-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .control-band,
+      .form-row,
+      .scenario-buttons {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .result-panel {
+        position: static;
+      }
+
+      .nav {
+        display: none;
+      }
+    }
+
+    @media (max-width: 620px) {
+      .topbar-inner,
+      .wrap {
+        width: min(100vw - 28px, 1180px);
+      }
+
+      .hero {
+        padding: 36px 0;
+      }
+
+      .section-head,
+      .section-body {
+        padding-left: 16px;
+        padding-right: 16px;
+      }
+
+      .control-band,
+      .form-row,
+      .scenario-buttons {
+        grid-template-columns: 1fr;
+      }
+
+      .doc-row {
+        grid-template-columns: 26px 1fr;
+      }
+
+      .doc-row .tag {
+        grid-column: 2;
+        justify-self: start;
+      }
+
+      table {
+        font-size: 13px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="mark">FDH</div>
+        <div>
+          <strong>材料提交与审核 Demo 方案</strong>
+          <span>乙方产品团队 / 技术团队工作说明</span>
+        </div>
+      </div>
+      <nav class="nav" aria-label="page">
+        <a href="#scope">Demo 范围</a>
+        <a href="#matrix">材料规则</a>
+        <a href="#simulator">交互模拟</a>
+        <a href="#fields">字段模型</a>
+      </nav>
+    </div>
+  </header>
+
+  <div class="hero">
+    <div class="wrap hero-grid">
+      <div>
+        <h1>外籍家庭傭工申请材料 AI 审核 Demo</h1>
+        <p class="lead">以“新聘外籍家庭傭工入境簽證”为首期主线，同时保留官网截图中的四类申请类别切换。Demo 展示从选择申请类别、提交材料、文件分類、字段抽取、跨文件核验，到输出 Cross-Check Report 和 Minutes 草稿依据的完整闭环。</p>
+      </div>
+      <div class="hero-meta" aria-label="summary">
+        <div><span>主线场景</span><strong>Entry Visa 新聘</strong></div>
+        <div><span>规则来源</span><strong>ImmD checklist + FDH 说明</strong></div>
+        <div><span>输出对象</span><strong>产品原型 / 技术规则 / 演示脚本</strong></div>
+        <div><span>建议首期</span><strong>12 类材料 + 30 条规则</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <main class="wrap">
+    <section id="scope">
+      <div class="section-head">
+        <h2>1. Demo 要回答什么问题</h2>
+        <p>目标不是替代 ImmD 正式审批，而是向客户展示 AI 应用层如何把材料包转成可审计的审核结论。</p>
+      </div>
+      <div class="section-body">
+        <div class="grid-3">
+          <div class="tile">
+            <h3>产品团队关注</h3>
+            <p>办案人员先选申请类别，系统自动生成应交清单，提示缺件、错件、不适用件和补件建议，并能解释每个结论来自哪份材料。</p>
+          </div>
+          <div class="tile">
+            <h3>技术团队关注</h3>
+            <p>材料 taxonomy、字段 schema、规则引擎、证据 bbox、置信度和报告 JSON 必须可配置、可回归、可对接 APPLIES-2。</p>
+          </div>
+          <div class="tile">
+            <h3>客户演示关注</h3>
+            <p>上传一组模拟材料后，页面展示“可受理 / 需补件 / 需人工复核 / 明显不合规”四类结论，并高亮问题位置。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>2. 建议 Demo 流程</h2>
+        <p>首期可用静态样例材料跑通端到端，后续再接真实 OCR、局部重识别和报告 PDF 生成。</p>
+      </div>
+      <div class="section-body">
+        <div class="timeline">
+          <div class="step"><span class="num">1</span><strong>选择申请类别</strong><span>入境签证、于两年合约期届满后续约、完成余下期间、转换雇主。</span></div>
+          <div class="step"><span class="num">2</span><strong>生成应交清单</strong><span>读取 checklist tick、脚注、提交渠道和条件豁免。</span></div>
+          <div class="step"><span class="num">3</span><strong>提交材料包</strong><span>模拟 PDF / 图片上传，识别模板、页数、版本和重复件。</span></div>
+          <div class="step"><span class="num">4</span><strong>字段与规则核验</strong><span>抽取姓名、证件、地址、工资、签名等标准字段并跨文件比对。</span></div>
+          <div class="step"><span class="num">5</span><strong>输出结论</strong><span>生成 Cross-Check Report、问题证据、JSON metadata 和 Minutes 草拟依据。</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="matrix">
+      <div class="section-head">
+        <h2>3. 四类申请的材料提交规则</h2>
+        <p>依据 ImmD checklist。MVP 先按清单规则判断缺件，再按提交方式和脚注处理条件豁免。</p>
+      </div>
+      <div class="section-body">
+        <table aria-label="document matrix">
+          <thead>
+            <tr>
+              <th style="width: 44px;">序</th>
+              <th>所需申请表 / 文件</th>
+              <th class="center">入境签证</th>
+              <th class="center">于两年合约期届满后续约</th>
+              <th class="center">完成余下期间</th>
+              <th class="center">转换雇主</th>
+            </tr>
+          </thead>
+          <tbody id="matrixBody"></tbody>
+        </table>
+        <div class="legend">
+          <span class="pill"><span class="tick">✓</span> 必交</span>
+          <span class="pill"><span class="conditional">C</span> 条件必交或可豁免</span>
+          <span class="pill"><span class="dash">-</span> 不适用</span>
+          <span class="pill">* 网上续约领取标签时查验合约正本</span>
+          <span class="pill">**** 仅续约/余下期间可声明财力与住址无变化后豁免递交</span>
+        </div>
+      </div>
+    </section>
+
+    <section id="simulator">
+      <div class="section-head">
+        <h2>4. Demo 交互模拟器</h2>
+        <p>这个区域体现最终产品的核心体验：先选择“我属于哪类申请”，再根据已提交文件和场景异常输出结论。</p>
+      </div>
+      <div class="section-body simulator">
+        <div>
+          <div class="control-band" id="applicationButtons"></div>
+          <div class="form-row">
+            <label class="checkline">
+              <input type="checkbox" id="helperHkid">
+              <span>傭工声明有香港身份证，附件 6 变为条件必交</span>
+            </label>
+            <label class="checkline">
+              <input type="checkbox" id="waiver">
+              <span>续约/余下期间声明收入不少于 HK$15,000 且住址无改变</span>
+            </label>
+            <label class="checkline">
+              <input type="checkbox" id="remoteMode" checked>
+              <span>按网上 / 邮递 / 投递方式提交，而非亲身递交</span>
+            </label>
+          </div>
+
+          <div class="doc-list" id="documentList"></div>
+
+          <div class="scenario-buttons" aria-label="scenario controls">
+            <button type="button" data-scenario="clean">完整合格包</button>
+            <button type="button" data-scenario="missing">缺 ID 407 / 财力证明</button>
+            <button type="button" data-scenario="waiver">续约豁免样例</button>
+            <button type="button" data-scenario="mismatch">字段不一致</button>
+            <button type="button" data-scenario="template">页数 / 模板异常</button>
+            <button type="button" data-scenario="signature">签名 / 印章缺失</button>
+            <button type="button" data-scenario="duplicate">重复 / 错件上传</button>
+            <button type="button" data-scenario="expired">材料过期</button>
+            <button type="button" data-scenario="threshold">工资 / 膳食低于标准</button>
+          </div>
+        </div>
+
+        <aside class="result-panel" aria-label="review result">
+          <div class="score">
+            <strong id="overallStatus">REVIEW</strong>
+            <span id="overallText">等待材料核验。</span>
+          </div>
+          <div class="result-box">
+            <h3>材料完整性</h3>
+            <ul class="finding-list" id="inventoryFindings"></ul>
+          </div>
+          <div class="result-box">
+            <h3>字段与业务规则</h3>
+            <ul class="finding-list" id="ruleFindings"></ul>
+          </div>
+          <div class="result-box">
+            <h3>报告输出</h3>
+            <ul class="finding-list" id="outputs"></ul>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section id="fields">
+      <div class="section-head">
+        <h2>5. 标准化字段与核查标准</h2>
+        <p>字段不是按文件孤立存储，而是按“傭工 / 雇主 / 合约 / 证明材料 / 文档元数据”形成统一 schema。</p>
+      </div>
+      <div class="section-body">
+        <div class="field-grid">
+          <div class="field-group">
+            <h3>案件与文档</h3>
+            <ul>
+              <li>申请类别、提交渠道、caseId</li>
+              <li>documentType、templateId、footerId</li>
+              <li>pageCount、fileHash、qualityFlags</li>
+              <li>来源页码、bbox、置信度、crop 证据</li>
+            </ul>
+          </div>
+          <div class="field-group">
+            <h3>傭工字段</h3>
+            <ul>
+              <li>英文姓名、中文名、出生日期、国籍</li>
+              <li>旅行证件号码、签发地、到期日</li>
+              <li>HKID 如适用、联系方式、近照</li>
+              <li>工作经历、声明事项、签名</li>
+            </ul>
+          </div>
+          <div class="field-group">
+            <h3>雇主字段</h3>
+            <ul>
+              <li>姓名、HKID / passport、出生日期</li>
+              <li>住宅地址、通讯地址、联系方式</li>
+              <li>收入声明、住户成员、现有傭工</li>
+              <li>签名与声明日期</li>
+            </ul>
+          </div>
+          <div class="field-group">
+            <h3>合约字段</h3>
+            <ul>
+              <li>D.H. Contract No.、签约日期</li>
+              <li>合约期、开始日期、雇主住址</li>
+              <li>月薪、膳食或膳食津贴</li>
+              <li>住宿安排、家务职责、双方签名</li>
+            </ul>
+          </div>
+        </div>
+
+        <h3 style="margin: 24px 0 8px; color: var(--blue);">5.1 标准化字段清单、释义、样例与出处</h3>
+        <p class="field-table-note">说明：入境处并没有发布一份名为“标准化字段 schema”的官方数据字典。本表是为了 demo 和后端规则配置，把官方表格、官方 checklist 和申请说明中的字段/材料要求整理为可计算的字段 key。字段 key 命名、rawText、normalizedValue、bbox、confidence、evidenceImage、fileHash 等属于本项目技术设计，不是入境处官方字段名。</p>
+        <div class="basis-box">
+          <strong>官方依据附注</strong>
+          <ul>
+            <li>材料清单与四类申请情形来自入境处《<a href="https://www.immd.gov.hk/hks/forms/forms/fdhchecklist.html">申请从外国聘用家庭佣工所需的申请表及文件一览表</a>》。</li>
+            <li>ID 988A 字段、签名、相片和 5 页页数基线来自入境处《<a href="https://www.immd.gov.hk/eng/forms/forms/id988a.html">Visa/Extension of Stay Application Form for Domestic Helper from Abroad</a>》表格页及 PDF。</li>
+            <li>ID 988B 字段、雇主资料、签名和 4 页页数基线来自入境处《<a href="https://www.immd.gov.hk/eng/forms/forms/id988b.html">Application for Employment of Domestic Helper from Abroad</a>》表格页及 PDF。</li>
+            <li>ID 407 合约字段来自入境处《<a href="https://www.immd.gov.hk/eng/forms/forms/id407.html">Employment Contract for a Domestic Helper Recruited from Outside Hong Kong</a>》样本页；官网说明该样本只供参考，不应下载作正式提交。</li>
+            <li>收入门槛、住址证明、旅行证件有效期、荐书、翻译、签名一致性等规则来自入境处《<a href="https://www.immd.gov.hk/eng/services/visas/foreign_domestic_helpers.html">Foreign Domestic Helpers</a>》申请说明。</li>
+            <li>当前 MAW HK$5,100 与膳食津贴不少于 HK$1,236 来自政府新闻稿《<a href="https://www.info.gov.hk/gia/general/202509/29/P2025092900318.htm">Increase in Minimum Allowable Wage and no change in food allowance for foreign domestic helpers</a>》；正式项目应版本化维护政策阈值。</li>
+          </ul>
+        </div>
+        <div class="field-table-wrap">
+          <table aria-label="standardized field list">
+            <thead>
+              <tr>
+                <th>标准字段 key</th>
+                <th>字段分类</th>
+                <th>释义 / 标准化口径</th>
+                <th>必填性</th>
+                <th>样例</th>
+                <th>官方出处 / 技术来源</th>
+                <th>核查标准</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="field-key">case.application_type</span></td>
+                <td>申请类别，标准化为系统内部 case type。</td>
+                <td><span class="tag required">必填</span></td>
+                <td>FDH_ENTRY_VISA_NEW_HELPER</td>
+                <td>ID 988A 第 1 部分；官网 checklist</td>
+                <td>必须与用户选择的四类情形一致；ID 988A 不得漏选或多选互斥类别。</td>
+              </tr>
+              <tr>
+                <td><span class="field-key">document.type</span></td>
+                <td>材料分类结果，映射到 12 类官方附件或 OTHER。</td>
+                <td><span class="tag required">必填</span></td>
+                <td>ID988A / ID407 / EMPLOYER_ADDRESS_PROOF</td>
+                <td>页脚 ID、标题、版式结构、文件名</td>
+                <td>用于判断缺件、错件、不适用材料上传和重复上传。</td>
+              </tr>
+              <tr>
+                <td><span class="field-key">document.footer_id</span></td>
+                <td>页尾表格编号和版本号 OCR 结果。</td>
+                <td><span class="tag required">必填</span></td>
+                <td>ID 988A (06/2024)</td>
+                <td>ID 988A、ID 988B、ID 407 页尾</td>
+                <td>必须落在模板库允许版本内；缺失时用版式结构降级识别并标记 REVIEW。</td>
+              </tr>
+              <tr>
+                <td><span class="field-key">document.page_count</span></td>
+                <td>文件或材料组识别页数。</td>
+                <td><span class="tag required">必填</span></td>
+                <td>ID 988A = 5</td>
+                <td>PDF / 图片解析结果</td>
+                <td>ID 988A 标准 5 页，ID 988B 标准 4 页，ID 407 标准 4 页；异常进入缺页或人工复核判断。</td>
+              </tr>
+              <tr>
+                <td><span class="field-key">document.file_hash</span></td>
+                <td>文件级 hash；页面可另存 page hash。</td>
+                <td><span class="tag none">系统生成</span></td>
+                <td>sha256:...</td>
+                <td>上传接入层</td>
+                <td>用于重复上传、重复页、同一材料多版本冲突检测。</td>
+              </tr>
+              <tr>
+                <td><span class="field-key">helper.name.full_en</span></td>
+                <td>傭工英文全名，姓与名合并后统一大小写、空格和标点。</td>
+                <td><span class="tag required">必填</span></td>
+                <td>SITI NURHALIZA</td>
+                <td>ID 988A；旅行证件副本；ID 407；傭工荐书</td>
+                <td>跨文件必须一致；轻微空格/大小写差异可标准化，实质姓名差异输出 FAIL/REVIEW。</td>
+              </tr>
+              <tr>
+                <td><span class="field-key">helper.date_of_birth</span></td>
+                <td>傭工出生日期，统一为 YYYY-MM-DD。</td>
+                <td><span class="tag required">必填</span></td>
+                <td>1992-11-27</td>
+                <td>ID 988A；旅行证件副本</td>
+                <td>ID 988A 与旅行证件必须一致；日期格式或字段漏填输出 FAIL。</td>
+              </tr>
+              <tr>
+                <td><span class="field-key">helper.nationality</span></td>
+                <td>傭工国籍，标准化到国家/地区字典。</td>
+                <td><span class="tag required">必填</span></td>
+                <td>Indonesia</td>
+                <td>ID 988A；旅行证件副本</td>
+                <td>用于证件一致性、领事馆公证要求和 Minutes 草拟。</td>
+              </tr>
+              <tr>
+                <td><span class="field-key">helper.travel_doc.number</span></td>
+                <td>傭工旅行证件号码。</td>
+                <td><span class="tag required">必填</span></td>
+                <td>C89123745</td>
+                <td>ID 988A；旅行证件副本</td>
+                <td>两处必须一致；空值或明显不同输出 FAIL。</td>
+              </tr>
+              <tr>
+                <td><span class="field-key">helper.travel_doc.expiry_date</span></td>
+                <td>旅行证件到期日，统一为 YYYY-MM-DD。</td>
+                <td><span class="tag required">必填</span></td>
+                <td>2027-02-07</td>
+                <td>ID 988A；旅行证件副本</td>
+                <td>准许逗留期限不得超过护照到期前 1 个月；不足时输出材料过期/有效期不足。</td>
+              </tr>
+              <tr>
+                <td><span class="field-key">helper.hkid.number</span></td>
+                <td>傭工香港身份证号码。</td>
+                <td><span class="tag conditional">条件必填</span></td>
+                <td>Y432189(6)</td>
+                <td>ID 988A；傭工 HKID 副本</td>
+                <td>ID 988A 声明已有 HKID 时，附件 6 必须上传并与号码一致。</td>
+              </tr>
+              <tr>
+                <td><span class="field-key">helper.photo.present</span></td>
+                <td>ID 988A 近照区域是否检测到照片。</td>
+                <td><span class="tag required">必填</span></td>
+                <td>true</td>
+                <td>ID 988A 照片框</td>
+                <td>Entry visa 申请缺照片输出 FAIL；低置信度输出 REVIEW。</td>
+              </tr>
+              <tr>
+                <td><span class="field-key">helper.signature.present</span></td>
+                <td>傭工签名是否存在，可扩展保存 image hash。</td>
+                <td><span class="tag required">必填</span></td>
+                <td>true</td>
+                <td>ID 988A 声明栏；ID 407 签署栏</td>
+                <td>签名缺失输出 FAIL；两份材料签名差异过大输出 REVIEW。</td>
+              </tr>
+              <tr>
+                <td><span class="field-key">helper.work_experience.total_months</span></td>
+                <td>傭工家庭傭工经验总月数。</td>
+                <td><span class="tag required">必填</span></td>
+                <td>36</td>
+                <td>ID 988A 工作经历；傭工荐书</td>
+                <td>新聘 Entry Visa 通常需证明至少 2 年相关经验；不足或无法证明输出 FAIL/REVIEW。</td>
+              </tr>
+              <tr>
+                <td><span class="field-key">employer.name.full_en</span></td>
+                <td>雇主英文全名，统一大小写、空格和标点。</td>
+                <td><span class="tag required">必填</span></td>
+                <td>CHAN TAI MAN</td>
+                <td>ID 988B；雇主身份证明；ID 407；财力/住址证明</td>
+                <td>核心身份字段需跨文件一致；证明文件非本人名下时需关系证明。</td>
+              </tr>
+              <tr>
+                <td><span class="field-key">employer.id.number</span></td>
+                <td>雇主 HKID 或旅行证件号码。</td>
+                <td><span class="tag required">必填</span></td>
+                <td>A123456(7)</td>
+                <td>ID 988B；雇主 HKID / 身份证 / 护照副本</td>
+                <td>ID 988B 与身份证明必须一致；缺失或冲突输出 FAIL。</td>
+              </tr>
+              <tr>
+                <td><span class="field-key">employer.address.residential</span></td>
+                <td>雇主住宅地址，地址标准化后用于比对。</td>
+                <td><span class="tag required">必填</span></td>
+                <td>Flat A, 12/F, ... Hong Kong</td>
+                <td>ID 988B；ID 407；住址证明</td>
+                <td>三处地址原则上应一致；差异需人工复核或补充解释。</td>
+              </tr>
+              <tr>
+                <td><span class="field-key">employer.contact.phone</span></td>
+                <td>雇主联系电话。</td>
+                <td><span class="tag none">非必填</span></td>
+                <td>9123 4567</td>
+                <td>ID 988B</td>
+                <td>用于联系信息完整性和报告展示；不作为首轮阻断规则。</td>
+              </tr>
+              <tr>
+                <td><span class="field-key">employer.signature.present</span></td>
+                <td>雇主签名是否存在，可扩展保存 image hash。</td>
+                <td><span class="tag required">必填</span></td>
+                <td>true</td>
+                <td>ID 988B 声明栏；ID 407 签署栏</td>
+                <td>签名缺失输出 FAIL；签名图像差异过大输出 REVIEW。</td>
+              </tr>
+              <tr>
+                <td><span class="field-key">contract.dh_contract_no</span></td>
+                <td>标准雇傭合约编号。</td>
+                <td><span class="tag required">必填</span></td>
+                <td>D.H. Contract No. 123456</td>
+                <td>ID 407；ID 988A/ID 988B undertaking</td>
+                <td>合约编号缺失、重复或与申请表引用不一致时输出 REVIEW/FAIL。</td>
+              </tr>
+              <tr>
+                <td><span class="field-key">contract.date_signed</span></td>
+                <td>合约签署日期，统一为 YYYY-MM-DD。</td>
+                <td><span class="tag required">必填</span></td>
+                <td>2026-04-20</td>
+                <td>ID 407</td>
+                <td>用于判断适用 MAW 和材料时效；签署日期缺失输出 FAIL。</td>
+              </tr>
+              <tr>
+                <td><span class="field-key">contract.duration_months</span></td>
+                <td>合约期限（月）。</td>
+                <td><span class="tag required">必填</span></td>
+                <td>24</td>
+                <td>ID 407</td>
+                <td>标准合约通常为 24 个月；异常期限输出 REVIEW/FAIL。</td>
+              </tr>
+              <tr>
+                <td><span class="field-key">contract.commencement.option</span></td>
+                <td>合约开始方式选项。</td>
+                <td><span class="tag required">必填</span></td>
+                <td>Clause 2(A)</td>
+                <td>ID 407</td>
+                <td>新聘入境场景通常应与从外地来港受聘逻辑一致；多选或漏选输出 REVIEW。</td>
+              </tr>
+              <tr>
+                <td><span class="field-key">contract.monthly_wage_hkd</span></td>
+                <td>合约月薪，标准化为港币数值。</td>
+                <td><span class="tag required">必填</span></td>
+                <td>5100</td>
+                <td>ID 407；ID 988B 收入/承诺区</td>
+                <td>不得低于签约日适用的 Minimum Allowable Wage；低于阈值输出 FAIL。</td>
+              </tr>
+              <tr>
+                <td><span class="field-key">contract.food.allowance_hkd</span></td>
+                <td>未提供免费膳食时的膳食津贴金额。</td>
+                <td><span class="tag conditional">条件必填</span></td>
+                <td>1236</td>
+                <td>ID 407</td>
+                <td>若未勾选免费膳食，津贴不得低于当前标准；低于阈值输出 FAIL。</td>
+              </tr>
+              <tr>
+                <td><span class="field-key">contract.employer_residence_address</span></td>
+                <td>合约列明的傭工工作及居住地址。</td>
+                <td><span class="tag required">必填</span></td>
+                <td>Same as employer residential address</td>
+                <td>ID 407；ID 988B；住址证明</td>
+                <td>必须与雇主住宅地址和住址证明一致；不一致输出 REVIEW/FAIL。</td>
+              </tr>
+              <tr>
+                <td><span class="field-key">contract.notarisation.present</span></td>
+                <td>合约公证、认证或领事馆处理痕迹。</td>
+                <td><span class="tag conditional">条件必填</span></td>
+                <td>true</td>
+                <td>ID 407 正本/认证页</td>
+                <td>按傭工所属国家或领事馆要求判断；无法确认时输出 REVIEW。</td>
+              </tr>
+              <tr>
+                <td><span class="field-key">household.income.amount_hkd</span></td>
+                <td>雇主住户月均收入或可比资产折算值。</td>
+                <td><span class="tag required">必填</span></td>
+                <td>30000</td>
+                <td>ID 988B；财力证明</td>
+                <td>一般每聘用 1 名傭工不少于 HK$15,000/月，或有可比资产支持整个合约期。</td>
+              </tr>
+              <tr>
+                <td><span class="field-key">household.members_count</span></td>
+                <td>住户成员数量。</td>
+                <td><span class="tag required">必填</span></td>
+                <td>4</td>
+                <td>ID 988B；ID 407 附录</td>
+                <td>用于住宿安排、现有傭工数量和家庭成员信息一致性判断。</td>
+              </tr>
+              <tr>
+                <td><span class="field-key">financial_proof.period_covered</span></td>
+                <td>财力证明覆盖期间。</td>
+                <td><span class="tag required">必填</span></td>
+                <td>2026-01 to 2026-03</td>
+                <td>税单、银行流水、工资单、雇主公司证明</td>
+                <td>证明期间、金额和持有人必须可追溯；不足或非本人名下输出 REVIEW/FAIL。</td>
+              </tr>
+              <tr>
+                <td><span class="field-key">address_proof.issue_date</span></td>
+                <td>住址证明签发日期。</td>
+                <td><span class="tag required">必填</span></td>
+                <td>2026-04-02</td>
+                <td>差饷、水电、电话、电费账单等</td>
+                <td>通常应为最近 3 个月内；过期输出 FAIL。</td>
+              </tr>
+              <tr>
+                <td><span class="field-key">address_proof.address</span></td>
+                <td>住址证明列明地址，做地址标准化。</td>
+                <td><span class="tag required">必填</span></td>
+                <td>Flat A, 12/F, ... Hong Kong</td>
+                <td>住址证明副本</td>
+                <td>需与 ID 988B、ID 407 地址一致；非雇主名下需关系证明。</td>
+              </tr>
+              <tr>
+                <td><span class="field-key">testimonial.duration_months</span></td>
+                <td>傭工荐书证明的工作经验时长。</td>
+                <td><span class="tag required">必填</span></td>
+                <td>36</td>
+                <td>傭工荐书；ID 988A 工作经历</td>
+                <td>新聘 Entry Visa 作为相关经验支持材料；少于 24 个月输出 FAIL/REVIEW。</td>
+              </tr>
+              <tr>
+                <td><span class="field-key">testimonial.signature_or_stamp_present</span></td>
+                <td>荐书是否有证明人签名或印章。</td>
+                <td><span class="tag required">必填</span></td>
+                <td>true</td>
+                <td>傭工荐书</td>
+                <td>缺签名/印章或证明人信息不完整时输出 REVIEW。</td>
+              </tr>
+              <tr>
+                <td><span class="field-key">release.termination_or_expiry_date</span></td>
+                <td>现时雇主离职信中的合约届满或终止日期。</td>
+                <td><span class="tag conditional">条件必填</span></td>
+                <td>2026-06-30</td>
+                <td>现时雇主离职信</td>
+                <td>转换雇主场景必填；新聘 Entry Visa 不应作为缺件阻断。</td>
+              </tr>
+              <tr>
+                <td><span class="field-key">continuous_letter.remaining_period</span></td>
+                <td>雇主继续聘用确认信中的余下期间。</td>
+                <td><span class="tag conditional">条件必填</span></td>
+                <td>6 months</td>
+                <td>继续聘用确认信</td>
+                <td>完成现有合约余下期间场景必填；其他场景上传则标记为不适用材料。</td>
+              </tr>
+              <tr>
+                <td><span class="field-key">translation.certified</span></td>
+                <td>非中文/英文材料是否附认证翻译。</td>
+                <td><span class="tag conditional">条件必填</span></td>
+                <td>true</td>
+                <td>所有非中英文支持材料</td>
+                <td>缺认证翻译时输出 REVIEW/FAIL，并记录原材料语种。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>6. 可模拟的异常场景</h2>
+        <p>演示时不需要一次展示所有规则，建议按客户最容易理解的缺件、错件、一致性、合规阈值四条线组织。</p>
+      </div>
+      <div class="section-body">
+        <div class="rule-grid">
+          <div class="note">
+            <h3>文件分類类</h3>
+            <p>缺件、错件、不适用材料上传、重复上传、页数异常、模板版本错误、文件模糊、旋转、裁边、非中英文但缺翻译。</p>
+          </div>
+          <div class="note">
+            <h3>字段完整性类</h3>
+            <p>ID 988A 未贴相片、ID 988A / ID 988B / ID 407 缺签名、合约编号缺失、日期缺失、住址证明无签发日期。</p>
+          </div>
+          <div class="note">
+            <h3>跨文件一致性类</h3>
+            <p>傭工姓名与护照不一致、旅行证件号不一致、雇主证件号不一致、合约地址与地址证明不一致、住户人数不一致。</p>
+          </div>
+          <div class="note">
+            <h3>业务规则类</h3>
+            <p>雇主收入低于 HK$15,000、合约工资低于当前 MAW、膳食津贴低于当前标准、地址证明超过 3 个月、护照有效期不足。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>7. 结论类型与报告输出</h2>
+        <p>结论必须可解释、可追溯、可导出，避免只给一个黑盒分数。</p>
+      </div>
+      <div class="section-body grid-2">
+        <div>
+          <table>
+            <thead>
+              <tr><th>结论</th><th>含义</th><th>产品动作</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><strong>PASS</strong></td><td>材料齐全，关键字段和业务规则未发现问题。</td><td>可进入后续审批或生成 Minutes 草稿。</td></tr>
+              <tr><td><strong>WARN</strong></td><td>存在多余件、低风险提醒或可解释差异。</td><td>报告提示，但不阻断。</td></tr>
+              <tr><td><strong>REVIEW</strong></td><td>OCR 置信度低、签名/印章模糊、规则需人工判断。</td><td>推送人工复核队列并附证据 crop。</td></tr>
+              <tr><td><strong>FAIL</strong></td><td>缺必交材料、关键字段不一致或明显不符合规则。</td><td>建议退回补件或标记不可受理。</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <pre class="code">{
+  "caseType": "FDH_ENTRY_VISA_NEW_HELPER",
+  "overallStatus": "REVIEW",
+  "documentInventoryConclusion": {
+    "missingRequired": ["ID407"],
+    "notApplicableUploaded": [],
+    "abnormalPages": ["ID988B"]
+  },
+  "crossCheckConclusion": [{
+    "ruleId": "FDH_HELPER_NAME_MISMATCH",
+    "severity": "FAIL",
+    "fieldKey": "helper.name.full_en",
+    "expected": "Passport / ID988A / ID407 aligned",
+    "actual": "Name differs in ID407",
+    "evidence": {"documentType": "ID407", "page": 1}
+  }],
+  "outputs": ["Cross-Check Report PDF", "JSON metadata", "Minutes Draft basis"]
+}</pre>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>8. 首期实现建议</h2>
+        <p>先把规则做成配置和可回归样本，不要把申请类别、材料要求和字段阈值写死在代码里。</p>
+      </div>
+      <div class="section-body">
+        <div class="grid-3">
+          <div class="tile">
+            <h3>配置 1：附件 taxonomy</h3>
+            <p>定义四类申请各自 required / conditional / waived / notApplicable 的材料规则，并记录官网脚注。</p>
+          </div>
+          <div class="tile">
+            <h3>配置 2：字段 schema</h3>
+            <p>定义字段 key、来源文件、页码锚点、标准化方式、必填条件、证据位置和置信度阈值。</p>
+          </div>
+          <div class="tile">
+            <h3>配置 3：核验规则集</h3>
+            <p>定义规则 ID、适用申请类别、严重性、判断逻辑、输出文案和是否进入人工复核队列。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>9. 参考来源</h2>
+        <p>Demo 规则应以官方页面为准，政策阈值需要版本化维护。</p>
+      </div>
+      <div class="section-body">
+        <div class="source-list">
+          <a href="https://www.immd.gov.hk/hks/forms/forms/fdhchecklist.html">ImmD：申请从外国聘用家庭佣工所需的申请表及文件一览表</a>
+          <a href="https://www.immd.gov.hk/eng/services/visas/foreign_domestic_helpers.html">ImmD：Foreign Domestic Helpers 申请说明</a>
+          <a href="https://www.immd.gov.hk/eng/forms/forms/id988a.html">ImmD：ID 988A 表格页</a>
+          <a href="https://www.immd.gov.hk/eng/forms/forms/id988b.html">ImmD：ID 988B 表格页</a>
+          <a href="https://www.immd.gov.hk/eng/forms/forms/id407.html">ImmD：ID 407 标准雇佣合约说明页</a>
+          <a href="https://www.fdh.labour.gov.hk/en/home.html">Labour Department：FDH Portal</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const documents = [
+      { id: "id988a", no: 1, name: "从外国受聘来港家庭佣工签证 / 延长逗留期限申请表", short: "ID 988A", template: "ID 988A (06/2024)", pages: "5 页" },
+      { id: "id988b", no: 2, name: "从外国聘用家庭佣工申请表", short: "ID 988B", template: "ID 988B (06/2024)", pages: "4 页" },
+      { id: "id407", no: 3, name: "新标准雇佣合约正本一份", short: "ID 407", template: "ID 407 (11/2016)", pages: "4 页" },
+      { id: "helperTravelOriginal", no: 4, name: "佣工的旅行证件正本", short: "旅行证件正本", template: "非固定模板", pages: "按证件" },
+      { id: "helperTravelCopy", no: 5, name: "佣工的旅行证件副本", short: "旅行证件副本", template: "非固定模板", pages: "资料页" },
+      { id: "helperHkid", no: 6, name: "佣工的香港身份证副本（如适用）", short: "佣工 HKID", template: "HKID", pages: "1-2 页" },
+      { id: "employerId", no: 7, name: "雇主的香港永久性居民身份证 / 香港身份证 / 护照副本", short: "雇主身份证明", template: "HKID / passport", pages: "1-2 页" },
+      { id: "financialProof", no: 8, name: "雇主的经济状况证明（副本）", short: "经济状况证明", template: "税单 / 银行 / 薪金", pages: "按证明" },
+      { id: "addressProof", no: 9, name: "雇主的住址证明（副本）", short: "住址证明", template: "差饷 / 水电等", pages: "按证明" },
+      { id: "testimonial", no: 10, name: "佣工的荐书", short: "荐书", template: "信件", pages: "按证明" },
+      { id: "releaseLetter", no: 11, name: "现时雇主发出的离职信（列明合约的届满 / 终止日期）", short: "离职信", template: "信件", pages: "按证明" },
+      { id: "continuousLetter", no: 12, name: "雇主继续聘用的确认信", short: "继续聘用确认信", template: "信件", pages: "按证明" }
+    ];
+
+    const appTypes = {
+      entry: {
+        label: "入境签证",
+        subtitle: "新聘外籍家庭傭工",
+        code: "FDH_ENTRY_VISA_NEW_HELPER",
+        matrix: { id988a: "required", id988b: "required", id407: "required", helperTravelCopy: "required", helperHkid: "conditional_hkid", employerId: "required", financialProof: "required", addressProof: "required", testimonial: "required" }
+      },
+      renewal: {
+        label: "于两年合约期届满后续约",
+        subtitle: "同一雇主续约",
+        code: "FDH_CONTRACT_RENEWAL",
+        matrix: { id988a: "required", id988b: "required", id407: "required_star", helperTravelOriginal: "conditional_in_person", helperTravelCopy: "conditional_remote", financialProof: "conditional_no_waiver", addressProof: "conditional_no_waiver" }
+      },
+      remaining: {
+        label: "完成余下期间",
+        subtitle: "完成现有合约余期",
+        code: "FDH_REMAINING_PERIOD",
+        matrix: { id988a: "required", helperTravelOriginal: "conditional_in_person", helperTravelCopy: "conditional_remote", financialProof: "conditional_no_waiver", addressProof: "conditional_no_waiver", continuousLetter: "required" }
+      },
+      change: {
+        label: "转换雇主",
+        subtitle: "新雇主接续聘用",
+        code: "FDH_CHANGE_EMPLOYER",
+        matrix: { id988a: "required", id988b: "required", id407: "required", helperTravelOriginal: "required", helperTravelCopy: "required", helperHkid: "conditional_hkid", employerId: "required", financialProof: "required", addressProof: "required", releaseLetter: "required" }
+      }
+    };
+
+    let selectedType = "entry";
+    let activeScenario = "clean";
+    const selectedDocs = new Set();
+
+    function requirementFor(docId) {
+      const raw = appTypes[selectedType].matrix[docId] || "none";
+      const hasHkid = document.getElementById("helperHkid").checked;
+      const waiver = document.getElementById("waiver").checked;
+      const remoteMode = document.getElementById("remoteMode").checked;
+
+      if (raw === "conditional_hkid") return hasHkid ? "required" : "none";
+      if (raw === "conditional_no_waiver") return waiver ? "waived" : "required";
+      if (raw === "conditional_remote") return remoteMode ? "required" : "none";
+      if (raw === "conditional_in_person") return remoteMode ? "none" : "required";
+      if (raw === "required_star") return "required";
+      return raw;
+    }
+
+    function baseLabel(raw, docId) {
+      const app = appTypes[selectedType];
+      const source = app.matrix[docId] || "none";
+      if (requirementFor(docId) === "waived") return "已豁免";
+      if (source === "conditional_hkid") return "如适用";
+      if (source === "conditional_no_waiver") return "条件";
+      if (source === "conditional_remote" || source === "conditional_in_person") return "按渠道";
+      if (source === "required_star") return "必交*";
+      if (source === "required") return "必交";
+      return "不适用";
+    }
+
+    function tagClass(docId) {
+      const req = requirementFor(docId);
+      const source = appTypes[selectedType].matrix[docId] || "none";
+      if (req === "required") return source.startsWith("conditional") ? "conditional" : "required";
+      if (req === "waived") return "waived";
+      return "none";
+    }
+
+    function renderMatrix() {
+      const body = document.getElementById("matrixBody");
+      body.innerHTML = documents.map((doc) => {
+        const cells = ["entry", "renewal", "remaining", "change"].map((type) => {
+          const raw = appTypes[type].matrix[doc.id] || "none";
+          if (raw === "required") return '<span class="tick">✓</span>';
+          if (raw === "required_star") return '<span class="tick">✓*</span>';
+          if (raw === "conditional_hkid") return '<span class="conditional">C</span>';
+          if (raw === "conditional_no_waiver") return '<span class="conditional">C****</span>';
+          if (raw === "conditional_remote") return '<span class="conditional">C***</span>';
+          if (raw === "conditional_in_person") return '<span class="conditional">C**</span>';
+          return '<span class="dash">-</span>';
+        });
+        return `<tr>
+          <td>${doc.no}</td>
+          <td><strong>${doc.name}</strong><br><span class="doc-note">${doc.short} · ${doc.template}</span></td>
+          <td class="center">${cells[0]}</td>
+          <td class="center">${cells[1]}</td>
+          <td class="center">${cells[2]}</td>
+          <td class="center">${cells[3]}</td>
+        </tr>`;
+      }).join("");
+    }
+
+    function renderAppButtons() {
+      const holder = document.getElementById("applicationButtons");
+      holder.innerHTML = Object.entries(appTypes).map(([key, app]) => `
+        <button class="seg" type="button" data-type="${key}" aria-pressed="${key === selectedType}">
+          <strong>${app.label}</strong>
+          <span>${app.subtitle}</span>
+        </button>
+      `).join("");
+      holder.querySelectorAll("button").forEach((button) => {
+        button.addEventListener("click", () => {
+          selectedType = button.dataset.type;
+          activeScenario = "clean";
+          seedDocsForCurrentType();
+          renderAll();
+        });
+      });
+    }
+
+    function seedDocsForCurrentType() {
+      selectedDocs.clear();
+      documents.forEach((doc) => {
+        if (requirementFor(doc.id) === "required") selectedDocs.add(doc.id);
+      });
+    }
+
+    function renderDocs() {
+      const list = document.getElementById("documentList");
+      list.innerHTML = documents.map((doc) => `
+        <label class="doc-row">
+          <input type="checkbox" data-doc="${doc.id}" ${selectedDocs.has(doc.id) ? "checked" : ""}>
+          <span>
+            <span class="doc-title">${doc.no}. ${doc.name}</span>
+            <span class="doc-note">${doc.short} · ${doc.template} · ${doc.pages}</span>
+          </span>
+          <span class="tag ${tagClass(doc.id)}">${baseLabel(appTypes[selectedType].matrix[doc.id], doc.id)}</span>
+        </label>
+      `).join("");
+      list.querySelectorAll("input").forEach((input) => {
+        input.addEventListener("change", () => {
+          if (input.checked) selectedDocs.add(input.dataset.doc);
+          else selectedDocs.delete(input.dataset.doc);
+          activeScenario = "manual";
+          renderResults();
+        });
+      });
+    }
+
+    function extraFindings() {
+      const findings = [];
+      if (activeScenario === "mismatch") {
+        findings.push({ level: "fail", title: "FDH_HELPER_NAME_MISMATCH", text: "ID 988A、护照、ID 407 的傭工英文姓名标准化后不一致，需退回更正或人工确认。" });
+        findings.push({ level: "fail", title: "FDH_EMPLOYER_ADDRESS_MISMATCH", text: "ID 407 合约地址与住址证明地址不一致，需补充解释或重新提交地址证明。" });
+      }
+      if (activeScenario === "template") {
+        findings.push({ level: "review", title: "FDH_PAGE_COUNT_ABNORMAL", text: "ID 988B 识别为 3 页，标准版本应为 4 页，疑似缺页或扫描失败。" });
+        findings.push({ level: "review", title: "FDH_TEMPLATE_VERSION_MISMATCH", text: "ID 988A 页脚版本与模板库不一致，进入人工复核。" });
+      }
+      if (activeScenario === "signature") {
+        findings.push({ level: "fail", title: "FDH_SIGNATURE_MISSING", text: "ID 407 未检测到雇主或傭工签名。" });
+        findings.push({ level: "review", title: "FDH_NOTARISATION_MISSING", text: "合约未发现领事馆公证 / 认证痕迹，需按傭工所属国家要求人工确认。" });
+      }
+      if (activeScenario === "duplicate") {
+        findings.push({ level: "warn", title: "FDH_DOC_DUPLICATE_UPLOAD", text: "旅行证件副本 page hash 重复，疑似重复上传同一页。" });
+        findings.push({ level: "warn", title: "FDH_DOC_NOT_REQUIRED_UPLOADED", text: "当前申请类别上传了不适用材料，应在报告中标记为多余件。" });
+      }
+      if (activeScenario === "expired") {
+        findings.push({ level: "fail", title: "FDH_MATERIAL_EXPIRED_ADDRESS", text: "住址证明签发日期超过 3 个月，不满足当前提交规则。" });
+        findings.push({ level: "fail", title: "FDH_MATERIAL_EXPIRED_PASSPORT", text: "护照有效期不足，准许逗留期限不得超过护照到期前 1 个月。" });
+      }
+      if (activeScenario === "threshold") {
+        findings.push({ level: "fail", title: "FDH_CONTRACT_WAGE_BELOW_MAW", text: "2025-09-30 后签订合约，月薪低于 HK$5,100。" });
+        findings.push({ level: "fail", title: "FDH_FOOD_ALLOWANCE_BELOW_BASELINE", text: "未提供免费膳食且膳食津贴低于 HK$1,236/月。" });
+      }
+      return findings;
+    }
+
+    function renderResults() {
+      const inventory = [];
+      const rules = [];
+
+      documents.forEach((doc) => {
+        const req = requirementFor(doc.id);
+        const selected = selectedDocs.has(doc.id);
+        if (req === "required" && !selected) {
+          inventory.push({ level: "fail", title: "FDH_DOC_REQUIRED_MISSING", text: `缺少必交材料：${doc.name}。` });
+        }
+        if ((req === "none" || req === "waived") && selected) {
+          inventory.push({ level: "warn", title: "FDH_DOC_NOT_REQUIRED_UPLOADED", text: `${doc.name} 对当前申请类别不是首轮必交材料。` });
+        }
+      });
+
+      if (inventory.length === 0) {
+        inventory.push({ level: "pass", title: "DOCUMENT_INVENTORY_PASS", text: "应交材料齐全；条件豁免和不适用材料已按当前申请类别处理。" });
+      }
+
+      rules.push(...extraFindings());
+      if (rules.length === 0) {
+        rules.push({ level: "pass", title: "FIELD_AND_RULE_PASS", text: "当前模拟未发现字段缺失、跨文件不一致或业务阈值失败。" });
+      }
+
+      const hasFail = [...inventory, ...rules].some((x) => x.level === "fail");
+      const hasReview = [...inventory, ...rules].some((x) => x.level === "review");
+      const hasWarn = [...inventory, ...rules].some((x) => x.level === "warn");
+      const status = hasFail ? "FAIL" : hasReview ? "REVIEW" : hasWarn ? "WARN" : "PASS";
+      const text = {
+        PASS: "可进入后续审批，并可生成 Minutes 草稿依据。",
+        WARN: "材料主体可继续流转，但报告中需提示多余件或低风险问题。",
+        REVIEW: "存在低置信度、模板、签章或需人工判断问题。",
+        FAIL: "存在缺必交材料或明确规则失败，建议退回补件。"
+      }[status];
+
+      document.getElementById("overallStatus").textContent = status;
+      document.getElementById("overallText").textContent = `${appTypes[selectedType].label}：${text}`;
+      document.getElementById("inventoryFindings").innerHTML = inventory.map(findingHtml).join("");
+      document.getElementById("ruleFindings").innerHTML = rules.map(findingHtml).join("");
+      document.getElementById("outputs").innerHTML = [
+        { level: "pass", title: "Cross-Check Report PDF", text: "展示材料清单、缺件结论、字段比对表、问题原文 crop / highlight。" },
+        { level: "pass", title: "JSON metadata", text: "回传 APPLIES-2：caseType、documentInventory、findings、confidence、evidence。" },
+        { level: status === "PASS" || status === "WARN" ? "pass" : "review", title: "Minutes Draft basis", text: status === "FAIL" ? "失败 case 仅生成补件 / 退回原因摘要。" : "可基于结构化字段和核验结论生成 Minutes 草稿。" }
+      ].map(findingHtml).join("");
+    }
+
+    function findingHtml(item) {
+      return `<li class="finding ${item.level}"><b>${item.title}</b>${item.text}</li>`;
+    }
+
+    function applyScenario(name) {
+      activeScenario = name;
+      if (name === "waiver") {
+        selectedType = "renewal";
+        document.getElementById("waiver").checked = true;
+        document.getElementById("remoteMode").checked = true;
+      }
+      if (name !== "waiver" && selectedType !== "entry" && name !== "clean") {
+        selectedType = selectedType;
+      }
+      seedDocsForCurrentType();
+
+      if (name === "missing") {
+        selectedDocs.delete("id407");
+        selectedDocs.delete("financialProof");
+      }
+      if (name === "duplicate") {
+        selectedDocs.add("releaseLetter");
+        selectedDocs.add("continuousLetter");
+      }
+      renderAll();
+    }
+
+    function renderAll() {
+      renderAppButtons();
+      renderDocs();
+      renderResults();
+    }
+
+    document.getElementById("helperHkid").addEventListener("change", () => { seedDocsForCurrentType(); renderAll(); });
+    document.getElementById("waiver").addEventListener("change", () => { seedDocsForCurrentType(); renderAll(); });
+    document.getElementById("remoteMode").addEventListener("change", () => { seedDocsForCurrentType(); renderAll(); });
+    document.querySelectorAll(".scenario-buttons button").forEach((button) => {
+      button.addEventListener("click", () => applyScenario(button.dataset.scenario));
+    });
+
+    function fieldCategoryFor(fieldKey) {
+      if (fieldKey.startsWith("case.") || fieldKey.startsWith("document.")) {
+        return { label: "案件与文档", className: "case", order: 1 };
+      }
+      if (fieldKey.startsWith("helper.")) {
+        return { label: "傭工字段", className: "helper", order: 2 };
+      }
+      if (fieldKey.startsWith("employer.") || fieldKey.startsWith("household.")) {
+        return { label: "雇主字段", className: "employer", order: 3 };
+      }
+      if (fieldKey.startsWith("contract.")) {
+        return { label: "合约字段", className: "contract", order: 4 };
+      }
+      return { label: "证明材料字段", className: "proof", order: 5 };
+    }
+
+    function enhanceFieldDictionaryTable() {
+      const table = document.querySelector('table[aria-label="standardized field list"]');
+      if (!table) return;
+
+      const rows = Array.from(table.querySelectorAll("tbody tr")).map((row, index) => {
+        const key = row.querySelector(".field-key")?.textContent?.trim() || "";
+        const category = fieldCategoryFor(key);
+        const categoryCell = document.createElement("td");
+        categoryCell.innerHTML = `<span class="category-badge ${category.className}">${category.label}</span>`;
+        row.insertBefore(categoryCell, row.children[1]);
+        return { row, category, index };
+      });
+
+      rows
+        .sort((a, b) => a.category.order - b.category.order || a.index - b.index)
+        .forEach((item) => table.tBodies[0].appendChild(item.row));
+    }
+
+    renderMatrix();
+    seedDocsForCurrentType();
+    renderAll();
+    enhanceFieldDictionaryTable();
+  </script>
+</body>
+</html>

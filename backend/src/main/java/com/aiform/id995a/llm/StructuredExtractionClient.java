@@ -68,18 +68,39 @@ public class StructuredExtractionClient implements StructuredExtractionGateway, 
       ExtractionProgressListener progressListener,
       LlmModelProfile modelProfile
   ) throws IOException {
+    return extractInternal(filename, pages, progressListener, modelProfile, false);
+  }
+
+  @Override
+  public StructuredExtractionResult extractAllowingPartialPages(
+      String filename,
+      List<RenderedOcrPage> pages,
+      ExtractionProgressListener progressListener,
+      LlmModelProfile modelProfile
+  ) throws IOException {
+    return extractInternal(filename, pages, progressListener, modelProfile, true);
+  }
+
+  private StructuredExtractionResult extractInternal(
+      String filename,
+      List<RenderedOcrPage> pages,
+      ExtractionProgressListener progressListener,
+      LlmModelProfile modelProfile,
+      boolean allowPartialPages
+  ) throws IOException {
     LlmModelProfile profile = modelProfile == null ? defaultProfile() : modelProfile;
     if (blank(profile.apiKey())) {
       throw new IOException("Missing LLM API key. Set LLM_API_KEY.");
     }
     ExtractionProgressListener listener = progressListener == null ? ExtractionProgressListener.NOOP : progressListener;
     try {
-      List<PageExtraction> pageExtractions = extractPages(filename, pages, listener, profile);
+      List<PageExtraction> pageExtractions = extractPages(filename, pages, listener, profile, allowPartialPages);
       ObjectNode combined = objectMapper.createObjectNode();
       combined.put("source_file", filename == null || filename.isBlank() ? "uploaded-document" : filename);
       combined.put("total_pages", pages.size());
       ObjectNode combinedConfidence = combined.putObject("_confidence");
       ObjectNode combinedEvidence = combined.putObject("_field_evidence");
+      ObjectNode combinedPageErrors = combined.putObject("_page_errors");
       StringBuilder rawText = new StringBuilder();
 
       boolean hasAnyPageFields = false;
@@ -95,9 +116,10 @@ public class StructuredExtractionClient implements StructuredExtractionGateway, 
         combined.set(pageKey, pageData);
         mergeMetadataPage(combinedConfidence, pageExtraction.response().data().path("_confidence"), pageKey);
         mergeMetadataPage(combinedEvidence, pageExtraction.response().data().path("_field_evidence"), pageKey);
+        mergeMetadataPage(combinedPageErrors, pageExtraction.response().data().path("_page_errors"), pageKey);
         rawText.append("/* ").append(pageKey).append(" */\n").append(pageExtraction.response().rawText()).append('\n');
       }
-      if (!hasAnyPageFields && !pages.isEmpty()) {
+      if (!hasAnyPageFields && !pages.isEmpty() && !allowPartialPages) {
         throw new IOException("LLM returned empty structured JSON after retry.");
       }
       return new StructuredExtractionResult(combined, rawText.toString(), profile.model());
@@ -111,21 +133,29 @@ public class StructuredExtractionClient implements StructuredExtractionGateway, 
       String filename,
       List<RenderedOcrPage> pages,
       ExtractionProgressListener progressListener,
-      LlmModelProfile profile
+      LlmModelProfile profile,
+      boolean allowPartialPages
   ) throws IOException, InterruptedException {
     int concurrency = pageConcurrency(pages.size());
     ExecutorService executor = Executors.newFixedThreadPool(concurrency);
     try {
-      List<Future<PageExtraction>> futures = new ArrayList<>();
+      List<PageFuture> futures = new ArrayList<>();
       for (RenderedOcrPage page : pages) {
-        futures.add(executor.submit(() -> extractPage(filename, pages.size(), page, progressListener, profile)));
+        futures.add(new PageFuture(
+            page.page(),
+            executor.submit(() -> extractPage(filename, pages.size(), page, progressListener, profile))
+        ));
       }
       List<PageExtraction> results = new ArrayList<>();
-      for (Future<PageExtraction> future : futures) {
+      for (PageFuture pageFuture : futures) {
         try {
-          results.add(future.get());
+          results.add(pageFuture.future().get());
         } catch (ExecutionException exception) {
           Throwable cause = exception.getCause();
+          if (allowPartialPages) {
+            results.add(failedPageExtraction(pageFuture.page(), cause));
+            continue;
+          }
           if (cause instanceof IOException ioException) {
             throw ioException;
           }
@@ -141,6 +171,27 @@ public class StructuredExtractionClient implements StructuredExtractionGateway, 
     } finally {
       executor.shutdownNow();
     }
+  }
+
+  private PageExtraction failedPageExtraction(int page, Throwable cause) {
+    String pageKey = "page_" + page;
+    String message = conciseFailureMessage(cause);
+    ObjectNode root = objectMapper.createObjectNode();
+    root.set(pageKey, objectMapper.createObjectNode());
+    ObjectNode pageErrors = root.putObject("_page_errors");
+    pageErrors.put(pageKey, message);
+    return new PageExtraction(page, new ExtractionResponse(root, "Page " + page + " extraction failed: " + message));
+  }
+
+  private String conciseFailureMessage(Throwable cause) {
+    if (cause == null) {
+      return "LLM page extraction failed.";
+    }
+    String message = cause.getMessage();
+    if (message == null || message.isBlank()) {
+      message = cause.getClass().getSimpleName();
+    }
+    return truncate(message, 220);
   }
 
   private PageExtraction extractPage(
@@ -641,6 +692,8 @@ public class StructuredExtractionClient implements StructuredExtractionGateway, 
   }
 
   private record ExtractionResponse(JsonNode data, String rawText) {}
+
+  private record PageFuture(int page, Future<PageExtraction> future) {}
 
   private record PageExtraction(int page, ExtractionResponse response) {}
 }

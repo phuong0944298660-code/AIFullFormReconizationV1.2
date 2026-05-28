@@ -5,68 +5,69 @@ import assert from 'node:assert/strict'
 const css = readFileSync(new URL('./styles.css', import.meta.url), 'utf8')
 const app = readFileSync(new URL('./App.vue', import.meta.url), 'utf8')
 const viteConfig = readFileSync(new URL('../vite.config.js', import.meta.url), 'utf8')
+const packageJson = readFileSync(new URL('../package.json', import.meta.url), 'utf8')
+const startLocal = readFileSync(new URL('../../start-local.ps1', import.meta.url), 'utf8')
 
-test('result panes keep independent scroll regions while the page can still scroll', () => {
-  assert.match(css, /\.split-workspace\s*\{[^}]*height:\s*calc\(100vh -/s)
-  assert.match(css, /\.source-pane,[\s\S]*?\.ocr-pane\s*\{[^}]*overflow:\s*hidden/s)
-  assert.match(css, /\.document-canvas,[\s\S]*?\.json-panel\s*\{[^}]*overflow-y:\s*auto/s)
+test('FDH result page keeps review sidebar and field evidence areas distinct', () => {
+  assert.match(css, /\.review-workspace\s*\{[^}]*grid-template-columns:\s*390px minmax\(0, 1fr\)/s)
+  assert.match(css, /\.review-sidebar,[\s\S]*?\.review-main\s*\{[^}]*display:\s*grid/s)
+  assert.match(css, /\.field-card-body\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1\.15fr\) minmax\(300px, 0\.85fr\)/s)
   assert.doesNotMatch(css, /body\s*\{[^}]*overflow:\s*hidden/s)
 })
 
-test('field value characters render in black and review marks avoid underlines', () => {
-  assert.match(css, /\.field-value-text span\s*\{[^}]*color:\s*var\(--ink\)/s)
-  assert.match(css, /\.field-value-text \.char-review\s*\{[^}]*color:\s*var\(--danger\)/s)
-  assert.doesNotMatch(css, /\.field-value-text \.char-review\s*\{[^}]*text-decoration/s)
+test('standardized field cards render source evidence and normalized values', () => {
+  assert.match(app, /v-for="source in field\.sources"/)
+  assert.match(app, /source\.documentName/)
+  assert.match(app, /source\.section/)
+  assert.match(app, /source\.fieldName/)
+  assert.match(app, /field\.normalizedValue/)
+  assert.match(css, /\.snapshot-card\s*\{/)
+  assert.match(css, /\.evidence-card\s*\{/)
 })
 
-test('source page snapshot does not render character review overlays', () => {
-  assert.doesNotMatch(app, /issue-overlay/)
-  assert.doesNotMatch(app, /issue-marker/)
-  assert.doesNotMatch(css, /\.issue-overlay/)
-  assert.doesNotMatch(css, /\.issue-marker/)
+test('upload page supports application type selection and mock scenario switching', () => {
+  assert.match(app, /applicationTypes/)
+  assert.match(app, /selectedApplicationTypeId/)
+  assert.match(app, /scenarios/)
+  assert.match(app, /selectedScenarioId/)
+  assert.match(app, /function simulateUpload/)
+  assert.match(app, /function startRecognition/)
 })
 
-test('field extraction view does not render OCR model comparison status', () => {
-  assert.doesNotMatch(app, /ocrStatusText/)
-  assert.doesNotMatch(app, /localOcrStatusText/)
-  assert.doesNotMatch(app, /OCR模型|OCR妯/)
+test('review output prioritizes overall decision, material completeness, and field findings', () => {
+  assert.match(app, /整体结论/)
+  assert.match(app, /材料完整性/)
+  assert.match(app, /逐条结论与出处/)
+  assert.match(app, /标准化字段核验/)
+  assert.match(app, /材料 1-3 纳入最终判定/)
+  assert.match(app, /材料 4-12 只展示是否上传/)
 })
 
-test('frontend fallback model labels use local and cloud-native display names', () => {
-  assert.match(app, /label:\s*LOCAL_MODEL_LABEL/)
-  assert.match(app, /normalizeModelOptions\(models\)/)
-  assert.doesNotMatch(app, /Qwen3\.6-35B-A3B 视觉结构化/)
-  assert.doesNotMatch(app, /Qwen3\.6-35B-A3B（官方原生）/)
+test('field filters expose all, issue, review, and required views', () => {
+  assert.match(app, /fieldFilter === 'all'/)
+  assert.match(app, /fieldFilter === 'issues'/)
+  assert.match(app, /fieldFilter === 'review'/)
+  assert.match(app, /fieldFilter === 'required'/)
 })
 
-test('page header uses OCR demo copy', () => {
-  assert.match(app, />Full-page OCR Demo</)
-  assert.match(app, />识别材料，左侧展示每页快照，右侧对应展示结构化识别结果。</)
-  assert.doesNotMatch(app, />Full-page LLM Demo</)
-  assert.doesNotMatch(app, />PDF 或图片按整页送入多模态大模型，右侧展示自动生成的结构化 JSON。</)
-})
-
-test('primary upload action does not mention LLM', () => {
-  assert.match(app, />\s*开始识别\s*</)
-  assert.doesNotMatch(app, />\s*开始 LLM 识别\s*</)
-})
-
-test('demo result state is not reset by development hot updates', () => {
+test('frontend dev server defaults to the new copied-project port', () => {
+  assert.match(viteConfig, /port:\s*Number\(process\.env\.FRONTEND_PORT\s*\|\|\s*5197\)/)
+  assert.match(packageJson, /node \.\/node_modules\/vite\/bin\/vite\.js --host 127\.0\.0\.1/)
+  assert.doesNotMatch(packageJson, /--port 5186/)
   assert.match(viteConfig, /hmr:\s*false/)
-  assert.match(app, /__AIFULLFORMRECONIZATION_STATE__/)
-  assert.doesNotMatch(app, /sessionStorage/)
 })
 
-test('frontend dev server proxies API requests to the active backend port', () => {
-  assert.match(viteConfig, /port:\s*Number\(process\.env\.FRONTEND_PORT\s*\|\|\s*5186\)/)
-  assert.match(viteConfig, /backendOrigin\s*=\s*process\.env\.VITE_BACKEND_ORIGIN\s*\|\|\s*process\.env\.BACKEND_ORIGIN\s*\|\|\s*'http:\/\/127\.0\.0\.1:18083'/)
-  assert.match(viteConfig, /'\/api':\s*backendOrigin/)
-  assert.doesNotMatch(viteConfig, /localhost:18081/)
+test('FDH backend polling does not timeout before the backend LLM request budget', () => {
+  assert.match(app, /const FDH_JOB_POLL_INTERVAL_MS = 1000/)
+  assert.match(app, /const FDH_JOB_POLL_LIMIT = 1500/)
+  assert.doesNotMatch(app, /attempt < 240/)
+  assert.match(app, /识别任务仍在处理中/)
 })
 
-test('starting over cancels the previous backend OCR job', () => {
-  assert.match(app, /async function cancelActiveJob/)
-  assert.match(app, /fetch\(`\$\{apiBase\}\/api\/ocr\/jobs\/\$\{encodeURIComponent\(jobId\)\}`,\s*\{\s*method:\s*'DELETE'/s)
-  assert.match(app, /await cancelActiveJob\(\)/)
-  assert.match(app, /status\.status === 'canceled'/)
+test('local startup uses stable port ownership and conservative FDH LLM defaults', () => {
+  assert.match(startLocal, /function Get-PortOwnerProcessIds/)
+  assert.match(startLocal, /netstat -ano/)
+  assert.match(startLocal, /\$env:LLM_PAGE_CONCURRENCY = "1"/)
+  assert.match(startLocal, /\$env:OCR_PAGE_MAX_IMAGE_LONG_SIDE = "1800"/)
+  assert.match(startLocal, /\$env:LLM_TIMEOUT_SECONDS = "120"/)
 })

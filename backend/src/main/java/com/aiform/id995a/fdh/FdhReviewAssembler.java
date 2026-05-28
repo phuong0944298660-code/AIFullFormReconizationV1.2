@@ -1,0 +1,1071 @@
+package com.aiform.id995a.fdh;
+
+import com.aiform.id995a.ocr.DocumentTemplate;
+import com.aiform.id995a.ocr.OcrDemoResponse;
+import com.aiform.id995a.ocr.OcrPage;
+import com.aiform.id995a.ocr.StructuredFieldDetail;
+import com.fasterxml.jackson.databind.JsonNode;
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+@Service
+public class FdhReviewAssembler {
+
+  private static final DateTimeFormatter GENERATED_AT_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+  private static final Pattern MONEY_PATTERN = Pattern.compile("([0-9][0-9,]*(?:\\.\\d+)?)");
+  private static final String ID988A_ENTRY_TO_HK_APPLICATION_TYPE =
+      "entry_to_hong_kong_to_take_up_employment_as_a_domestic_helper_from_abroad";
+  private static final String ID988A_CONTRACT_RENEWAL_APPLICATION_TYPE =
+      "contract_renewal_with_the_same_employer_or_change_of_employer";
+  private static final String ID988A_REMAINING_CONTRACT_APPLICATION_TYPE =
+      "complete_the_remaining_extended_period_of_the_current_contract";
+  private static final String ID988A_ENTRY_TO_HK_LABEL =
+      "Entry to Hong Kong to take up employment as a domestic helper from abroad";
+  private static final String ID988A_CONTRACT_RENEWAL_LABEL =
+      "Contract renewal with the same employer or change of employer";
+  private static final String ID988A_REMAINING_CONTRACT_LABEL =
+      "Complete the remaining/extended period of the current contract";
+
+  private final int minimumMonthlyWageHkd;
+  private final int minimumFoodAllowanceHkd;
+  private final Clock clock;
+
+  @Autowired
+  public FdhReviewAssembler(
+      @Value("${fdh.minimum-monthly-wage-hkd:5100}") int minimumMonthlyWageHkd,
+      @Value("${fdh.minimum-food-allowance-hkd:1236}") int minimumFoodAllowanceHkd
+  ) {
+    this(minimumMonthlyWageHkd, minimumFoodAllowanceHkd, Clock.systemDefaultZone());
+  }
+
+  FdhReviewAssembler(int minimumMonthlyWageHkd, int minimumFoodAllowanceHkd, Clock clock) {
+    this.minimumMonthlyWageHkd = Math.max(0, minimumMonthlyWageHkd);
+    this.minimumFoodAllowanceHkd = Math.max(0, minimumFoodAllowanceHkd);
+    this.clock = clock == null ? Clock.systemDefaultZone() : clock;
+  }
+
+  public FdhReviewResult assemble(String applicationTypeId, List<FdhReviewDocument> documents) {
+    String resolvedApplicationType = normalizeApplicationType(applicationTypeId);
+    List<FdhReviewDocument> safeDocuments = documents == null ? List.of() : List.copyOf(documents);
+    List<FdhReviewResult.MaterialRow> materialRows = buildMaterialRows(resolvedApplicationType, safeDocuments);
+    List<FdhReviewResult.StandardField> fields = buildFields(resolvedApplicationType, safeDocuments);
+    FdhReviewResult.FieldStats stats = stats(fields);
+    String decision = decision(materialRows, fields);
+    return new FdhReviewResult(
+        resolvedApplicationType,
+        uploadedFiles(safeDocuments),
+        materialRows,
+        fields,
+        decision,
+        decisionText(decision, materialRows, fields),
+        stats,
+        LocalDateTime.now(clock).format(GENERATED_AT_FORMAT)
+    );
+  }
+
+  private List<FdhReviewResult.UploadedFile> uploadedFiles(List<FdhReviewDocument> documents) {
+    return documents.stream()
+        .map(document -> {
+          DocumentTemplate template = document.template();
+          return new FdhReviewResult.UploadedFile(
+              document.materialId(),
+              FdhMaterialCatalog.displayName(document.materialId()),
+              document.filename(),
+              document.pageCount(),
+              template == null ? "" : template.footerId(),
+              template == null ? "" : template.templateId(),
+              template == null ? "" : template.matchSource()
+          );
+        })
+        .toList();
+  }
+
+  private List<FdhReviewResult.MaterialRow> buildMaterialRows(
+      String applicationTypeId,
+      List<FdhReviewDocument> documents
+  ) {
+    Map<String, List<FdhReviewDocument>> byMaterial = new LinkedHashMap<>();
+    for (FdhReviewDocument document : documents) {
+      byMaterial.computeIfAbsent(document.materialId(), ignored -> new ArrayList<>()).add(document);
+    }
+
+    return FdhMaterialCatalog.materials().stream()
+        .map(material -> materialRow(material, applicationTypeId, byMaterial.getOrDefault(material.id(), List.of())))
+        .toList();
+  }
+
+  private FdhReviewResult.MaterialRow materialRow(
+      FdhMaterialDefinition material,
+      String applicationTypeId,
+      List<FdhReviewDocument> documents
+  ) {
+    boolean applicable = material.applicableTo(applicationTypeId);
+    boolean uploaded = !documents.isEmpty();
+    boolean core = material.coreFor(applicationTypeId);
+    String status = "muted";
+    String issue = "";
+    if (!applicable) {
+      status = "muted";
+    } else if (!uploaded && core) {
+      status = "fail";
+      issue = "该申请类别必须提交 " + material.shortName() + "，但未识别到对应材料。";
+    } else if (!uploaded) {
+      status = "warn";
+      issue = "官方清单要求或条件要求材料未上传；本 demo 不将材料 4-12 纳入最终通过判定。";
+    } else if (documents.size() > 1 && core) {
+      status = "review";
+      issue = material.shortName() + " 被识别到多份上传文件，需要人工确认是否重复或错件。";
+    } else {
+      status = material.expectedPageCount()
+          .map(expected -> pageStatus(expected, documents.get(0)))
+          .orElse("pass");
+      issue = materialIssue(material, documents.get(0), status);
+    }
+
+    if (!core && "pass".equals(status) && material.no() > 3) {
+      issue = "材料已上传并被识别为官方清单展示项；不参与最终通过判定。";
+    }
+
+    return new FdhReviewResult.MaterialRow(
+        material.id(),
+        material.no(),
+        material.name(),
+        material.shortName(),
+        material.templateId(),
+        material.expectedPages(),
+        applicable,
+        uploaded,
+        core,
+        core,
+        material.conditional(),
+        status,
+        materialStatusText(status, core),
+        materialScopeText(applicable, core),
+        documents.stream().map(FdhReviewDocument::filename).toList(),
+        issue
+    );
+  }
+
+  private String pageStatus(int expectedPages, FdhReviewDocument document) {
+    if (document.pageCount() < expectedPages) {
+      return "fail";
+    }
+    if (document.pageCount() > expectedPages) {
+      return "review";
+    }
+    DocumentTemplate template = document.template();
+    if (template != null && template.confidence() > 0 && template.confidence() < 75) {
+      return "review";
+    }
+    return "pass";
+  }
+
+  private String materialIssue(FdhMaterialDefinition material, FdhReviewDocument document, String status) {
+    if ("fail".equals(status)) {
+      return material.shortName() + " 页数少于官方模板预期，预期 "
+          + material.expectedPageCount().orElse(0) + " 页，识别到 " + document.pageCount() + " 页。";
+    }
+    if ("review".equals(status)) {
+      return material.shortName() + " 页数或模板置信度异常，需人工确认是否缺页、错页或重复页。";
+    }
+    return "";
+  }
+
+  private String materialStatusText(String status, boolean core) {
+    return switch (status) {
+      case "pass" -> core ? "核心材料齐全" : "已上传";
+      case "fail" -> "缺核心材料或缺页";
+      case "review" -> "需人工复核";
+      case "warn" -> "未上传，不阻断";
+      default -> "不适用";
+    };
+  }
+
+  private String materialScopeText(boolean applicable, boolean core) {
+    if (!applicable) {
+      return "当前类别不适用";
+    }
+    return core ? "影响最终结论" : "官方清单项，本 demo 不阻断";
+  }
+
+  private List<FdhReviewResult.StandardField> buildFields(
+      String applicationTypeId,
+      List<FdhReviewDocument> documents
+  ) {
+    List<FdhReviewDocument> id988a = docsFor(documents, "id988a");
+    List<FdhReviewDocument> id988b = docsFor(documents, "id988b");
+    List<FdhReviewDocument> id407 = docsFor(documents, "id407");
+    boolean id407Required = FdhMaterialCatalog.find("id407")
+        .map(material -> material.coreFor(applicationTypeId))
+        .orElse(false);
+
+    List<FdhReviewResult.StandardField> fields = new ArrayList<>();
+    fields.add(applicationTypeField(applicationTypeId, id988a));
+    fields.add(standardField(
+        "helper.name.full_en",
+        "傭工字段",
+        "傭工英文姓名",
+        true,
+        List.of(
+            helperName(id988a, "ID 988A"),
+            helperName(id407, "ID 407"),
+            evidence(documents, "helperTravelCopy", "Name", List.of(group("passport", "name"), group("travel", "name")))
+        ),
+        "ID 988A、ID 407、旅行证件上的傭工英文姓名应一致；明显不一致判为 FAIL。"
+    ));
+    fields.add(standardField(
+        "helper.travel_doc.number",
+        "傭工字段",
+        "傭工旅行证件号码",
+        true,
+        List.of(
+            evidence(id988a, "ID 988A", "Travel document no.", List.of(
+                group("travel", "document", "no"),
+                group("travel", "doc", "no"),
+                group("passport", "no")
+            )),
+            evidence(documents, "helperTravelCopy", "Passport No.", List.of(
+                group("passport", "no"),
+                group("travel", "document", "no")
+            ))
+        ),
+        "ID 988A 与旅行证件副本号码应一致；轻微 OCR 差异进入 REVIEW。"
+    ));
+    fields.add(standardField(
+        "helper.date_of_birth",
+        "傭工字段",
+        "傭工出生日期",
+        true,
+        List.of(
+            evidence(id988a, "ID 988A", "Date of birth", List.of(group("date", "birth"), group("dob"))),
+            evidence(documents, "helperTravelCopy", "Date of birth", List.of(group("date", "birth"), group("dob")))
+        ),
+        "日期标准化后应一致。"
+    ));
+    fields.add(standardField(
+        "helper.nationality",
+        "傭工字段",
+        "傭工国籍",
+        true,
+        List.of(
+            evidence(id988a, "ID 988A", "Nationality", List.of(group("nationality"))),
+            evidence(documents, "helperTravelCopy", "Nationality", List.of(group("nationality")))
+        ),
+        "可做国家名 / 国籍词标准化，例如 Indonesia 与 Indonesian 视为一致。"
+    ));
+    fields.add(signatureField(
+        "helper.signature.present",
+        "傭工字段",
+        "傭工签名",
+        true,
+        id988a,
+        "Signature of applicant",
+        "ID 988A 申请人签名栏必须存在签署痕迹；明确空白判为 FAIL，无法识别判为 REVIEW。"
+    ));
+    fields.add(standardField(
+        "employer.name.full_en",
+        "雇主字段",
+        "雇主英文姓名",
+        true,
+        List.of(
+            evidence(id988b, "ID 988B", "Name of employer", List.of(
+                group("employer", "name"),
+                group("name", "employer")
+            )),
+            evidence(id407, "ID 407", "Name of employer", List.of(
+                group("employer", "name"),
+                group("name", "employer")
+            ))
+        ),
+        "ID 988B 与 ID 407 雇主姓名应一致。"
+    ));
+    fields.add(multiSignatureField(
+        "employer.signature.present",
+        "雇主字段",
+        "雇主签名",
+        true,
+        List.of(
+            evidence(id988b, "ID 988B", "Signature of employer", List.of(group("signature"), group("sign"))),
+            evidence(id407, "ID 407", "Signature of employer", List.of(group("signature"), group("sign")))
+        ),
+        "ID 988B 与 ID 407 的雇主签名栏应存在签署痕迹；无法识别时进入 REVIEW。"
+    ));
+    fields.add(contractField(
+        "contract.dh_contract_no",
+        "标准雇佣合约编号",
+        id407Required,
+        id407,
+        "Contract No.",
+        List.of(group("contract", "no"), group("contract", "number")),
+        "如当前类别要求 ID 407，合约编号必须可识别。"
+    ));
+    fields.add(wageField(
+        "contract.monthly_wage_hkd",
+        "每月工资",
+        id407Required,
+        id407,
+        "Monthly wages",
+        List.of(group("monthly", "wage"), group("wages"), group("salary")),
+        minimumMonthlyWageHkd,
+        "标准雇佣合约月薪不得低于当前政府公布的外籍家庭傭工最低允许工资。"
+    ));
+    fields.add(wageField(
+        "contract.food.allowance_hkd",
+        "膳食津贴",
+        id407Required,
+        id407,
+        "Food allowance",
+        List.of(group("food", "allowance"), group("allowance", "food")),
+        minimumFoodAllowanceHkd,
+        "如雇主不免费提供膳食，膳食津贴不得低于当前政府公布的最低金额。"
+    ));
+    fields.add(documentFooterField(documents));
+    return fields;
+  }
+
+  private FdhReviewResult.StandardField applicationTypeField(
+      String applicationTypeId,
+      List<FdhReviewDocument> documents
+  ) {
+    List<ApplicationTypeExtraction> extractedTypes = applicationTypeExtractions(documents);
+    List<FdhReviewResult.FieldSource> sources = extractedTypes.stream()
+        .map(extracted -> {
+          ExtractedValue value = extracted.value();
+          String displayValue = extracted.label() + " - " + value.value();
+          return new FdhReviewResult.FieldSource(
+              "ID 988A",
+              extracted.filename(),
+              value.section(),
+              "Application Type",
+              displayValue,
+              value.confidence(),
+              displayValue,
+              value.snapshotDataUrl()
+          );
+        })
+        .toList();
+    FieldAssessment assessment = assessRequiredSources(sources);
+    String expected = applicationTypeLabel(applicationTypeId);
+    long distinctRows = extractedTypes.stream()
+        .map(ApplicationTypeExtraction::applicationTypeKey)
+        .distinct()
+        .count();
+    if (distinctRows > 1) {
+      assessment = new FieldAssessment(
+          "fail",
+          "ID 988A application type has more than one selected business row."
+      );
+    } else if (!sources.isEmpty() && !applicationTypeMatches(applicationTypeId, extractedTypes.get(0))) {
+      assessment = new FieldAssessment(
+          "fail",
+          "ID 988A 申请类别与用户在首页选择的四类情形不一致。"
+      );
+    }
+    return new FdhReviewResult.StandardField(
+        "case.application_type",
+        "案件与文档",
+        "申请类别",
+        true,
+        sources.isEmpty() ? "Unrecognized" : "Selected: " + expected + "; ID 988A: " + normalizeDisplayValue(sources),
+        assessment.status(),
+        assessment.issue(),
+        true,
+        sources,
+        "必须与用户选择的四类情形一致；ID 988A 不得漏选或多选。"
+    );
+  }
+
+  private FdhReviewResult.StandardField signatureField(
+      String key,
+      String category,
+      String label,
+      boolean required,
+      List<FdhReviewDocument> documents,
+      String fieldName,
+      String rule
+  ) {
+    List<FdhReviewResult.FieldSource> sources = sources(List.of(evidence(
+        documents,
+        documents.isEmpty() ? "" : FdhMaterialCatalog.displayName(documents.get(0).materialId()),
+        fieldName,
+        List.of(group("signature"), group("sign"))
+    )));
+    FieldAssessment assessment = assessRequiredSources(sources);
+    if (!sources.isEmpty() && sources.stream().anyMatch(source -> blankOrNegative(source.value()))) {
+      assessment = new FieldAssessment("fail", label + " 字段明确为空或标记为未签署。");
+    }
+    return new FdhReviewResult.StandardField(
+        key,
+        category,
+        label,
+        required,
+        sources.isEmpty() ? "未识别" : "已检测到",
+        assessment.status(),
+        assessment.issue(),
+        required,
+        sources,
+        rule
+    );
+  }
+
+  private FdhReviewResult.StandardField multiSignatureField(
+      String key,
+      String category,
+      String label,
+      boolean required,
+      List<Optional<FdhReviewResult.FieldSource>> optionalSources,
+      String rule
+  ) {
+    List<FdhReviewResult.FieldSource> sources = sources(optionalSources);
+    FieldAssessment assessment = assessRequiredSources(sources);
+    if (!sources.isEmpty() && sources.stream().anyMatch(source -> blankOrNegative(source.value()))) {
+      assessment = new FieldAssessment("fail", label + " 字段明确为空或标记为未签署。");
+    }
+    return new FdhReviewResult.StandardField(
+        key,
+        category,
+        label,
+        required,
+        sources.isEmpty() ? "未识别" : "已检测到",
+        assessment.status(),
+        assessment.issue(),
+        required,
+        sources,
+        rule
+    );
+  }
+
+  private FdhReviewResult.StandardField contractField(
+      String key,
+      String label,
+      boolean required,
+      List<FdhReviewDocument> documents,
+      String fieldName,
+      List<List<String>> groups,
+      String rule
+  ) {
+    List<FdhReviewResult.FieldSource> sources = sources(List.of(evidence(documents, "ID 407", fieldName, groups)));
+    FieldAssessment assessment = required && documents.isEmpty()
+        ? new FieldAssessment("fail", "ID 407 未上传，无法核验该合约字段。")
+        : assessSources(required, sources);
+    return new FdhReviewResult.StandardField(
+        key,
+        "合约字段",
+        label,
+        required,
+        sources.isEmpty() ? "未识别" : normalizeDisplayValue(sources),
+        assessment.status(),
+        assessment.issue(),
+        required,
+        sources,
+        rule
+    );
+  }
+
+  private FdhReviewResult.StandardField wageField(
+      String key,
+      String label,
+      boolean required,
+      List<FdhReviewDocument> documents,
+      String fieldName,
+      List<List<String>> groups,
+      int minimum,
+      String rule
+  ) {
+    List<FdhReviewResult.FieldSource> sources = sources(List.of(evidence(documents, "ID 407", fieldName, groups)));
+    FieldAssessment assessment = required && documents.isEmpty()
+        ? new FieldAssessment("fail", "ID 407 未上传，无法核验该合约字段。")
+        : assessSources(required, sources);
+    Optional<Integer> amount = sources.stream()
+        .map(FdhReviewResult.FieldSource::value)
+        .map(FdhReviewAssembler::money)
+        .filter(Optional::isPresent)
+        .map(Optional::get)
+        .findFirst();
+    if (amount.isPresent() && amount.get() < minimum) {
+      assessment = new FieldAssessment("fail", label + " HK$" + amount.get() + " 低于规则阈值 HK$" + minimum + "。");
+    }
+    return new FdhReviewResult.StandardField(
+        key,
+        "合约字段",
+        label,
+        required,
+        sources.isEmpty() ? "未识别" : normalizeDisplayValue(sources),
+        assessment.status(),
+        assessment.issue(),
+        required,
+        sources,
+        rule + " 当前系统阈值可通过 fdh.minimum-* 配置更新。"
+    );
+  }
+
+  private FdhReviewResult.StandardField documentFooterField(List<FdhReviewDocument> documents) {
+    List<FdhReviewResult.FieldSource> sources = documents.stream()
+        .filter(document -> document.template() != null)
+        .map(document -> new FdhReviewResult.FieldSource(
+            FdhMaterialCatalog.displayName(document.materialId()),
+            document.filename(),
+            "页尾",
+            "Template footer",
+            document.template().footerId().isBlank() ? document.template().templateId() : document.template().footerId(),
+            document.template().confidence(),
+            document.template().footerId().isBlank() ? document.template().templateId() : document.template().footerId(),
+            firstPageSnapshot(document)
+        ))
+        .toList();
+    boolean lowConfidenceCoreTemplate = documents.stream()
+        .filter(document -> FdhMaterialCatalog.find(document.materialId())
+            .map(material -> material.no() <= 3)
+            .orElse(false))
+        .map(FdhReviewDocument::template)
+        .filter(Objects::nonNull)
+        .anyMatch(template -> template.confidence() < 75);
+    FieldAssessment assessment = sources.isEmpty()
+        ? new FieldAssessment("review", "未能读取任何页尾 ID 或页面结构模板。")
+        : lowConfidenceCoreTemplate
+            ? new FieldAssessment("review", "存在模板识别低置信材料，需要人工确认模板版本。")
+            : new FieldAssessment("pass", "");
+    return new FdhReviewResult.StandardField(
+        "document.footer_id",
+        "案件与文档",
+        "页尾模板标识",
+        true,
+        sources.isEmpty() ? "未识别" : normalizeDisplayValue(sources),
+        assessment.status(),
+        assessment.issue(),
+        true,
+        sources,
+        "通过页尾 ID 与页面结构识别材料类型和模板版本。"
+    );
+  }
+
+  private FdhReviewResult.StandardField standardField(
+      String key,
+      String category,
+      String label,
+      boolean required,
+      List<Optional<FdhReviewResult.FieldSource>> optionalSources,
+      String rule
+  ) {
+    List<FdhReviewResult.FieldSource> sources = sources(optionalSources);
+    FieldAssessment assessment = assessSources(required, sources);
+    return new FdhReviewResult.StandardField(
+        key,
+        category,
+        label,
+        required,
+        sources.isEmpty() ? "未识别" : normalizeDisplayValue(sources),
+        assessment.status(),
+        assessment.issue(),
+        required,
+        sources,
+        rule
+    );
+  }
+
+  private FieldAssessment assessRequiredSources(List<FdhReviewResult.FieldSource> sources) {
+    return assessSources(true, sources);
+  }
+
+  private FieldAssessment assessSources(boolean required, List<FdhReviewResult.FieldSource> sources) {
+    if (sources.isEmpty()) {
+      return required
+          ? new FieldAssessment("review", "未能从已上传材料识别该必填字段，需要人工复核。")
+          : new FieldAssessment("pass", "");
+    }
+    if (sources.stream().anyMatch(source -> source.confidence() < 70)) {
+      return new FieldAssessment("review", "字段识别置信度较低，需要人工复核。");
+    }
+    List<String> normalized = sources.stream()
+        .map(source -> comparableValue(source.fieldName(), source.value()))
+        .filter(value -> !value.isBlank())
+        .distinct()
+        .toList();
+    if (normalized.size() <= 1) {
+      return new FieldAssessment("pass", "");
+    }
+    return hasOnlyTinyDifference(normalized)
+        ? new FieldAssessment("review", "跨文件字段值存在轻微差异，需要人工复核。")
+        : new FieldAssessment("fail", "跨文件字段值明显不一致。");
+  }
+
+  private Optional<FdhReviewResult.FieldSource> helperName(List<FdhReviewDocument> documents, String documentName) {
+    Optional<FdhReviewResult.FieldSource> surname = evidence(
+        documents,
+        documentName,
+        "Surname in English",
+        List.of(group("surname"), group("family", "name"))
+    );
+    Optional<FdhReviewResult.FieldSource> given = evidence(
+        documents,
+        documentName,
+        "Given names in English",
+        List.of(group("given"), group("given", "name"))
+    );
+    if (surname.isPresent() && given.isPresent()) {
+      FdhReviewResult.FieldSource first = surname.get();
+      FdhReviewResult.FieldSource second = given.get();
+      return Optional.of(new FdhReviewResult.FieldSource(
+          first.documentName(),
+          first.filename(),
+          first.section(),
+          "Surname / Given names",
+          first.value() + " " + second.value(),
+          Math.min(first.confidence(), second.confidence()),
+          first.value() + " " + second.value(),
+          first.snapshotDataUrl().isBlank() ? second.snapshotDataUrl() : first.snapshotDataUrl()
+      ));
+    }
+    Optional<FdhReviewResult.FieldSource> full = evidence(
+        documents,
+        documentName,
+        "Name of Helper",
+        List.of(group("helper", "name"), group("name", "helper"), group("full", "name"), group("english", "name"))
+    );
+    return full.or(() -> surname).or(() -> given);
+  }
+
+  private List<ApplicationTypeExtraction> applicationTypeExtractions(List<FdhReviewDocument> documents) {
+    Map<String, ApplicationTypeExtraction> extractions = new LinkedHashMap<>();
+    for (FdhReviewDocument document : documents == null ? List.<FdhReviewDocument>of() : documents) {
+      for (ExtractedValue value : flatten(document)) {
+        applicationTypeCandidate(value).ifPresent(candidate -> {
+          String key = document.filename() + "|" + candidate.applicationTypeKey() + "|" + value.value();
+          extractions.putIfAbsent(key, new ApplicationTypeExtraction(
+              document.filename(),
+              candidate.applicationTypeKey(),
+              candidate.label(),
+              value
+          ));
+        });
+      }
+    }
+    return List.copyOf(extractions.values());
+  }
+
+  private Optional<ApplicationTypeCandidate> applicationTypeCandidate(ExtractedValue value) {
+    String path = value.path() == null ? "" : value.path();
+    if (path.isBlank() || path.startsWith("_")) {
+      return Optional.empty();
+    }
+    String normalizedPath = normalizeTokens(path);
+    if (!normalizedPath.contains("application type")) {
+      return Optional.empty();
+    }
+    if (path.contains(ID988A_ENTRY_TO_HK_APPLICATION_TYPE)) {
+      return Optional.of(new ApplicationTypeCandidate(ID988A_ENTRY_TO_HK_APPLICATION_TYPE, ID988A_ENTRY_TO_HK_LABEL));
+    }
+    if (path.contains(ID988A_CONTRACT_RENEWAL_APPLICATION_TYPE)) {
+      return Optional.of(new ApplicationTypeCandidate(ID988A_CONTRACT_RENEWAL_APPLICATION_TYPE, ID988A_CONTRACT_RENEWAL_LABEL));
+    }
+    if (path.contains(ID988A_REMAINING_CONTRACT_APPLICATION_TYPE)) {
+      return Optional.of(new ApplicationTypeCandidate(ID988A_REMAINING_CONTRACT_APPLICATION_TYPE, ID988A_REMAINING_CONTRACT_LABEL));
+    }
+
+    String normalizedValue = normalizeTokens(value.value());
+    if (normalizedValue.equals("entry visa")) {
+      return Optional.empty();
+    }
+    if (containsAny(normalizedValue, "take up employment", "domestic helper from abroad", "from abroad")) {
+      return Optional.of(new ApplicationTypeCandidate(ID988A_ENTRY_TO_HK_APPLICATION_TYPE, ID988A_ENTRY_TO_HK_LABEL));
+    }
+    if (containsAny(normalizedValue, "contract renewal", "same employer", "change of employer", "change employer")) {
+      return Optional.of(new ApplicationTypeCandidate(ID988A_CONTRACT_RENEWAL_APPLICATION_TYPE, ID988A_CONTRACT_RENEWAL_LABEL));
+    }
+    if (containsAny(normalizedValue, "remaining", "extended period", "extension of stay")) {
+      return Optional.of(new ApplicationTypeCandidate(ID988A_REMAINING_CONTRACT_APPLICATION_TYPE, ID988A_REMAINING_CONTRACT_LABEL));
+    }
+    return Optional.empty();
+  }
+
+  private Optional<FdhReviewResult.FieldSource> evidence(
+      List<FdhReviewDocument> documents,
+      String expectedMaterialOrDocumentName,
+      String fieldName,
+      List<List<String>> tokenGroups
+  ) {
+    List<FdhReviewDocument> candidates = documents == null ? List.of() : documents;
+    if (FdhMaterialCatalog.find(expectedMaterialOrDocumentName).isPresent()) {
+      candidates = docsFor(candidates, expectedMaterialOrDocumentName);
+    }
+    for (FdhReviewDocument document : candidates) {
+      Optional<ExtractedValue> value = findValue(document, tokenGroups);
+      if (value.isPresent()) {
+        ExtractedValue extracted = value.get();
+        String documentName = FdhMaterialCatalog.displayName(document.materialId());
+        if (!expectedMaterialOrDocumentName.isBlank() && !FdhMaterialCatalog.find(expectedMaterialOrDocumentName).isPresent()) {
+          documentName = expectedMaterialOrDocumentName;
+        }
+        return Optional.of(new FdhReviewResult.FieldSource(
+            documentName,
+            document.filename(),
+            extracted.section(),
+            fieldName,
+            extracted.value(),
+            extracted.confidence(),
+            extracted.value(),
+            extracted.snapshotDataUrl()
+        ));
+      }
+    }
+    return Optional.empty();
+  }
+
+  private Optional<ExtractedValue> findValue(FdhReviewDocument document, List<List<String>> tokenGroups) {
+    List<ExtractedValue> fields = flatten(document);
+    return fields.stream()
+        .filter(value -> matchesAnyGroup(value.path(), tokenGroups))
+        .max(Comparator.comparingDouble(ExtractedValue::confidence));
+  }
+
+  private List<ExtractedValue> flatten(FdhReviewDocument document) {
+    List<ExtractedValue> values = new ArrayList<>();
+    OcrDemoResponse response = document.ocrResult();
+    if (response != null) {
+      for (OcrPage page : response.pages()) {
+        for (StructuredFieldDetail detail : page.structuredFields()) {
+          if (detail.displayValue() != null && !detail.displayValue().isBlank()) {
+            values.add(new ExtractedValue(
+                detail.path() + " " + detail.label(),
+                sectionFromPath(detail.path()),
+                detail.displayValue(),
+                detail.confidence(),
+                detail.snapshotDataUrl()
+            ));
+          }
+        }
+      }
+      flattenJson(response.structuredData(), "", values);
+    }
+    return values;
+  }
+
+  private void flattenJson(JsonNode node, String path, List<ExtractedValue> values) {
+    if (node == null || node.isMissingNode() || node.isNull()) {
+      return;
+    }
+    if (node.isObject()) {
+      node.fields().forEachRemaining(entry -> flattenJson(entry.getValue(), append(path, entry.getKey()), values));
+      return;
+    }
+    if (node.isArray()) {
+      int index = 0;
+      for (JsonNode child : node) {
+        flattenJson(child, append(path, String.valueOf(index)), values);
+        index += 1;
+      }
+      return;
+    }
+    String value = node.asText("");
+    if (!value.isBlank()) {
+      values.add(new ExtractedValue(path, sectionFromPath(path), value, 78, ""));
+    }
+  }
+
+  private String append(String path, String key) {
+    return path == null || path.isBlank() ? key : path + "." + key;
+  }
+
+  private String sectionFromPath(String path) {
+    if (path == null || path.isBlank()) {
+      return "结构化字段";
+    }
+    String[] parts = path.split("\\.");
+    if (parts.length <= 2) {
+      return path;
+    }
+    return parts[0] + "." + parts[1];
+  }
+
+  private boolean matchesAnyGroup(String path, List<List<String>> groups) {
+    String normalized = normalizeTokens(path);
+    for (List<String> group : groups) {
+      boolean allMatch = true;
+      for (String token : group) {
+        if (!normalized.contains(normalizeTokens(token))) {
+          allMatch = false;
+          break;
+        }
+      }
+      if (allMatch) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private static List<String> group(String... tokens) {
+    return List.of(tokens);
+  }
+
+  private List<FdhReviewResult.FieldSource> sources(List<Optional<FdhReviewResult.FieldSource>> optionalSources) {
+    return optionalSources.stream()
+        .filter(Optional::isPresent)
+        .map(Optional::get)
+        .toList();
+  }
+
+  private List<FdhReviewDocument> docsFor(List<FdhReviewDocument> documents, String materialId) {
+    return documents.stream()
+        .filter(document -> Objects.equals(document.materialId(), materialId))
+        .toList();
+  }
+
+  private String decision(List<FdhReviewResult.MaterialRow> materials, List<FdhReviewResult.StandardField> fields) {
+    boolean fail = materials.stream().anyMatch(material -> material.blocking() && "fail".equals(material.status()))
+        || fields.stream().anyMatch(field -> field.blocking() && "fail".equals(field.status()));
+    if (fail) {
+      return "FAIL";
+    }
+    boolean review = materials.stream().anyMatch(material -> material.blocking() && "review".equals(material.status()))
+        || fields.stream().anyMatch(field -> field.blocking() && "review".equals(field.status()));
+    return review ? "REVIEW" : "PASS";
+  }
+
+  private String decisionText(
+      String decision,
+      List<FdhReviewResult.MaterialRow> materials,
+      List<FdhReviewResult.StandardField> fields
+  ) {
+    if ("FAIL".equals(decision)) {
+      Optional<String> materialIssue = materials.stream()
+          .filter(material -> material.blocking() && "fail".equals(material.status()))
+          .map(material -> material.shortName() + "：" + material.issue())
+          .findFirst();
+      Optional<String> fieldIssue = fields.stream()
+          .filter(field -> field.blocking() && "fail".equals(field.status()))
+          .map(field -> field.label() + "：" + field.issue())
+          .findFirst();
+      return materialIssue.or(() -> fieldIssue).orElse("存在阻断规则失败，当前申请不允许自动通过。");
+    }
+    if ("REVIEW".equals(decision)) {
+      Optional<String> reviewIssue = fields.stream()
+          .filter(field -> field.blocking() && "review".equals(field.status()))
+          .map(field -> field.label() + "：" + field.issue())
+          .findFirst();
+      return reviewIssue.orElse("核心材料或字段存在待人工复核项，复核前不建议自动通过。");
+    }
+    return "核心材料 1-3 齐全，必填字段可识别，关键字段跨文件一致，允许通过。";
+  }
+
+  private FdhReviewResult.FieldStats stats(List<FdhReviewResult.StandardField> fields) {
+    int pass = (int) fields.stream().filter(field -> "pass".equals(field.status())).count();
+    int fail = (int) fields.stream().filter(field -> "fail".equals(field.status())).count();
+    int review = (int) fields.stream().filter(field -> "review".equals(field.status())).count();
+    int required = (int) fields.stream().filter(FdhReviewResult.StandardField::required).count();
+    return new FdhReviewResult.FieldStats(fields.size(), pass, fail, review, required);
+  }
+
+  private static String normalizeApplicationType(String applicationTypeId) {
+    Set<String> allowed = Set.of("entry_visa", "renewal", "remaining_period", "change_employer");
+    return allowed.contains(applicationTypeId) ? applicationTypeId : "entry_visa";
+  }
+
+  private String applicationTypeLabel(String applicationTypeId) {
+    return switch (applicationTypeId) {
+      case "renewal" -> "于两年合约期届满后续约";
+      case "remaining_period" -> "完成现有合约的余下期间";
+      case "change_employer" -> "转换雇主";
+      default -> "入境签证";
+    };
+  }
+
+  private boolean applicationTypeMatches(String applicationTypeId, ApplicationTypeExtraction extraction) {
+    String applicationTypeKey = extraction.applicationTypeKey();
+    return switch (applicationTypeId) {
+      case "renewal", "change_employer" -> ID988A_CONTRACT_RENEWAL_APPLICATION_TYPE.equals(applicationTypeKey);
+      case "remaining_period" -> ID988A_REMAINING_CONTRACT_APPLICATION_TYPE.equals(applicationTypeKey);
+      default -> ID988A_ENTRY_TO_HK_APPLICATION_TYPE.equals(applicationTypeKey);
+    };
+  }
+
+  private boolean containsAny(String value, String... needles) {
+    for (String needle : needles) {
+      if (value.contains(normalizeTokens(needle))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private static String normalizeDisplayValue(List<FdhReviewResult.FieldSource> sources) {
+    Set<String> values = new LinkedHashSet<>();
+    for (FdhReviewResult.FieldSource source : sources) {
+      if (source.value() != null && !source.value().isBlank()) {
+        values.add(source.value().trim());
+      }
+    }
+    return String.join(" / ", values);
+  }
+
+  private String comparableValue(String fieldName, String value) {
+    if (fieldName != null && fieldName.toLowerCase(Locale.ROOT).contains("date")) {
+      return normalizeDate(value);
+    }
+    if (fieldName != null && fieldName.toLowerCase(Locale.ROOT).contains("nationality")) {
+      return normalizeNationality(value);
+    }
+    return normalizeTokens(value);
+  }
+
+  private static String normalizeTokens(String value) {
+    return value == null ? "" : value
+        .toLowerCase(Locale.ROOT)
+        .replaceAll("[^\\p{IsAlphabetic}\\p{IsDigit}]+", " ")
+        .replaceAll("\\s+", " ")
+        .trim();
+  }
+
+  private String normalizeDate(String value) {
+    String normalized = normalizeTokens(value);
+    Matcher matcher = Pattern.compile("(\\d{1,2})\\s+(\\d{1,2}|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\\s+(\\d{4})").matcher(normalized);
+    if (matcher.find()) {
+      return matcher.group(3) + "-" + monthNumber(matcher.group(2)) + "-" + twoDigits(matcher.group(1));
+    }
+    matcher = Pattern.compile("(\\d{4})\\s+(\\d{1,2})\\s+(\\d{1,2})").matcher(normalized);
+    if (matcher.find()) {
+      return matcher.group(1) + "-" + twoDigits(matcher.group(2)) + "-" + twoDigits(matcher.group(3));
+    }
+    return normalized;
+  }
+
+  private String monthNumber(String value) {
+    return switch (value.toLowerCase(Locale.ROOT)) {
+      case "jan" -> "01";
+      case "feb" -> "02";
+      case "mar" -> "03";
+      case "apr" -> "04";
+      case "may" -> "05";
+      case "jun" -> "06";
+      case "jul" -> "07";
+      case "aug" -> "08";
+      case "sep" -> "09";
+      case "oct" -> "10";
+      case "nov" -> "11";
+      case "dec" -> "12";
+      default -> twoDigits(value);
+    };
+  }
+
+  private String twoDigits(String value) {
+    try {
+      int number = Integer.parseInt(value);
+      return number < 10 ? "0" + number : String.valueOf(number);
+    } catch (NumberFormatException exception) {
+      return value;
+    }
+  }
+
+  private String normalizeNationality(String value) {
+    String normalized = normalizeTokens(value);
+    if (normalized.equals("indonesia")) {
+      return "indonesian";
+    }
+    return normalized;
+  }
+
+  private boolean hasOnlyTinyDifference(List<String> values) {
+    for (int first = 0; first < values.size(); first += 1) {
+      for (int second = first + 1; second < values.size(); second += 1) {
+        if (levenshtein(values.get(first), values.get(second)) > 1) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  private int levenshtein(String left, String right) {
+    String a = left == null ? "" : left;
+    String b = right == null ? "" : right;
+    int[] previous = new int[b.length() + 1];
+    int[] current = new int[b.length() + 1];
+    for (int index = 0; index <= b.length(); index += 1) {
+      previous[index] = index;
+    }
+    for (int i = 1; i <= a.length(); i += 1) {
+      current[0] = i;
+      for (int j = 1; j <= b.length(); j += 1) {
+        int cost = a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1;
+        current[j] = Math.min(Math.min(
+            current[j - 1] + 1,
+            previous[j] + 1
+        ), previous[j - 1] + cost);
+      }
+      int[] swap = previous;
+      previous = current;
+      current = swap;
+    }
+    return previous[b.length()];
+  }
+
+  private static Optional<Integer> money(String value) {
+    Matcher matcher = MONEY_PATTERN.matcher(value == null ? "" : value.replace(",", ""));
+    if (!matcher.find()) {
+      return Optional.empty();
+    }
+    try {
+      return Optional.of((int) Math.round(Double.parseDouble(matcher.group(1))));
+    } catch (NumberFormatException exception) {
+      return Optional.empty();
+    }
+  }
+
+  private boolean blankOrNegative(String value) {
+    String normalized = normalizeTokens(value);
+    return normalized.isBlank()
+        || normalized.equals("no")
+        || normalized.equals("none")
+        || normalized.contains("not detected")
+        || normalized.contains("blank")
+        || normalized.contains("missing")
+        || normalized.contains("未签")
+        || normalized.contains("未检测");
+  }
+
+  private String firstPageSnapshot(FdhReviewDocument document) {
+    OcrDemoResponse response = document.ocrResult();
+    if (response == null || response.pages().isEmpty()) {
+      return "";
+    }
+    return response.pages().get(0).sourceImageDataUrl();
+  }
+
+  private record ApplicationTypeExtraction(
+      String filename,
+      String applicationTypeKey,
+      String label,
+      ExtractedValue value
+  ) {}
+
+  private record ApplicationTypeCandidate(
+      String applicationTypeKey,
+      String label
+  ) {}
+
+  private record ExtractedValue(
+      String path,
+      String section,
+      String value,
+      double confidence,
+      String snapshotDataUrl
+  ) {}
+
+  private record FieldAssessment(String status, String issue) {}
+}

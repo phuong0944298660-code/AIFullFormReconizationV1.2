@@ -10,6 +10,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Service;
@@ -90,6 +91,27 @@ public class OcrDemoService {
       String modelId,
       DocumentTemplate template
   ) throws IOException {
+    return recognizeRenderedInternal(filename, pages, progressListener, modelId, template, true);
+  }
+
+  public OcrDemoResponse recognizeRenderedForFdhReview(
+      String filename,
+      List<RenderedOcrPage> pages,
+      ExtractionProgressListener progressListener,
+      String modelId,
+      DocumentTemplate template
+  ) throws IOException {
+    return recognizeRenderedInternal(filename, pages, progressListener, modelId, template, false);
+  }
+
+  private OcrDemoResponse recognizeRenderedInternal(
+      String filename,
+      List<RenderedOcrPage> pages,
+      ExtractionProgressListener progressListener,
+      String modelId,
+      DocumentTemplate template,
+      boolean refineFieldCrops
+  ) throws IOException {
     String normalizedFilename = normalizeFilename(filename);
     List<RenderedOcrPage> safePages = pages == null ? List.of() : pages;
     DocumentTemplate resolvedTemplate = template == null
@@ -97,40 +119,67 @@ public class OcrDemoService {
         : template;
     LlmModelProfile modelProfile = llmModelRegistry.resolve(modelId);
     ExtractionProgressListener listener = progressListener == null ? ExtractionProgressListener.NOOP : progressListener;
-    StructuredExtractionResult extraction = structuredExtractionGateway.extract(normalizedFilename, safePages, listener, modelProfile);
-    listener.postProcessingStep("address_crop_review", "Reviewing address fields.", 72);
-    AddressFieldCropRefinementResult refinedExtraction = addressFieldCropRefinementService.refine(
-        normalizedFilename,
-        extraction.data(),
-        safePages,
-        modelProfile
-    );
-    listener.postProcessingStep("field_crop_review", "Reviewing ordinary and symbol-sensitive fields.", 80);
-    GeneralFieldCropRefinementResult refinedGeneralFields = generalFieldCropRefinementService.refine(
-        normalizedFilename,
-        refinedExtraction.data(),
-        safePages,
-        modelProfile
-    );
-    listener.postProcessingStep("selection_crop_review", "Reviewing checkbox and declaration fields.", 88);
-    SelectionFieldCropRefinementResult refinedSelections = selectionFieldCropRefinementService.refine(
-        normalizedFilename,
-        refinedGeneralFields.data(),
-        safePages,
-        modelProfile,
-        resolvedTemplate
-    );
-    listener.postProcessingStep("declaration_footer_review", "Restoring declaration footer fields.", 92);
-    DeclarationFooterFieldRefinementResult refinedFooterFields = declarationFooterFieldRefinementService.refine(
-        normalizedFilename,
-        refinedSelections.data(),
-        safePages,
-        modelProfile
-    );
-    listener.postProcessingStep("smudge_filter", "Filtering smudges, erasures, and correction marks.", 96);
-    SmudgedFieldValueFilterResult filteredExtraction = smudgedFieldValueFilterService.filter(refinedFooterFields.data());
+    StructuredExtractionResult extraction = refineFieldCrops
+        ? structuredExtractionGateway.extract(normalizedFilename, safePages, listener, modelProfile)
+        : structuredExtractionGateway.extractAllowingPartialPages(normalizedFilename, safePages, listener, modelProfile);
+    JsonNode structuredData = extraction.data();
+    List<String> statusMessages = new ArrayList<>();
+    statusMessages.add("Rendered " + safePages.size() + " page snapshot(s) and extracted structured JSON with " + modelProfile.label() + ".");
+    statusMessages.add("Rendered page snapshots were sent directly to the multimodal LLM to find fields and filled regions; no preset field list or manual template coordinate boxes were used.");
+    statusMessages.add("Detected document template: " + resolvedTemplate.templateId() + " (" + resolvedTemplate.matchSource() + ").");
+
+    if (refineFieldCrops) {
+      listener.postProcessingStep("address_crop_review", "Reviewing address fields.", 72);
+      AddressFieldCropRefinementResult refinedExtraction = addressFieldCropRefinementService.refine(
+          normalizedFilename,
+          structuredData,
+          safePages,
+          modelProfile
+      );
+      listener.postProcessingStep("field_crop_review", "Reviewing ordinary and symbol-sensitive fields.", 80);
+      GeneralFieldCropRefinementResult refinedGeneralFields = generalFieldCropRefinementService.refine(
+          normalizedFilename,
+          refinedExtraction.data(),
+          safePages,
+          modelProfile
+      );
+      listener.postProcessingStep("selection_crop_review", "Reviewing checkbox and declaration fields.", 88);
+      SelectionFieldCropRefinementResult refinedSelections = selectionFieldCropRefinementService.refine(
+          normalizedFilename,
+          refinedGeneralFields.data(),
+          safePages,
+          modelProfile,
+          resolvedTemplate
+      );
+      listener.postProcessingStep("declaration_footer_review", "Restoring declaration footer fields.", 92);
+      DeclarationFooterFieldRefinementResult refinedFooterFields = declarationFooterFieldRefinementService.refine(
+          normalizedFilename,
+          refinedSelections.data(),
+          safePages,
+          modelProfile
+      );
+      listener.postProcessingStep("smudge_filter", "Filtering smudges, erasures, and correction marks.", 96);
+      SmudgedFieldValueFilterResult filteredExtraction = smudgedFieldValueFilterService.filter(refinedFooterFields.data());
+      structuredData = filteredExtraction.data();
+      statusMessages.add("Address fields with clear value regions are second-pass transcribed from their field crop; updated fields: " + refinedExtraction.updated() + " / " + refinedExtraction.attempted() + ".");
+      statusMessages.add("Ordinary text and symbol-sensitive fields with clear value regions are crop-reviewed by field type; updated fields: " + refinedGeneralFields.updated() + " / " + refinedGeneralFields.attempted() + ".");
+      statusMessages.add("Checkbox and declaration fields with clear value regions are second-pass reviewed from their field crop; updated fields: " + refinedSelections.updated() + " / " + refinedSelections.attempted() + ".");
+      statusMessages.add("Declaration page checkbox/date/signature fields are restored from fixed page crops when the page model misses them; updated fields: " + refinedFooterFields.updated() + " / " + refinedFooterFields.attempted() + ".");
+      statusMessages.add("Smudged, crossed-out, erased, or correction marks mixed into field values are filtered as not filled; filtered fields: " + filteredExtraction.filtered() + ".");
+    } else {
+      listener.postProcessingStep("selection_geometry_restore", "Restoring fixed template checkbox fields.", 94);
+      SelectionFieldCropRefinementResult restoredSelections = selectionFieldCropRefinementService.restoreTemplateSelections(
+          structuredData,
+          safePages,
+          resolvedTemplate
+      );
+      structuredData = restoredSelections.data();
+      statusMessages.add("ID 988A application type checkboxes are restored from fixed table geometry when the template is recognized; updated fields: " + restoredSelections.updated() + ".");
+      statusMessages.add("FDH review fast path skipped second-pass field crop transcription to keep multi-file material review responsive.");
+    }
+
     listener.postProcessingStep("field_evidence", "Building field snapshots and display results.", 98);
-    JsonNode finalStructuredData = withTemplateMetadata(filteredExtraction.data(), resolvedTemplate);
+    JsonNode finalStructuredData = withTemplateMetadata(structuredData, resolvedTemplate);
     templateClassificationLogService.record(normalizedFilename, resolvedTemplate);
     Map<Integer, List<StructuredFieldDetail>> fieldDetailsByPage =
         structuredFieldEvidenceService.buildFieldDetails(finalStructuredData, safePages);
@@ -150,16 +199,7 @@ public class OcrDemoService {
     EngineStatus status = new EngineStatus(
         modelProfile.label(),
         false,
-        List.of(
-            "Rendered " + responsePages.size() + " page snapshot(s) and extracted structured JSON with " + modelProfile.label() + ".",
-            "Rendered page snapshots were sent directly to the multimodal LLM to find fields and filled regions; no preset field list or manual template coordinate boxes were used.",
-            "Detected document template: " + resolvedTemplate.templateId() + " (" + resolvedTemplate.matchSource() + ").",
-            "Address fields with clear value regions are second-pass transcribed from their field crop; updated fields: " + refinedExtraction.updated() + " / " + refinedExtraction.attempted() + ".",
-            "Ordinary text and symbol-sensitive fields with clear value regions are crop-reviewed by field type; updated fields: " + refinedGeneralFields.updated() + " / " + refinedGeneralFields.attempted() + ".",
-            "Checkbox and declaration fields with clear value regions are second-pass reviewed from their field crop; updated fields: " + refinedSelections.updated() + " / " + refinedSelections.attempted() + ".",
-            "Declaration page checkbox/date/signature fields are restored from fixed page crops when the page model misses them; updated fields: " + refinedFooterFields.updated() + " / " + refinedFooterFields.attempted() + ".",
-            "Smudged, crossed-out, erased, or correction marks mixed into field values are filtered as not filled; filtered fields: " + filteredExtraction.filtered() + "."
-        )
+        List.copyOf(statusMessages)
     );
     return new OcrDemoResponse(
         normalizedFilename,

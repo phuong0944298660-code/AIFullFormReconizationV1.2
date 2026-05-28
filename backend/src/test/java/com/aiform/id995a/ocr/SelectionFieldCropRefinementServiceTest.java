@@ -531,6 +531,35 @@ class SelectionFieldCropRefinementServiceTest {
     assertThat(result.data().at("/page_1/visa_type").isMissingNode()).isTrue();
   }
 
+  @Test
+  void restoresApplicationTypeRowsWithoutFieldCropTranscriptionForFdhFastPath() throws Exception {
+    FakeFieldCropTranscriptionGateway gateway = new FakeFieldCropTranscriptionGateway(List.of());
+    SelectionFieldCropRefinementService service = new SelectionFieldCropRefinementService(gateway, objectMapper);
+    JsonNode structuredData = objectMapper.readTree("""
+        {
+          "page_1": {
+            "application_type": "Entry visa"
+          }
+        }
+        """);
+
+    SelectionFieldCropRefinementResult result = service.restoreTemplateSelections(
+        structuredData,
+        List.of(renderedApplicationTypePage(false, true, false, false)),
+        template("id988a_2024_06")
+    );
+
+    assertThat(result.attempted()).isZero();
+    assertThat(result.updated()).isEqualTo(1);
+    assertThat(gateway.requests).isEmpty();
+    assertThat(result.data().at("/page_1/application_type/contract_renewal_with_the_same_employer_or_change_of_employer").asText())
+        .isEqualTo("entry visa");
+    assertThat(result.data().at("/page_1/application_type/entry_to_hong_kong_to_take_up_employment_as_a_domestic_helper_from_abroad").isMissingNode())
+        .isTrue();
+    assertThat(result.data().at("/_field_evidence/page_1/application_type/contract_renewal_with_the_same_employer_or_change_of_employer/selection_crop_status").asText())
+        .isEqualTo("detected");
+  }
+
   private RenderedOcrPage renderedPage(int page) throws Exception {
     BufferedImage image = new BufferedImage(220, 140, BufferedImage.TYPE_INT_RGB);
     Graphics2D graphics = image.createGraphics();

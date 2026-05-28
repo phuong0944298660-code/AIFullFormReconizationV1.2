@@ -1,0 +1,231 @@
+package com.aiform.id995a.fdh;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import com.aiform.id995a.llm.ExtractionProgressListener;
+import com.aiform.id995a.ocr.BaiduOcrPageRenderer;
+import com.aiform.id995a.ocr.DocumentTemplate;
+import com.aiform.id995a.ocr.OcrDemoResponse;
+import com.aiform.id995a.ocr.OcrDemoService;
+import com.aiform.id995a.ocr.OcrPage;
+import com.aiform.id995a.ocr.RenderedOcrPage;
+import com.aiform.id995a.ocr.TemplateDetectionService;
+import com.aiform.id995a.review.EngineStatus;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.nio.charset.StandardCharsets;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.Test;
+import org.springframework.mock.web.MockMultipartFile;
+
+class FdhReviewJobServiceTest {
+
+  private final ObjectMapper objectMapper = new ObjectMapper();
+
+  @Test
+  void asyncJobRunsMaterialClassificationLlmExtractionAndRules() throws Exception {
+    BaiduOcrPageRenderer renderer = mock(BaiduOcrPageRenderer.class);
+    TemplateDetectionService templateDetectionService = mock(TemplateDetectionService.class);
+    OcrDemoService ocrDemoService = mock(OcrDemoService.class);
+    FdhReviewAssembler assembler = new FdhReviewAssembler(
+        5100,
+        1236,
+        Clock.fixed(Instant.parse("2026-05-28T10:15:00Z"), ZoneOffset.UTC)
+    );
+    FdhReviewJobService service = new FdhReviewJobService(
+        renderer,
+        templateDetectionService,
+        ocrDemoService,
+        assembler
+    );
+
+    when(renderer.render(anyString(), anyString(), any())).thenAnswer(invocation -> {
+      String filename = invocation.getArgument(0);
+      return renderedPages(filename.contains("988A") ? 5 : filename.contains("988B") ? 4 : 4);
+    });
+    when(templateDetectionService.detect(anyString(), anyString(), any(), anyList())).thenAnswer(invocation -> {
+      String filename = invocation.getArgument(0);
+      if (filename.contains("988A")) {
+        return template("id988a_2024_06", "ID 988A (06/2024)", 5);
+      }
+      if (filename.contains("988B")) {
+        return template("id988b_2024_06", "ID 988B (06/2024)", 4);
+      }
+      return template("id407_2016_11", "ID 407 (11/2016)", 4);
+    });
+    when(ocrDemoService.recognizeRenderedForFdhReview(
+        anyString(),
+        anyList(),
+        any(ExtractionProgressListener.class),
+        any(),
+        any(DocumentTemplate.class)
+    )).thenAnswer(invocation -> response(invocation.getArgument(0), invocation.getArgument(4)));
+
+    FdhReviewJobStatusResponse started = service.start(
+        "entry_visa",
+        List.of(file("ID988A.pdf"), file("ID988B.pdf"), file("ID407.pdf")),
+        null
+    );
+    FdhReviewJobStatusResponse completed = waitForCompletion(service, started.jobId());
+
+    assertThat(completed.status()).isEqualTo("completed");
+    assertThat(completed.progress()).isEqualTo(100);
+    assertThat(completed.result()).isNotNull();
+    assertThat(completed.result().decision()).isEqualTo("PASS");
+    assertThat(completed.result().uploadedFiles()).hasSize(3);
+    assertThat(completed.result().materials()).filteredOn(FdhReviewResult.MaterialRow::core)
+        .allMatch(row -> "pass".equals(row.status()));
+    verify(ocrDemoService, times(3)).recognizeRenderedForFdhReview(
+        anyString(),
+        anyList(),
+        any(ExtractionProgressListener.class),
+        any(),
+        any(DocumentTemplate.class)
+    );
+  }
+
+  @Test
+  void reportsPageLevelProgressWhileCurrentFileIsStillRunning() throws Exception {
+    BaiduOcrPageRenderer renderer = mock(BaiduOcrPageRenderer.class);
+    TemplateDetectionService templateDetectionService = mock(TemplateDetectionService.class);
+    OcrDemoService ocrDemoService = mock(OcrDemoService.class);
+    FdhReviewJobService service = new FdhReviewJobService(
+        renderer,
+        templateDetectionService,
+        ocrDemoService,
+        new FdhReviewAssembler(5100, 1236, Clock.systemUTC())
+    );
+    CountDownLatch pageStarted = new CountDownLatch(1);
+    CountDownLatch allowCompletion = new CountDownLatch(1);
+
+    when(renderer.render(anyString(), anyString(), any())).thenReturn(renderedPages(5));
+    when(templateDetectionService.detect(anyString(), anyString(), any(), anyList()))
+        .thenReturn(template("id988a_2024_06", "ID 988A (06/2024)", 5));
+    when(ocrDemoService.recognizeRenderedForFdhReview(
+        anyString(),
+        anyList(),
+        any(ExtractionProgressListener.class),
+        any(),
+        any(DocumentTemplate.class)
+    )).thenAnswer(invocation -> {
+      ExtractionProgressListener listener = invocation.getArgument(2);
+      listener.pageStarted(3);
+      pageStarted.countDown();
+      assertThat(allowCompletion.await(2, TimeUnit.SECONDS)).isTrue();
+      return response(invocation.getArgument(0), invocation.getArgument(4));
+    });
+
+    FdhReviewJobStatusResponse started = service.start("entry_visa", List.of(file("ID988A.pdf")), null);
+    assertThat(pageStarted.await(2, TimeUnit.SECONDS)).isTrue();
+
+    FdhReviewJobStatusResponse running = service.status(started.jobId());
+    allowCompletion.countDown();
+
+    assertThat(running.status()).isEqualTo("running");
+    assertThat(running.progress()).isGreaterThan(10);
+    assertThat(running.message()).contains("第 3 页");
+    assertThat(waitForCompletion(service, started.jobId()).status()).isEqualTo("completed");
+  }
+
+  private FdhReviewJobStatusResponse waitForCompletion(FdhReviewJobService service, String jobId) throws Exception {
+    FdhReviewJobStatusResponse status = service.status(jobId);
+    for (int attempt = 0; attempt < 30; attempt += 1) {
+      status = service.status(jobId);
+      if ("completed".equals(status.status()) || "failed".equals(status.status())) {
+        return status;
+      }
+      Thread.sleep(25);
+    }
+    return status;
+  }
+
+  private MockMultipartFile file(String filename) {
+    return new MockMultipartFile(
+        "files",
+        filename,
+        "application/pdf",
+        ("fake-" + filename).getBytes(StandardCharsets.UTF_8)
+    );
+  }
+
+  private List<RenderedOcrPage> renderedPages(int pages) {
+    return java.util.stream.IntStream.rangeClosed(1, pages)
+        .mapToObj(page -> new RenderedOcrPage(page, new byte[] {1}, "data:image/png;base64,AAA=", 100, 100))
+        .toList();
+  }
+
+  private DocumentTemplate template(String templateId, String footerId, int pages) {
+    return new DocumentTemplate(templateId, footerId, pages, 98, "test", templateId);
+  }
+
+  private OcrDemoResponse response(String filename, DocumentTemplate template) throws Exception {
+    String json = switch (template.templateId()) {
+      case "id988a_2024_06" -> """
+          {
+            "page_1": {
+              "application_type": "Entry visa - Domestic helper from abroad",
+              "part_2_personal_particulars": {
+                "surname_en": "SITI",
+                "given_names_en": "NURHALIZA",
+                "travel_document_no": "C8923745",
+                "date_of_birth": "27/11/1992",
+                "nationality": "Indonesian",
+                "signature_of_applicant": "signature detected"
+              }
+            }
+          }
+          """;
+      case "id988b_2024_06" -> """
+          {
+            "page_1": {"employer_particulars": {"employer_name": "CHAN TAI MAN"}},
+            "page_4": {"declaration": {"signature_of_employer": "signature detected"}}
+          }
+          """;
+      default -> """
+          {
+            "page_1": {
+              "contract_no": "DH-2026-004218",
+              "name_of_helper": "SITI NURHALIZA",
+              "name_of_employer": "CHAN TAI MAN"
+            },
+            "page_2": {
+              "monthly_wages": "HK$5,100",
+              "food_allowance": "HK$1,236"
+            },
+            "page_4": {"signature_of_employer": "signature detected"}
+          }
+          """;
+    };
+    return new OcrDemoResponse(
+        filename,
+        "test",
+        template.pageCount(),
+        List.of(new OcrPage(
+            1,
+            "data:image/png;base64,AAA=",
+            100,
+            100,
+            "",
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of()
+        )),
+        List.of(),
+        new EngineStatus("test", false, List.of()),
+        objectMapper.readTree(json),
+        ""
+    );
+  }
+}

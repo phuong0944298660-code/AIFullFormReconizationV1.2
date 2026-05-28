@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [vue()],
   server: {
     host: '127.0.0.1',
-    port: Number(process.env.FRONTEND_PORT || 5186),
+    port: Number(process.env.FRONTEND_PORT || 5197),
     strictPort: true,
     hmr: false,
     proxy: {

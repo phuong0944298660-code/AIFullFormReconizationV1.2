@@ -5,7 +5,7 @@ spring:
   servlet:
     multipart:
       max-file-size: 25MB
-      max-request-size: 30MB
+      max-request-size: ${MULTIPART_MAX_REQUEST_SIZE:150MB}
 
 id995a:
   template-path: ${TEMPLATE_PATH:../official_templates/students/ID995A_来港就读申请表_申请人.pdf}

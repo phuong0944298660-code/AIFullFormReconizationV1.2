@@ -76,6 +76,18 @@ public class SelectionFieldCropRefinementService {
     return refine(filename, structuredData, pages, modelProfile, null);
   }
 
+  public SelectionFieldCropRefinementResult restoreTemplateSelections(
+      JsonNode structuredData,
+      List<RenderedOcrPage> pages,
+      DocumentTemplate template
+  ) {
+    ObjectNode mutableData = structuredData != null && structuredData.isObject()
+        ? structuredData.deepCopy()
+        : objectMapper.createObjectNode();
+    int updated = shouldApplyId988aRules(template) ? restoreApplicationTypeSelections(mutableData, pages) : 0;
+    return new SelectionFieldCropRefinementResult(mutableData, 0, updated);
+  }
+
   public SelectionFieldCropRefinementResult refine(
       String filename,
       JsonNode structuredData,

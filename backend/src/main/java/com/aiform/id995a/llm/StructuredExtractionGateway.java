@@ -23,4 +23,13 @@ public interface StructuredExtractionGateway {
   ) throws IOException {
     return extract(filename, pages, progressListener);
   }
+
+  default StructuredExtractionResult extractAllowingPartialPages(
+      String filename,
+      List<RenderedOcrPage> pages,
+      ExtractionProgressListener progressListener,
+      LlmModelProfile modelProfile
+  ) throws IOException {
+    return extract(filename, pages, progressListener, modelProfile);
+  }
 }

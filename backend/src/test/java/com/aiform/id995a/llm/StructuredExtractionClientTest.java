@@ -447,6 +447,35 @@ class StructuredExtractionClientTest {
     );
   }
 
+  @Test
+  void partialExtractionKeepsSuccessfulPagesWhenLaterPageFails() throws Exception {
+    StubHttpClient httpClient = new StubHttpClient(List.of(
+        jsonResponse("{\"page_1\":{\"surname_en\":\"CHAN\"}}"),
+        new java.io.IOException("LLM page request timed out")
+    ));
+    StructuredExtractionClient client = new StructuredExtractionClient(
+        new LlmProperties(true, "https://apie.zhisuaninfo.com/v1", "test-key", "Qwen3.6-35B-A3B", 4096, 60, 1),
+        httpClient,
+        objectMapper
+    );
+
+    StructuredExtractionResult result = client.extractAllowingPartialPages(
+        "sample.pdf",
+        List.of(
+            new RenderedOcrPage(1, new byte[] {1}, "data:image/png;base64,page1", 1000, 1400),
+            new RenderedOcrPage(2, new byte[] {2}, "data:image/png;base64,page2", 1000, 1400)
+        ),
+        ExtractionProgressListener.NOOP,
+        null
+    );
+
+    assertThat(httpClient.sendCount()).isEqualTo(2);
+    assertThat(result.data().at("/page_1/surname_en").asText()).isEqualTo("CHAN");
+    assertThat(result.data().path("page_2").isObject()).isTrue();
+    assertThat(result.data().at("/_page_errors/page_2").asText()).contains("timed out");
+    assertThat(result.rawText()).contains("Page 2 extraction failed");
+  }
+
   private String jsonResponse(String content) throws Exception {
     return objectMapper.writeValueAsString(Map.of(
         "choices", List.of(Map.of(
