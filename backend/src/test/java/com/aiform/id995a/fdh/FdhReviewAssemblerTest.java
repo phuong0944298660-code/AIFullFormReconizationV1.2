@@ -83,6 +83,38 @@ class FdhReviewAssemblerTest {
   }
 
   @Test
+  void id988bSplitEmployerEnglishNameParticipatesInCrossDocumentCheck() throws Exception {
+    FdhReviewResult result = assembler.assemble(
+        "entry_visa",
+        List.of(id988a(), id988bSplitEmployerName("CHAN", "LAI PING"), id407WithEmployerName("CHAN TAI MAN"))
+    );
+
+    FdhReviewResult.StandardField employerName = field(result, "employer.name.full_en");
+    assertThat(result.decision()).isEqualTo("FAIL");
+    assertThat(employerName.status()).isEqualTo("fail");
+    assertThat(employerName.sources()).extracting(FdhReviewResult.FieldSource::documentName)
+        .contains("ID 988B", "ID 407");
+    assertThat(employerName.sources()).extracting(FdhReviewResult.FieldSource::value)
+        .contains("CHAN LAI PING", "CHAN TAI MAN");
+  }
+
+  @Test
+  void id407ChineseEmployerNameComparesAgainstId988bChineseName() throws Exception {
+    String employerChineseName = "\u9673\u9E97\u840D";
+    FdhReviewResult result = assembler.assemble(
+        "entry_visa",
+        List.of(id988a(), id988bEmployerNames(employerChineseName, "CHAN", "LAI PING"), id407WithEmployerName(employerChineseName))
+    );
+
+    FdhReviewResult.StandardField employerName = field(result, "employer.name.full_en");
+    assertThat(result.decision()).isEqualTo("PASS");
+    assertThat(employerName.status()).isEqualTo("pass");
+    assertThat(employerName.normalizedValue()).isEqualTo(employerChineseName);
+    assertThat(employerName.sources()).extracting(FdhReviewResult.FieldSource::value)
+        .doesNotContain("CHAN LAI PING");
+  }
+
+  @Test
   void lowConfidenceOrTinyDifferenceRequiresReview() throws Exception {
     FdhReviewResult result = assembler.assemble(
         "entry_visa",
@@ -233,7 +265,58 @@ class FdhReviewAssemblerTest {
     );
   }
 
+  private FdhReviewDocument id988bSplitEmployerName(String surname, String givenNames) throws Exception {
+    return document(
+        "ID988B.pdf",
+        "id988b",
+        4,
+        "id988b_2024_06",
+        "ID 988B (06/2024)",
+        """
+            {
+              "page_1": {
+                "surname_in_english": "%s",
+                "given_names_in_english": "%s"
+              },
+              "page_3": {
+                "signature_of_employer": "signature detected"
+              }
+            }
+            """.formatted(surname, givenNames)
+    );
+  }
+
+  private FdhReviewDocument id988bEmployerNames(String chineseName, String surname, String givenNames) throws Exception {
+    return document(
+        "ID988B.pdf",
+        "id988b",
+        4,
+        "id988b_2024_06",
+        "ID 988B (06/2024)",
+        """
+            {
+              "page_1": {
+                "name_in_chinese": "%s",
+                "surname_in_english": "%s",
+                "given_names_in_english": "%s"
+              },
+              "page_3": {
+                "signature_of_employer": "signature detected"
+              }
+            }
+            """.formatted(chineseName, surname, givenNames)
+    );
+  }
+
   private FdhReviewDocument id407(String helperName, String wages, String foodAllowance) throws Exception {
+    return id407(helperName, "CHAN TAI MAN", wages, foodAllowance);
+  }
+
+  private FdhReviewDocument id407WithEmployerName(String employerName) throws Exception {
+    return id407("SITI NURHALIZA", employerName, "HK$5,100", "HK$1,236");
+  }
+
+  private FdhReviewDocument id407(String helperName, String employerName, String wages, String foodAllowance) throws Exception {
     return document(
         "ID407.pdf",
         "id407",
@@ -245,7 +328,7 @@ class FdhReviewAssemblerTest {
               "page_1": {
                 "contract_no": "DH-2026-004218",
                 "name_of_helper": "%s",
-                "name_of_employer": "CHAN TAI MAN"
+                "name_of_employer": "%s"
               },
               "page_2": {
                 "monthly_wages": "%s",
@@ -255,7 +338,7 @@ class FdhReviewAssemblerTest {
                 "signature_of_employer": "signature detected"
               }
             }
-            """.formatted(helperName, wages, foodAllowance)
+            """.formatted(helperName, employerName, wages, foodAllowance)
     );
   }
 

@@ -29,6 +29,7 @@ public class FdhReviewAssembler {
 
   private static final DateTimeFormatter GENERATED_AT_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
   private static final Pattern MONEY_PATTERN = Pattern.compile("([0-9][0-9,]*(?:\\.\\d+)?)");
+  private static final Pattern CJK_PATTERN = Pattern.compile("\\p{IsHan}");
   private static final String ID988A_ENTRY_TO_HK_APPLICATION_TYPE =
       "entry_to_hong_kong_to_take_up_employment_as_a_domestic_helper_from_abroad";
   private static final String ID988A_CONTRACT_RENEWAL_APPLICATION_TYPE =
@@ -278,23 +279,7 @@ public class FdhReviewAssembler {
         "Signature of applicant",
         "ID 988A 申请人签名栏必须存在签署痕迹；明确空白判为 FAIL，无法识别判为 REVIEW。"
     ));
-    fields.add(standardField(
-        "employer.name.full_en",
-        "雇主字段",
-        "雇主英文姓名",
-        true,
-        List.of(
-            evidence(id988b, "ID 988B", "Name of employer", List.of(
-                group("employer", "name"),
-                group("name", "employer")
-            )),
-            evidence(id407, "ID 407", "Name of employer", List.of(
-                group("employer", "name"),
-                group("name", "employer")
-            ))
-        ),
-        "ID 988B 与 ID 407 雇主姓名应一致。"
-    ));
+    fields.add(employerNameField(id988b, id407));
     fields.add(multiSignatureField(
         "employer.signature.present",
         "雇主字段",
@@ -605,6 +590,46 @@ public class FdhReviewAssembler {
         : new FieldAssessment("fail", "跨文件字段值明显不一致。");
   }
 
+  private FdhReviewResult.StandardField employerNameField(
+      List<FdhReviewDocument> id988b,
+      List<FdhReviewDocument> id407
+  ) {
+    Optional<FdhReviewResult.FieldSource> id407EmployerName = evidence(
+        id407,
+        "ID 407",
+        "Name of employer",
+        List.of(
+            group("employer", "name"),
+            group("name", "employer")
+        )
+    );
+    boolean id407UsesChinese = id407EmployerName
+        .map(source -> containsCjk(source.value()))
+        .orElse(false);
+    Optional<FdhReviewResult.FieldSource> id988bEmployerName = id407UsesChinese
+        ? employerChineseName(id988b, "ID 988B")
+        : employerEnglishName(id988b, "ID 988B");
+    List<FdhReviewResult.FieldSource> sources = sources(List.of(id988bEmployerName, id407EmployerName));
+    FieldAssessment assessment = sources.size() < 2
+        ? new FieldAssessment("review", "Unable to identify comparable employer name in both ID 988B and ID 407.")
+        : assessSources(true, sources);
+    if (sources.isEmpty()) {
+      assessment = assessRequiredSources(sources);
+    }
+    return new FdhReviewResult.StandardField(
+        "employer.name.full_en",
+        "雇主字段",
+        "雇主姓名",
+        true,
+        sources.isEmpty() ? "未识别" : normalizeDisplayValue(sources),
+        assessment.status(),
+        assessment.issue(),
+        true,
+        sources,
+        "ID 407 employer name is first classified as Chinese or English; then it is compared with the matching ID 988B employer name field."
+    );
+  }
+
   private Optional<FdhReviewResult.FieldSource> helperName(List<FdhReviewDocument> documents, String documentName) {
     Optional<FdhReviewResult.FieldSource> surname = evidence(
         documents,
@@ -639,6 +664,60 @@ public class FdhReviewAssembler {
         List.of(group("helper", "name"), group("name", "helper"), group("full", "name"), group("english", "name"))
     );
     return full.or(() -> surname).or(() -> given);
+  }
+
+  private Optional<FdhReviewResult.FieldSource> employerChineseName(
+      List<FdhReviewDocument> documents,
+      String documentName
+  ) {
+    return evidence(
+        documents,
+        documentName,
+        "Name in Chinese",
+        List.of(group("name", "chinese"), group("chinese", "name"))
+    ).filter(source -> containsCjk(source.value()));
+  }
+
+  private Optional<FdhReviewResult.FieldSource> employerEnglishName(List<FdhReviewDocument> documents, String documentName) {
+    Optional<FdhReviewResult.FieldSource> surname = evidence(
+        documents,
+        documentName,
+        "Surname in English",
+        List.of(group("surname"), group("family", "name"))
+    );
+    Optional<FdhReviewResult.FieldSource> given = evidence(
+        documents,
+        documentName,
+        "Given names in English",
+        List.of(group("given"), group("given", "name"))
+    );
+    if (surname.isPresent() && given.isPresent()) {
+      FdhReviewResult.FieldSource first = surname.get();
+      FdhReviewResult.FieldSource second = given.get();
+      String fullName = first.value() + " " + second.value();
+      return Optional.of(new FdhReviewResult.FieldSource(
+          first.documentName(),
+          first.filename(),
+          first.section(),
+          "Surname / Given names",
+          fullName,
+          Math.min(first.confidence(), second.confidence()),
+          fullName,
+          first.snapshotDataUrl().isBlank() ? second.snapshotDataUrl() : first.snapshotDataUrl()
+      ));
+    }
+    Optional<FdhReviewResult.FieldSource> full = evidence(
+        documents,
+        documentName,
+        "Name of employer",
+        List.of(
+            group("employer", "name"),
+            group("name", "employer")
+        )
+    );
+    return full.filter(source -> !containsCjk(source.value()))
+        .or(() -> surname.filter(source -> !containsCjk(source.value())))
+        .or(() -> given.filter(source -> !containsCjk(source.value())));
   }
 
   private List<ApplicationTypeExtraction> applicationTypeExtractions(List<FdhReviewDocument> documents) {
@@ -930,6 +1009,10 @@ public class FdhReviewAssembler {
         .replaceAll("[^\\p{IsAlphabetic}\\p{IsDigit}]+", " ")
         .replaceAll("\\s+", " ")
         .trim();
+  }
+
+  private static boolean containsCjk(String value) {
+    return value != null && CJK_PATTERN.matcher(value).find();
   }
 
   private String normalizeDate(String value) {
