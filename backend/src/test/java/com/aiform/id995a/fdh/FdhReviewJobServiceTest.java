@@ -24,8 +24,11 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
 
@@ -138,6 +141,131 @@ class FdhReviewJobServiceTest {
     assertThat(waitForCompletion(service, started.jobId()).status()).isEqualTo("completed");
   }
 
+  @Test
+  void limitsMultipleUploadedMaterialsToTwoParallelExtractions() throws Exception {
+    BaiduOcrPageRenderer renderer = mock(BaiduOcrPageRenderer.class);
+    TemplateDetectionService templateDetectionService = mock(TemplateDetectionService.class);
+    OcrDemoService ocrDemoService = mock(OcrDemoService.class);
+    FdhReviewJobService service = new FdhReviewJobService(
+        renderer,
+        templateDetectionService,
+        ocrDemoService,
+        new FdhReviewAssembler(5100, 1236, Clock.systemUTC())
+    );
+    CountDownLatch firstTwoExtractionsStarted = new CountDownLatch(2);
+    CountDownLatch thirdExtractionStarted = new CountDownLatch(1);
+    CountDownLatch releaseExtractions = new CountDownLatch(1);
+    AtomicInteger extractionCalls = new AtomicInteger();
+    AtomicInteger activeExtractions = new AtomicInteger();
+    AtomicInteger maxActiveExtractions = new AtomicInteger();
+
+    when(renderer.render(anyString(), anyString(), any())).thenAnswer(invocation -> renderedPages(
+        invocation.getArgument(0, String.class).contains("988A") ? 5 : 4
+    ));
+    when(templateDetectionService.detect(anyString(), anyString(), any(), anyList())).thenAnswer(invocation -> {
+      String filename = invocation.getArgument(0);
+      if (filename.contains("988A")) {
+        return template("id988a_2024_06", "ID 988A (06/2024)", 5);
+      }
+      if (filename.contains("988B")) {
+        return template("id988b_2024_06", "ID 988B (06/2024)", 4);
+      }
+      return template("id407_2016_11", "ID 407 (11/2016)", 4);
+    });
+    when(ocrDemoService.recognizeRenderedForFdhReview(
+        anyString(),
+        anyList(),
+        any(ExtractionProgressListener.class),
+        any(),
+        any(DocumentTemplate.class)
+    )).thenAnswer(invocation -> {
+      int call = extractionCalls.incrementAndGet();
+      int active = activeExtractions.incrementAndGet();
+      maxActiveExtractions.accumulateAndGet(active, Math::max);
+      if (call <= 2) {
+        firstTwoExtractionsStarted.countDown();
+      }
+      if (call == 3) {
+        thirdExtractionStarted.countDown();
+      }
+      assertThat(releaseExtractions.await(2, TimeUnit.SECONDS)).isTrue();
+      activeExtractions.decrementAndGet();
+      return response(invocation.getArgument(0), invocation.getArgument(4));
+    });
+
+    FdhReviewJobStatusResponse started = service.start(
+        "entry_visa",
+        List.of(file("ID988A.pdf"), file("ID988B.pdf"), file("ID407.pdf")),
+        null
+    );
+    boolean firstTwoStarted = firstTwoExtractionsStarted.await(500, TimeUnit.MILLISECONDS);
+    boolean thirdStartedBeforeRelease = thirdExtractionStarted.await(250, TimeUnit.MILLISECONDS);
+    releaseExtractions.countDown();
+    FdhReviewJobStatusResponse completed = waitForCompletion(service, started.jobId());
+
+    assertThat(firstTwoStarted).isTrue();
+    assertThat(thirdStartedBeforeRelease).isFalse();
+    assertThat(maxActiveExtractions.get()).isEqualTo(2);
+    assertThat(thirdExtractionStarted.await(2, TimeUnit.SECONDS)).isTrue();
+    assertThat(completed.status()).isEqualTo("completed");
+  }
+
+  @Test
+  void skipsNonFillableOfficialPagesForExtractionButKeepsOriginalMaterialPageCount() throws Exception {
+    BaiduOcrPageRenderer renderer = mock(BaiduOcrPageRenderer.class);
+    TemplateDetectionService templateDetectionService = mock(TemplateDetectionService.class);
+    OcrDemoService ocrDemoService = mock(OcrDemoService.class);
+    FdhReviewJobService service = new FdhReviewJobService(
+        renderer,
+        templateDetectionService,
+        ocrDemoService,
+        new FdhReviewAssembler(5100, 1236, Clock.systemUTC())
+    );
+    Map<String, List<Integer>> extractedPagesByFilename = new ConcurrentHashMap<>();
+
+    when(renderer.render(anyString(), anyString(), any())).thenAnswer(invocation -> {
+      String filename = invocation.getArgument(0);
+      return renderedPages(filename.contains("988A") ? 5 : 4);
+    });
+    when(templateDetectionService.detect(anyString(), anyString(), any(), anyList())).thenAnswer(invocation -> {
+      String filename = invocation.getArgument(0);
+      if (filename.contains("988A")) {
+        return template("id988a_2024_06", "ID 988A (06/2024)", 5);
+      }
+      if (filename.contains("988B")) {
+        return template("id988b_2024_06", "ID 988B (06/2024)", 4);
+      }
+      return template("id407_2016_11", "ID 407 (11/2016)", 4);
+    });
+    when(ocrDemoService.recognizeRenderedForFdhReview(
+        anyString(),
+        anyList(),
+        any(ExtractionProgressListener.class),
+        any(),
+        any(DocumentTemplate.class)
+    )).thenAnswer(invocation -> {
+      String filename = invocation.getArgument(0);
+      List<RenderedOcrPage> pages = invocation.getArgument(1);
+      extractedPagesByFilename.put(filename, pages.stream().map(RenderedOcrPage::page).toList());
+      return response(filename, invocation.getArgument(4), pages.size());
+    });
+
+    FdhReviewJobStatusResponse started = service.start(
+        "entry_visa",
+        List.of(file("ID988A.pdf"), file("ID988B.pdf"), file("ID407.pdf")),
+        null
+    );
+    FdhReviewJobStatusResponse completed = waitForCompletion(service, started.jobId());
+
+    assertThat(completed.status()).isEqualTo("completed");
+    assertThat(extractedPagesByFilename.get("ID988A.pdf")).containsExactly(1, 2, 3, 4);
+    assertThat(extractedPagesByFilename.get("ID988B.pdf")).containsExactly(1, 2, 3);
+    assertThat(extractedPagesByFilename.get("ID407.pdf")).containsExactly(1, 2, 3, 4);
+    assertThat(uploadedFile(completed.result(), "id988a").pages()).isEqualTo(5);
+    assertThat(uploadedFile(completed.result(), "id988b").pages()).isEqualTo(4);
+    assertThat(uploadedFile(completed.result(), "id407").pages()).isEqualTo(4);
+  }
+
   private FdhReviewJobStatusResponse waitForCompletion(FdhReviewJobService service, String jobId) throws Exception {
     FdhReviewJobStatusResponse status = service.status(jobId);
     for (int attempt = 0; attempt < 30; attempt += 1) {
@@ -170,6 +298,10 @@ class FdhReviewJobServiceTest {
   }
 
   private OcrDemoResponse response(String filename, DocumentTemplate template) throws Exception {
+    return response(filename, template, template.pageCount());
+  }
+
+  private OcrDemoResponse response(String filename, DocumentTemplate template, int pageCount) throws Exception {
     String json = switch (template.templateId()) {
       case "id988a_2024_06" -> """
           {
@@ -210,7 +342,7 @@ class FdhReviewJobServiceTest {
     return new OcrDemoResponse(
         filename,
         "test",
-        template.pageCount(),
+        pageCount,
         List.of(new OcrPage(
             1,
             "data:image/png;base64,AAA=",
@@ -227,5 +359,12 @@ class FdhReviewJobServiceTest {
         objectMapper.readTree(json),
         ""
     );
+  }
+
+  private FdhReviewResult.UploadedFile uploadedFile(FdhReviewResult result, String materialId) {
+    return result.uploadedFiles().stream()
+        .filter(file -> materialId.equals(file.materialId()))
+        .findFirst()
+        .orElseThrow();
   }
 }

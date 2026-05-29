@@ -67,7 +67,8 @@ test('FDH backend polling does not timeout before the backend LLM request budget
 test('local startup uses stable port ownership and conservative FDH LLM defaults', () => {
   assert.match(startLocal, /function Get-PortOwnerProcessIds/)
   assert.match(startLocal, /netstat -ano/)
-  assert.match(startLocal, /\$env:LLM_PAGE_CONCURRENCY = "1"/)
+  assert.match(startLocal, /\$env:LLM_PAGE_CONCURRENCY = "2"/)
+  assert.match(startLocal, /\$env:FDH_REVIEW_FILE_CONCURRENCY = "2"/)
   assert.match(startLocal, /\$env:OCR_PAGE_MAX_IMAGE_LONG_SIDE = "1800"/)
   assert.match(startLocal, /\$env:LLM_TIMEOUT_SECONDS = "120"/)
 })

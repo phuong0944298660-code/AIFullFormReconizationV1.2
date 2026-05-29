@@ -9,16 +9,20 @@ import com.aiform.id995a.ocr.RenderedOcrPage;
 import com.aiform.id995a.ocr.TemplateDetectionService;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import org.springframework.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
@@ -27,24 +31,38 @@ import org.springframework.web.server.ResponseStatusException;
 public class FdhReviewJobService {
 
   private static final Logger log = LoggerFactory.getLogger(FdhReviewJobService.class);
+  private static final int DEFAULT_FILE_CONCURRENCY = 2;
 
   private final BaiduOcrPageRenderer pageRenderer;
   private final TemplateDetectionService templateDetectionService;
   private final OcrDemoService ocrDemoService;
   private final FdhReviewAssembler reviewAssembler;
+  private final int fileConcurrency;
   private final ConcurrentMap<String, JobState> jobs = new ConcurrentHashMap<>();
   private final ExecutorService executor = Executors.newCachedThreadPool();
 
+  @Autowired
   public FdhReviewJobService(
       BaiduOcrPageRenderer pageRenderer,
       TemplateDetectionService templateDetectionService,
       OcrDemoService ocrDemoService,
-      FdhReviewAssembler reviewAssembler
+      FdhReviewAssembler reviewAssembler,
+      @Value("${fdh.review.file-concurrency:2}") int fileConcurrency
   ) {
     this.pageRenderer = pageRenderer;
     this.templateDetectionService = templateDetectionService;
     this.ocrDemoService = ocrDemoService;
     this.reviewAssembler = reviewAssembler;
+    this.fileConcurrency = Math.max(1, Math.min(3, fileConcurrency));
+  }
+
+  FdhReviewJobService(
+      BaiduOcrPageRenderer pageRenderer,
+      TemplateDetectionService templateDetectionService,
+      OcrDemoService ocrDemoService,
+      FdhReviewAssembler reviewAssembler
+  ) {
+    this(pageRenderer, templateDetectionService, ocrDemoService, reviewAssembler, DEFAULT_FILE_CONCURRENCY);
   }
 
   public FdhReviewJobStatusResponse start(
@@ -73,7 +91,7 @@ public class FdhReviewJobService {
     String jobId = UUID.randomUUID().toString();
     JobState state = new JobState(jobId, applicationTypeId, uploads.size());
     jobs.put(jobId, state);
-    Future<?> future = executor.submit(() -> runJob(state, uploads, modelId));
+    Future<?> future = executor.submit(() -> runJobParallel(state, uploads, modelId));
     state.attachFuture(future);
     return state.snapshot();
   }
@@ -96,6 +114,156 @@ public class FdhReviewJobService {
       future.cancel(true);
     }
     return state.snapshot();
+  }
+
+  private void runJobParallel(JobState state, List<ReviewUpload> uploads, String modelId) {
+    List<IndexedReviewDocument> documents = new ArrayList<>();
+    long jobStartedAt = System.nanoTime();
+    int concurrency = Math.min(fileConcurrency, uploads.size());
+    ExecutorService fileExecutor = Executors.newFixedThreadPool(concurrency);
+    try {
+      log.info(
+          "FDH review job {} started: applicationType={}, files={}, fileConcurrency={}",
+          state.jobId,
+          state.applicationTypeId(),
+          uploads.size(),
+          concurrency
+      );
+      List<Future<IndexedReviewDocument>> futures = new ArrayList<>();
+      for (int index = 0; index < uploads.size(); index += 1) {
+        if (state.isCanceled()) {
+          return;
+        }
+        int fileIndex = index;
+        ReviewUpload upload = uploads.get(index);
+        futures.add(fileExecutor.submit(() -> processUpload(state, upload, fileIndex, uploads.size(), modelId)));
+      }
+      for (Future<IndexedReviewDocument> future : futures) {
+        if (state.isCanceled()) {
+          return;
+        }
+        IndexedReviewDocument document = future.get();
+        if (document != null) {
+          documents.add(document);
+        }
+      }
+      if (state.isCanceled()) {
+        return;
+      }
+      state.markReviewing();
+      List<FdhReviewDocument> orderedDocuments = documents.stream()
+          .sorted(Comparator.comparingInt(IndexedReviewDocument::index))
+          .map(IndexedReviewDocument::document)
+          .toList();
+      FdhReviewResult result = reviewAssembler.assemble(state.applicationTypeId(), orderedDocuments);
+      state.markCompleted(result);
+      log.info(
+          "FDH review job {} completed with decision={} in {} ms",
+          state.jobId,
+          result.decision(),
+          elapsedMillisSince(jobStartedAt)
+      );
+    } catch (InterruptedException exception) {
+      Thread.currentThread().interrupt();
+      state.markCanceled();
+    } catch (ExecutionException exception) {
+      Throwable cause = exception.getCause() == null ? exception : exception.getCause();
+      if (state.isCanceled()) {
+        state.markCanceled();
+      } else {
+        log.warn("FDH review job {} failed: {}", state.jobId, cause.getMessage(), cause);
+        state.markFailed(cause.getMessage());
+      }
+    } catch (RuntimeException exception) {
+      if (state.isCanceled()) {
+        state.markCanceled();
+      } else {
+        log.warn("FDH review job {} failed: {}", state.jobId, exception.getMessage(), exception);
+        state.markFailed(exception.getMessage());
+      }
+    } finally {
+      fileExecutor.shutdownNow();
+    }
+  }
+
+  private IndexedReviewDocument processUpload(
+      JobState state,
+      ReviewUpload upload,
+      int index,
+      int totalFiles,
+      String modelId
+  ) throws IOException {
+    if (state.isCanceled()) {
+      return null;
+    }
+    long fileStartedAt = System.nanoTime();
+    log.info(
+        "FDH review job {} processing file {}/{}: {}",
+        state.jobId,
+        index + 1,
+        totalFiles,
+        upload.filename()
+    );
+    state.markActive(upload.filename(), "正在渲染并识别材料类型");
+    List<RenderedOcrPage> pages = pageRenderer.render(upload.filename(), upload.contentType(), upload.bytes());
+    DocumentTemplate template = templateDetectionService.detect(upload.filename(), upload.contentType(), upload.bytes(), pages);
+    String materialId = FdhMaterialCatalog.classify(template, upload.filename());
+    log.info(
+        "FDH review job {} rendered and classified {} as {} (template={}, pages={}, source={}) in {} ms",
+        state.jobId,
+        upload.filename(),
+        materialId,
+        template.templateId(),
+        pages.size(),
+        template.matchSource(),
+        elapsedMillisSince(fileStartedAt)
+    );
+    if (state.isCanceled()) {
+      return null;
+    }
+    long extractionStartedAt = System.nanoTime();
+    List<RenderedOcrPage> extractionPages = extractionPages(template, pages);
+    state.markActive(upload.filename(), "正在按已识别模板执行字段提取");
+    OcrDemoResponse response = ocrDemoService.recognizeRenderedForFdhReview(
+        upload.filename(),
+        extractionPages,
+        state.progressListener(upload.filename(), extractionPages.size()),
+        modelId,
+        template
+    );
+    log.info(
+        "FDH review job {} completed extraction for {} in {} ms",
+        state.jobId,
+        upload.filename(),
+        elapsedMillisSince(extractionStartedAt)
+    );
+    state.markProcessedFile(upload.filename());
+    return new IndexedReviewDocument(
+        index,
+        new FdhReviewDocument(
+            upload.filename(),
+            upload.contentType(),
+            pages.size(),
+            template,
+            response,
+            materialId
+        )
+    );
+  }
+
+  private List<RenderedOcrPage> extractionPages(DocumentTemplate template, List<RenderedOcrPage> pages) {
+    List<RenderedOcrPage> safePages = pages == null ? List.of() : pages;
+    if (template == null) {
+      return safePages;
+    }
+    String templateId = template.templateId();
+    if ("id988a_2024_06".equals(templateId)) {
+      return safePages.stream().filter(page -> page.page() != 5).toList();
+    }
+    if ("id988b_2024_06".equals(templateId)) {
+      return safePages.stream().filter(page -> page.page() != 4).toList();
+    }
+    return safePages;
   }
 
   private void runJob(JobState state, List<ReviewUpload> uploads, String modelId) {
@@ -199,6 +367,8 @@ public class FdhReviewJobService {
     }
   }
 
+  private record IndexedReviewDocument(int index, FdhReviewDocument document) {}
+
   private static final class JobState {
 
     private final String jobId;
@@ -252,6 +422,17 @@ public class FdhReviewJobService {
       }
       status = "running";
       processedFiles = Math.max(processedFiles, processed);
+      activeFilename = filename == null ? "" : filename;
+      progress = progressFor(processedFiles, totalFiles, 0);
+      message = "已完成 " + processedFiles + " / " + totalFiles + " 份材料识别。";
+    }
+
+    private synchronized void markProcessedFile(String filename) {
+      if (isTerminal()) {
+        return;
+      }
+      status = "running";
+      processedFiles = Math.min(totalFiles, processedFiles + 1);
       activeFilename = filename == null ? "" : filename;
       progress = progressFor(processedFiles, totalFiles, 0);
       message = "已完成 " + processedFiles + " / " + totalFiles + " 份材料识别。";

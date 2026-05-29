@@ -176,7 +176,10 @@ $env:FIELD_OCR_BASE_URL = "http://127.0.0.1:$FieldOcrPort"
 $env:FIELD_OCR_PORT = [string]$FieldOcrPort
 $env:npm_config_cache = Join-Path $Root "frontend\.npm-cache"
 if (-not $env:LLM_PAGE_CONCURRENCY) {
-  $env:LLM_PAGE_CONCURRENCY = "1"
+  $env:LLM_PAGE_CONCURRENCY = "2"
+}
+if (-not $env:FDH_REVIEW_FILE_CONCURRENCY) {
+  $env:FDH_REVIEW_FILE_CONCURRENCY = "2"
 }
 if (-not $env:OCR_PAGE_MAX_IMAGE_LONG_SIDE) {
   $env:OCR_PAGE_MAX_IMAGE_LONG_SIDE = "1800"
