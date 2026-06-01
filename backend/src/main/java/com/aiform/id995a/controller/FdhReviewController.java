@@ -1,10 +1,14 @@
 package com.aiform.id995a.controller;
 
+import com.aiform.id995a.fdh.FdhReviewConclusionResponse;
+import com.aiform.id995a.fdh.FdhReviewConclusionService;
 import com.aiform.id995a.fdh.FdhReviewJobService;
 import com.aiform.id995a.fdh.FdhReviewJobStatusResponse;
+import com.aiform.id995a.fdh.FdhReviewResult;
 import java.io.IOException;
 import java.util.List;
 import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -20,9 +24,14 @@ import org.springframework.web.multipart.MultipartFile;
 public class FdhReviewController {
 
   private final FdhReviewJobService reviewJobService;
+  private final FdhReviewConclusionService reviewConclusionService;
 
-  public FdhReviewController(FdhReviewJobService reviewJobService) {
+  public FdhReviewController(
+      FdhReviewJobService reviewJobService,
+      FdhReviewConclusionService reviewConclusionService
+  ) {
     this.reviewJobService = reviewJobService;
+    this.reviewConclusionService = reviewConclusionService;
   }
 
   @PostMapping(value = "/review/jobs", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -42,5 +51,10 @@ public class FdhReviewController {
   @DeleteMapping("/review/jobs/{jobId}")
   public FdhReviewJobStatusResponse cancelReviewJob(@PathVariable String jobId) {
     return reviewJobService.cancel(jobId);
+  }
+
+  @PostMapping(value = "/review/conclusion", consumes = MediaType.APPLICATION_JSON_VALUE)
+  public FdhReviewConclusionResponse generateReviewConclusion(@RequestBody FdhReviewResult result) {
+    return reviewConclusionService.generate(result);
   }
 }

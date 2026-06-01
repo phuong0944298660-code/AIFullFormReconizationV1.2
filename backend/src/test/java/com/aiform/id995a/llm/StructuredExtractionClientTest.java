@@ -68,6 +68,8 @@ class StructuredExtractionClientTest {
     assertThat(payload.toString()).contains("not mail, hotmail, gmail, yahoo");
     assertThat(payload.toString()).contains("distinguish F from T by strokes");
     assertThat(payload.toString()).contains("Do not assume the prefix from the form type");
+    assertThat(payload.toString()).contains("ID 988A and ID 988B");
+    assertThat(payload.toString()).contains("Use the key employment_contract_no");
     assertThat(payload.toString()).contains("excluded_marks");
     assertThat(payload.toString()).contains("If smudged, crossed-out, erased, or correction marks are mixed into a filled value");
     assertThat(payload.toString()).contains("treat those marks as not filled");

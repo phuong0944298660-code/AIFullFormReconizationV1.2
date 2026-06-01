@@ -8,7 +8,7 @@
     "confidence" : 90,
     "structureHash" : "fec483b166b46dce",
     "firstSeenAt" : "2026-05-25 15:14:07",
-    "lastSeenAt" : "2026-05-28 17:55:39"
+    "lastSeenAt" : "2026-06-01 16:23:55"
   }, {
     "filename" : "陈丽萍-A.pdf",
     "templateId" : "id988a_2024_06",
@@ -18,7 +18,7 @@
     "confidence" : 92,
     "structureHash" : "280f6f677211b755",
     "firstSeenAt" : "2026-05-25 15:14:18",
-    "lastSeenAt" : "2026-05-28 17:57:58"
+    "lastSeenAt" : "2026-06-01 16:22:55"
   }, {
     "filename" : "陈丽萍-B.pdf",
     "templateId" : "id988b_2024_06",
@@ -28,7 +28,7 @@
     "confidence" : 90,
     "structureHash" : "5a6cfd2df0b2bd60",
     "firstSeenAt" : "2026-05-25 15:14:28",
-    "lastSeenAt" : "2026-05-28 17:54:05"
+    "lastSeenAt" : "2026-06-01 16:22:55"
   }, {
     "filename" : "陈志萍-B.pdf",
     "templateId" : "id988b_2024_06",
@@ -46,9 +46,9 @@
     "pageCount" : 5,
     "matchSource" : "visual_layout_footer",
     "confidence" : 92,
-    "structureHash" : "8e5301a366932ae3",
+    "structureHash" : "89e01ebe7ac4e134",
     "firstSeenAt" : "2026-05-25 15:14:49",
-    "lastSeenAt" : "2026-05-25 15:14:49"
+    "lastSeenAt" : "2026-05-29 17:06:43"
   }, {
     "filename" : "何嘉萱-B.pdf",
     "templateId" : "id988b_2024_06",
@@ -56,9 +56,9 @@
     "pageCount" : 3,
     "matchSource" : "visual_layout_footer",
     "confidence" : 90,
-    "structureHash" : "b99a47ba94256a13",
+    "structureHash" : "b4f0d69bb838f7c9",
     "firstSeenAt" : "2026-05-25 15:14:56",
-    "lastSeenAt" : "2026-05-25 15:14:56"
+    "lastSeenAt" : "2026-05-29 17:06:22"
   }, {
     "filename" : "黄晓兰A(P1申请类别双勾选).pdf",
     "templateId" : "id988a_2024_06",
@@ -86,9 +86,9 @@
     "pageCount" : 4,
     "matchSource" : "visual_layout_footer",
     "confidence" : 90,
-    "structureHash" : "f221ffaa3eca9571",
+    "structureHash" : "b52ab1856bad7d06",
     "firstSeenAt" : "2026-05-25 15:15:26",
-    "lastSeenAt" : "2026-05-25 15:15:26"
+    "lastSeenAt" : "2026-05-29 16:23:14"
   }, {
     "filename" : "李俊贤-A.pdf",
     "templateId" : "id988a_2024_06",
@@ -96,9 +96,9 @@
     "pageCount" : 5,
     "matchSource" : "visual_layout_footer",
     "confidence" : 92,
-    "structureHash" : "c40ed22de3023ade",
+    "structureHash" : "5905ca84fe186a7a",
     "firstSeenAt" : "2026-05-25 15:15:36",
-    "lastSeenAt" : "2026-05-25 20:06:32"
+    "lastSeenAt" : "2026-05-29 16:22:58"
   }, {
     "filename" : "李俊贤-B.pdf",
     "templateId" : "id988b_2024_06",
@@ -106,9 +106,9 @@
     "pageCount" : 4,
     "matchSource" : "visual_layout_footer",
     "confidence" : 90,
-    "structureHash" : "f942dce661447810",
+    "structureHash" : "68e777d1ec13cf4f",
     "firstSeenAt" : "2026-05-25 15:15:44",
-    "lastSeenAt" : "2026-05-25 15:15:44"
+    "lastSeenAt" : "2026-05-29 16:22:02"
   }, {
     "filename" : "梁静娴-A-V7.pdf",
     "templateId" : "id988a_2024_06",

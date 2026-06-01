@@ -392,13 +392,17 @@ function buildFields(scenarioId, uploadedIds, applicationTypeId) {
       category: '合约字段',
       label: '标准雇佣合约编号',
       required: id407Applicable,
-      normalizedValue: uploadedIds.has('id407') ? 'DH-2026-004218' : '未识别',
+      normalizedValue: uploadedIds.has('id407') ? 'FH-CON-IDN2026-0612' : '未识别',
       status: uploadedIds.has('id407') ? 'pass' : id407MissingStatus,
       issue: uploadedIds.has('id407') ? '' : id407MissingIssue,
       sources: uploadedIds.has('id407')
-        ? [source('ID 407', '合约首页', 'Contract No.', 'DH-2026-004218', 87)]
+        ? [
+          source('ID 988A', '第 4 部分 Undertaking', 'Employment contract no.', 'FH-CON-IDN2026-0612', 89),
+          source('ID 988B', '第 3 部分 Undertaking', 'Employment contract no.', 'FH-CON-IDN2026-0612', 88),
+          source('ID 407', '合约首页', 'Contract No.', 'FH-CON-IDN2026-0612', 87)
+        ]
         : [],
-      rule: '如当前类别要求 ID 407，合约编号必须可识别。'
+      rule: 'ID 988A、ID 988B 与 ID 407 的标准雇佣合约编号必须完整填写并保持一致。'
     }),
     field({
       key: 'contract.monthly_wage_hkd',

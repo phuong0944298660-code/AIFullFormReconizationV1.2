@@ -268,28 +268,29 @@ svg {
   opacity: 0.62;
 }
 
-.fake-checkbox {
-  width: 18px;
-  height: 18px;
-  border: 1.5px solid #98a2b3;
-  border-radius: 4px;
+.material-readonly-marker {
+  width: 12px;
+  height: 12px;
+  border: 2px solid #cbd5e1;
+  border-radius: 999px;
   display: inline-grid;
   place-items: center;
   background: #fff;
+  box-shadow: 0 0 0 4px #f1f5f9;
+  justify-self: center;
 }
 
-.fake-checkbox.checked {
+.material-readonly-marker.applicable {
   border-color: var(--teal);
-  background: var(--teal);
+  box-shadow: 0 0 0 4px rgba(0, 109, 119, 0.12);
 }
 
-.fake-checkbox.checked::after {
+.material-readonly-marker.applicable::after {
   content: "";
-  width: 8px;
-  height: 4px;
-  border-left: 2px solid #fff;
-  border-bottom: 2px solid #fff;
-  transform: rotate(-45deg) translate(1px, -1px);
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--teal);
 }
 
 .material-main {
@@ -673,6 +674,42 @@ svg {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.result-view-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.result-tabs {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-muted);
+  display: inline-flex;
+  align-items: center;
+  padding: 3px;
+}
+
+.result-tabs button {
+  min-height: 30px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #475467;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.result-tabs button.active {
+  background: var(--teal);
+  color: #fff;
 }
 
 .review-workspace {
@@ -692,10 +729,377 @@ svg {
 .decision-card,
 .side-panel,
 .findings-panel,
-.fields-panel {
+.fields-panel,
+.json-result-panel,
+.verification-page {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
+}
+
+.json-result-panel,
+.verification-page {
+  padding: 18px;
+}
+
+.json-preview {
+  width: 100%;
+  max-height: 70vh;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 16px;
+  font-family: "Consolas", "SFMono-Regular", monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.verification-loading {
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  padding: 12px;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.verification-note {
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  background: #fff7ed;
+  color: #9a3412;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.5;
+}
+
+.verification-output {
+  display: grid;
+  gap: 12px;
+}
+
+.verification-summary-card,
+.verification-section {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-muted);
+  padding: 14px;
+}
+
+.verification-summary-card {
+  display: grid;
+  gap: 6px;
+  border-left: 4px solid var(--teal);
+}
+
+.verification-summary-card.decision-pass {
+  border-left-color: var(--green);
+  background: #f0fdf4;
+}
+
+.verification-summary-card.decision-review {
+  border-left-color: var(--amber);
+  background: #fffbeb;
+}
+
+.verification-summary-card.decision-fail {
+  border-left-color: var(--danger);
+  background: #fff5f5;
+}
+
+.verification-summary-card span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.verification-summary-card strong {
+  color: var(--ink);
+  font-size: 18px;
+  line-height: 1.45;
+}
+
+.verification-summary-card p {
+  color: #344054;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.5;
+}
+
+.overall-bullet-list {
+  display: grid;
+  gap: 6px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.overall-bullet-list li {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  color: #344054;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.overall-bullet-list li::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.45;
+  flex: 0 0 auto;
+  margin-top: 7px;
+}
+
+.overall-bullet-list span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.overall-bullet-list strong {
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.verification-section h3 {
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+.template-status-legend {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.template-status-pill {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: #344054;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.template-status-pill svg {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.template-status-pill small {
+  min-width: 0;
+  color: var(--muted);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.template-status-pill.pass {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #047857;
+}
+
+.template-status-pill.unrecognized {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.template-status-pill.required_missing {
+  border-color: #fecaca;
+  background: #fff5f5;
+  color: #b91c1c;
+}
+
+.template-status-pill.review {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.template-status-pill.compact {
+  justify-content: center;
+  border-radius: 8px;
+  padding: 7px 9px;
+  white-space: nowrap;
+}
+
+.material-template-table,
+.minutes-template-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+  table-layout: fixed;
+}
+
+.material-template-table th,
+.material-template-table td,
+.minutes-template-table th,
+.minutes-template-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 11px 12px;
+  text-align: left;
+  vertical-align: top;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.material-template-table th,
+.minutes-template-table th {
+  background: #f8fafc;
+  color: #17456b;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.material-template-table tr:last-child td,
+.minutes-template-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.minutes-template-table th:nth-child(1),
+.minutes-template-table td:nth-child(1) {
+  width: 23%;
+}
+
+.minutes-template-table th:nth-child(2),
+.minutes-template-table td:nth-child(2) {
+  width: 22%;
+}
+
+.minutes-template-table th:nth-child(3),
+.minutes-template-table td:nth-child(3) {
+  width: 14%;
+}
+
+.minutes-template-table td:nth-child(4) {
+  color: #344054;
+}
+
+.minutes-template-table td strong,
+.minutes-template-table td code,
+.minutes-template-table td small,
+.minutes-template-table td p {
+  overflow-wrap: anywhere;
+}
+
+.minutes-template-table td code {
+  display: block;
+  color: #1d4ed8;
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.template-field-value {
+  display: block;
+  color: #062f35;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.minutes-template-table tr.field-pass {
+  background: #fbfffd;
+}
+
+.minutes-template-table tr.field-unrecognized {
+  background: #f8fbff;
+}
+
+.minutes-template-table tr.field-required_missing {
+  background: #fffafa;
+}
+
+.minutes-template-table tr.field-review {
+  background: #fffdf5;
+}
+
+.conflict-list {
+  display: grid;
+  gap: 5px;
+  margin-top: 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.conflict-list li {
+  border-left: 3px solid #f59e0b;
+  background: #fffbeb;
+  border-radius: 6px;
+  padding: 7px 9px;
+  display: grid;
+  gap: 3px;
+}
+
+.conflict-list strong {
+  color: #7c2d12;
+}
+
+.conflict-list span {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.verification-list {
+  display: grid;
+  gap: 8px;
+}
+
+.verification-item {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 10px 12px;
+}
+
+.verification-item.pass {
+  border-left: 4px solid var(--green);
+}
+
+.verification-item.review {
+  border-left: 4px solid var(--amber);
+}
+
+.verification-item.fail {
+  border-left: 4px solid var(--danger);
+}
+
+.verification-item p {
+  color: #344054;
+  font-size: 13px;
+  line-height: 1.55;
 }
 
 .decision-card {
@@ -1066,6 +1470,36 @@ svg {
   overflow-wrap: anywhere;
 }
 
+.evidence-value-block {
+  margin-top: 4px;
+  padding-top: 7px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.evidence-value-label {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.evidence-value {
+  display: block;
+  color: #0f2f24;
+  font-size: 15px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.value-diff-char {
+  border-radius: 3px;
+  background: #fee2e2;
+  color: #b42318;
+  padding: 0 1px;
+}
+
 .field-value-panel {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1117,6 +1551,7 @@ svg {
 
 @media (max-width: 1180px) {
   .case-grid,
+  .template-status-legend,
   .upload-grid,
   .review-workspace,
   .field-card-body {
@@ -1135,6 +1570,7 @@ svg {
 
   .app-header,
   .result-toolbar,
+  .result-view-controls,
   .toolbar-actions,
   .file-summary,
   .section-heading,
@@ -1148,8 +1584,13 @@ svg {
   .scenario-pill,
   .scenario-pill select,
   .status-chip,
+  .result-tabs,
   .secondary-action {
     width: 100%;
+  }
+
+  .result-tabs button {
+    flex: 1;
   }
 
   .scenario-pill {
@@ -1157,15 +1598,19 @@ svg {
     padding: 10px 12px;
   }
 
-  .material-row,
   .compact-material,
   .finding-item,
   .evidence-card {
     grid-template-columns: 1fr;
   }
 
-  .fake-checkbox {
-    display: none;
+  .material-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .material-row .requirement-badge {
+    grid-column: 2;
+    justify-self: start;
   }
 
   .field-metrics {
@@ -1175,5 +1620,15 @@ svg {
 
   .field-card-actions {
     flex-wrap: wrap;
+  }
+
+  .material-template-table,
+  .minutes-template-table {
+    display: block;
+    overflow-x: auto;
+  }
+
+  .minutes-template-table {
+    min-width: 760px;
   }
 }

@@ -34,6 +34,8 @@ import org.springframework.mock.web.MockMultipartFile;
 
 class FdhReviewJobServiceTest {
 
+  private static final String CONTRACT_NO = "FH-CON-IDN2026-0612";
+
   private final ObjectMapper objectMapper = new ObjectMapper();
 
   @Test
@@ -315,19 +317,21 @@ class FdhReviewJobServiceTest {
                 "nationality": "Indonesian",
                 "signature_of_applicant": "signature detected"
               }
-            }
+            },
+            "page_4": {"employment_contract_no": "%s"}
           }
-          """;
+          """.formatted(CONTRACT_NO);
       case "id988b_2024_06" -> """
           {
             "page_1": {"employer_particulars": {"employer_name": "CHAN TAI MAN"}},
+            "page_3": {"employment_contract_no": "%s"},
             "page_4": {"declaration": {"signature_of_employer": "signature detected"}}
           }
-          """;
+          """.formatted(CONTRACT_NO);
       default -> """
           {
             "page_1": {
-              "contract_no": "DH-2026-004218",
+              "contract_no": "%s",
               "name_of_helper": "SITI NURHALIZA",
               "name_of_employer": "CHAN TAI MAN"
             },
@@ -337,7 +341,7 @@ class FdhReviewJobServiceTest {
             },
             "page_4": {"signature_of_employer": "signature detected"}
           }
-          """;
+          """.formatted(CONTRACT_NO);
     };
     return new OcrDemoResponse(
         filename,

@@ -291,15 +291,7 @@ public class FdhReviewAssembler {
         ),
         "ID 988B 与 ID 407 的雇主签名栏应存在签署痕迹；无法识别时进入 REVIEW。"
     ));
-    fields.add(contractField(
-        "contract.dh_contract_no",
-        "标准雇佣合约编号",
-        id407Required,
-        id407,
-        "Contract No.",
-        List.of(group("contract", "no"), group("contract", "number")),
-        "如当前类别要求 ID 407，合约编号必须可识别。"
-    ));
+    fields.add(contractNumberField(id407Required, id988a, id988b, id407));
     fields.add(wageField(
         "contract.monthly_wage_hkd",
         "每月工资",
@@ -433,6 +425,89 @@ public class FdhReviewAssembler {
         required,
         sources,
         rule
+    );
+  }
+
+  private FdhReviewResult.StandardField contractNumberField(
+      boolean required,
+      List<FdhReviewDocument> id988a,
+      List<FdhReviewDocument> id988b,
+      List<FdhReviewDocument> id407
+  ) {
+    Optional<FdhReviewResult.FieldSource> id988aSource = evidence(
+        id988a,
+        "ID 988A",
+        "Employment contract no.",
+        contractNumberGroups()
+    );
+    Optional<FdhReviewResult.FieldSource> id988bSource = evidence(
+        id988b,
+        "ID 988B",
+        "Employment contract no.",
+        contractNumberGroups()
+    );
+    Optional<FdhReviewResult.FieldSource> id407Source = evidence(
+        id407,
+        "ID 407",
+        "Contract No.",
+        contractNumberGroups()
+    );
+    List<FdhReviewResult.FieldSource> sources = sources(List.of(id988aSource, id988bSource, id407Source));
+    FieldAssessment assessment = contractNumberAssessment(required, id988aSource, id988bSource, id407Source, sources);
+    return new FdhReviewResult.StandardField(
+        "contract.dh_contract_no",
+        "合约字段",
+        "标准雇佣合约编号",
+        required,
+        sources.isEmpty() ? "未识别" : normalizeDisplayValue(sources),
+        assessment.status(),
+        assessment.issue(),
+        required,
+        sources,
+        "ID 988A、ID 988B 与 ID 407 的标准雇佣合约编号必须完整填写并保持一致。"
+    );
+  }
+
+  private FieldAssessment contractNumberAssessment(
+      boolean required,
+      Optional<FdhReviewResult.FieldSource> id988aSource,
+      Optional<FdhReviewResult.FieldSource> id988bSource,
+      Optional<FdhReviewResult.FieldSource> id407Source,
+      List<FdhReviewResult.FieldSource> sources
+  ) {
+    if (!required) {
+      return assessSources(false, sources);
+    }
+    List<String> missingDocuments = new ArrayList<>();
+    if (id988aSource.isEmpty()) {
+      missingDocuments.add("ID 988A");
+    }
+    if (id988bSource.isEmpty()) {
+      missingDocuments.add("ID 988B");
+    }
+    if (id407Source.isEmpty()) {
+      missingDocuments.add("ID 407");
+    }
+    if (!missingDocuments.isEmpty()) {
+      return new FieldAssessment(
+          "fail",
+          String.join("、", missingDocuments) + " 未识别到标准雇佣合约编号，无法确认填写完整性。"
+      );
+    }
+    return assessSources(true, sources);
+  }
+
+  private List<List<String>> contractNumberGroups() {
+    return List.of(
+        group("employment", "contract", "no"),
+        group("employment", "contract", "number"),
+        group("dh", "contract", "no"),
+        group("d h", "contract", "no"),
+        group("previous", "contract", "number"),
+        group("contract", "no"),
+        group("contract", "number"),
+        group("合約", "號碼"),
+        group("合约", "号码")
     );
   }
 

@@ -17,6 +17,8 @@ import org.junit.jupiter.api.Test;
 
 class FdhReviewAssemblerTest {
 
+  private static final String CONTRACT_NO = "FH-CON-IDN2026-0612";
+
   private final ObjectMapper objectMapper = new ObjectMapper();
   private final FdhReviewAssembler assembler = new FdhReviewAssembler(
       5100,
@@ -140,6 +142,49 @@ class FdhReviewAssemblerTest {
   }
 
   @Test
+  void contractNumberComparesAcrossId988aId988bAndId407() throws Exception {
+    FdhReviewResult result = assembler.assemble(
+        "entry_visa",
+        List.of(id988a(), id988b(), id407("SITI NURHALIZA", "HK$5,100", "HK$1,236"))
+    );
+
+    FdhReviewResult.StandardField contractNo = field(result, "contract.dh_contract_no");
+    assertThat(contractNo.status()).isEqualTo("pass");
+    assertThat(contractNo.normalizedValue()).isEqualTo(CONTRACT_NO);
+    assertThat(contractNo.sources()).extracting(FdhReviewResult.FieldSource::documentName)
+        .containsExactly("ID 988A", "ID 988B", "ID 407");
+    assertThat(contractNo.sources()).extracting(FdhReviewResult.FieldSource::value)
+        .containsExactly(CONTRACT_NO, CONTRACT_NO, CONTRACT_NO);
+  }
+
+  @Test
+  void contractNumberMismatchAcrossCoreFormsFails() throws Exception {
+    FdhReviewResult result = assembler.assemble(
+        "entry_visa",
+        List.of(id988a(), id988bWithContractNo("FH-CON-IDN2026-9999"), id407("SITI NURHALIZA", "HK$5,100", "HK$1,236"))
+    );
+
+    FdhReviewResult.StandardField contractNo = field(result, "contract.dh_contract_no");
+    assertThat(result.decision()).isEqualTo("FAIL");
+    assertThat(contractNo.status()).isEqualTo("fail");
+    assertThat(contractNo.sources()).extracting(FdhReviewResult.FieldSource::value)
+        .contains(CONTRACT_NO, "FH-CON-IDN2026-9999");
+  }
+
+  @Test
+  void missingCoreFormContractNumberFailsCompleteness() throws Exception {
+    FdhReviewResult result = assembler.assemble(
+        "entry_visa",
+        List.of(id988a(), id988bWithoutContractNo(), id407("SITI NURHALIZA", "HK$5,100", "HK$1,236"))
+    );
+
+    FdhReviewResult.StandardField contractNo = field(result, "contract.dh_contract_no");
+    assertThat(result.decision()).isEqualTo("FAIL");
+    assertThat(contractNo.status()).isEqualTo("fail");
+    assertThat(contractNo.issue()).contains("ID 988B");
+  }
+
+  @Test
   void failsEntryVisaWhenId988aEntryVisaCheckboxBelongsToContractRenewalRow() throws Exception {
     FdhReviewResult result = assembler.assemble(
         "entry_visa",
@@ -208,9 +253,12 @@ class FdhReviewAssemblerTest {
                   "nationality": "Indonesian",
                   "signature_of_applicant": "signature detected"
                 }
+              },
+              "page_4": {
+                "employment_contract_no": "%s"
               }
             }
-            """
+            """.formatted(CONTRACT_NO)
     );
   }
 
@@ -235,13 +283,47 @@ class FdhReviewAssemblerTest {
                   "nationality": "Indonesian",
                   "signature_of_applicant": "signature detected"
                 }
+              },
+              "page_4": {
+                "employment_contract_no": "%s"
               }
             }
-            """.formatted(applicationTypeKey, value)
+            """.formatted(applicationTypeKey, value, CONTRACT_NO)
     );
   }
 
   private FdhReviewDocument id988b() throws Exception {
+    return id988bWithContractNo(CONTRACT_NO);
+  }
+
+  private FdhReviewDocument id988bWithContractNo(String contractNo) throws Exception {
+    return document(
+        "ID988B.pdf",
+        "id988b",
+        4,
+        "id988b_2024_06",
+        "ID 988B (06/2024)",
+        """
+            {
+              "page_1": {
+                "employer_particulars": {
+                  "employer_name": "CHAN TAI MAN"
+                }
+              },
+              "page_3": {
+                "employment_contract_no": "%s"
+              },
+              "page_4": {
+                "declaration": {
+                  "signature_of_employer": "signature detected"
+                }
+              }
+            }
+            """.formatted(contractNo)
+    );
+  }
+
+  private FdhReviewDocument id988bWithoutContractNo() throws Exception {
     return document(
         "ID988B.pdf",
         "id988b",
@@ -279,10 +361,11 @@ class FdhReviewAssemblerTest {
                 "given_names_in_english": "%s"
               },
               "page_3": {
+                "employment_contract_no": "%s",
                 "signature_of_employer": "signature detected"
               }
             }
-            """.formatted(surname, givenNames)
+            """.formatted(surname, givenNames, CONTRACT_NO)
     );
   }
 
@@ -301,10 +384,11 @@ class FdhReviewAssemblerTest {
                 "given_names_in_english": "%s"
               },
               "page_3": {
+                "employment_contract_no": "%s",
                 "signature_of_employer": "signature detected"
               }
             }
-            """.formatted(chineseName, surname, givenNames)
+            """.formatted(chineseName, surname, givenNames, CONTRACT_NO)
     );
   }
 
@@ -326,7 +410,7 @@ class FdhReviewAssemblerTest {
         """
             {
               "page_1": {
-                "contract_no": "DH-2026-004218",
+                "contract_no": "%s",
                 "name_of_helper": "%s",
                 "name_of_employer": "%s"
               },
@@ -338,7 +422,7 @@ class FdhReviewAssemblerTest {
                 "signature_of_employer": "signature detected"
               }
             }
-            """.formatted(helperName, employerName, wages, foodAllowance)
+            """.formatted(CONTRACT_NO, helperName, employerName, wages, foodAllowance)
     );
   }
 

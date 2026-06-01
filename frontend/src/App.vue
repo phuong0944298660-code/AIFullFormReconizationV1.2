@@ -7,12 +7,21 @@ import {
   materials,
   scenarios
 } from './fdhMockData.js'
+import { sourceValueSegments } from './fieldDiff.js'
+import {
+  buildVerificationTemplate,
+  TEMPLATE_STATUS_LEGEND
+} from './verificationTemplate.js'
 
 const selectedApplicationTypeId = ref(applicationTypes[0].id)
 const selectedScenarioId = ref('missing_core')
 const uploadedFiles = ref([])
 const uploadedFileObjects = ref([])
 const reviewResult = ref(null)
+const resultView = ref('recognition')
+const verificationConclusion = ref(null)
+const verificationLoading = ref(false)
+const verificationError = ref('')
 const processing = ref(false)
 const fieldFilter = ref('all')
 const fileInput = ref(null)
@@ -21,6 +30,7 @@ const apiError = ref('')
 const dragActive = ref(false)
 let uploadSequence = 0
 let uploadBatchSequence = 0
+let verificationSequence = 0
 const FDH_JOB_POLL_INTERVAL_MS = 1000
 const FDH_JOB_POLL_LIMIT = 1500
 
@@ -78,9 +88,79 @@ const nonBlockingMaterialHints = computed(() => {
   return reviewResult.value.materials.filter((item) => !item.blocking && item.status === 'warn')
 })
 
+const reviewJsonPayload = computed(() => {
+  if (!reviewResult.value) return {}
+  return {
+    applicationType: {
+      id: reviewResult.value.applicationTypeId,
+      label: selectedApplicationType.value.label
+    },
+    decision: reviewResult.value.decision,
+    decisionText: reviewResult.value.decisionText,
+    generatedAt: reviewResult.value.generatedAt,
+    stats: reviewResult.value.stats,
+    materialCompleteness: reviewResult.value.materials.map((material) => ({
+      no: material.no,
+      id: material.id,
+      name: material.name,
+      shortName: material.shortName,
+      templateId: material.templateId,
+      expectedPages: material.expectedPages,
+      applicable: material.applicable,
+      uploaded: material.uploaded,
+      core: material.core,
+      blocking: material.blocking,
+      status: material.status,
+      statusText: material.statusText,
+      scopeText: material.scopeText,
+      uploadedFilenames: material.uploadedFilenames || [],
+      issue: material.issue || ''
+    })),
+    fieldRecognitionAndAudit: reviewResult.value.fields.map((field) => ({
+      key: field.key,
+      category: field.category,
+      label: field.label,
+      required: field.required,
+      normalizedValue: field.normalizedValue,
+      status: field.status,
+      issue: field.issue || '',
+      blocking: field.blocking,
+      rule: field.rule,
+      sources: field.sources.map((source) => ({
+        documentName: source.documentName,
+        filename: source.filename,
+        section: source.section,
+        fieldName: source.fieldName,
+        value: source.value,
+        confidence: source.confidence,
+        hasSnapshot: Boolean(source.snapshotDataUrl || source.snapshotText)
+      }))
+    }))
+  }
+})
+
+const reviewJsonPreview = computed(() => JSON.stringify(reviewJsonPayload.value, null, 2))
+
+const verificationView = computed(() => {
+  return parseVerificationConclusion(verificationConclusion.value?.text || '')
+})
+
+const verificationTemplate = computed(() => {
+  if (!reviewResult.value) return null
+  return buildVerificationTemplate(reviewResult.value, {
+    applicationTypeLabel: selectedApplicationType.value.label
+  })
+})
+
+const templateStatusLegend = TEMPLATE_STATUS_LEGEND
+
 watch([selectedApplicationTypeId, selectedScenarioId], () => {
   fieldFilter.value = 'all'
   apiError.value = ''
+  verificationSequence += 1
+  resultView.value = 'recognition'
+  verificationConclusion.value = null
+  verificationError.value = ''
   if (uploadedFiles.value.length && !uploadedFileObjects.value.length) {
     uploadedFiles.value = buildUploadedFiles(selectedScenarioId.value)
   }
@@ -131,6 +211,10 @@ function handleSelectedFiles(files) {
   reviewResult.value = null
   jobStatus.value = null
   apiError.value = ''
+  verificationSequence += 1
+  resultView.value = 'recognition'
+  verificationConclusion.value = null
+  verificationError.value = ''
   if (fileInput.value) {
     fileInput.value.value = ''
   }
@@ -155,6 +239,7 @@ function simulateUpload() {
   reviewResult.value = null
   jobStatus.value = null
   apiError.value = ''
+  verificationSequence += 1
 }
 
 async function startRecognition() {
@@ -167,7 +252,12 @@ async function startRecognition() {
   processing.value = true
   reviewResult.value = null
   window.setTimeout(() => {
-    reviewResult.value = buildReviewResult(selectedApplicationTypeId.value, selectedScenarioId.value)
+    const result = buildReviewResult(selectedApplicationTypeId.value, selectedScenarioId.value)
+    reviewResult.value = result
+    resultView.value = 'recognition'
+    verificationConclusion.value = null
+    verificationError.value = ''
+    startVerificationConclusion(result)
     processing.value = false
   }, 700)
 }
@@ -195,8 +285,13 @@ async function startBackendRecognition() {
     if (completed.status !== 'completed') {
       throw new Error(completed.error || completed.message || '识别任务未完成。')
     }
-    reviewResult.value = completed.result
-    uploadedFiles.value = completed.result?.uploadedFiles || uploadedFiles.value
+    const result = completed.result
+    reviewResult.value = result
+    resultView.value = 'recognition'
+    verificationConclusion.value = null
+    verificationError.value = ''
+    uploadedFiles.value = result?.uploadedFiles || uploadedFiles.value
+    startVerificationConclusion(result)
   } catch (error) {
     apiError.value = error?.message || '后端识别失败。'
   } finally {
@@ -211,6 +306,10 @@ function removeUploadedFile(uploadId) {
   reviewResult.value = null
   jobStatus.value = null
   apiError.value = ''
+  verificationSequence += 1
+  resultView.value = 'recognition'
+  verificationConclusion.value = null
+  verificationError.value = ''
 }
 
 function clearUploadedFiles() {
@@ -221,6 +320,10 @@ function clearUploadedFiles() {
   reviewResult.value = null
   jobStatus.value = null
   apiError.value = ''
+  verificationSequence += 1
+  resultView.value = 'recognition'
+  verificationConclusion.value = null
+  verificationError.value = ''
   if (fileInput.value) {
     fileInput.value.value = ''
   }
@@ -274,6 +377,11 @@ function resetDemo() {
   reviewResult.value = null
   processing.value = false
   fieldFilter.value = 'all'
+  verificationSequence += 1
+  resultView.value = 'recognition'
+  verificationConclusion.value = null
+  verificationLoading.value = false
+  verificationError.value = ''
   jobStatus.value = null
   apiError.value = ''
   dragActive.value = false
@@ -292,6 +400,15 @@ function statusLabel(status) {
   }[status] || status
 }
 
+function templateStatusIconPath(status) {
+  return {
+    pass: 'M20 6 9 17l-5-5',
+    unrecognized: 'M9.2 9a3 3 0 1 1 4.9 2.3c-.9.6-1.6 1.2-1.6 2.7 M12 17.8h.01',
+    required_missing: 'M12 7v6 M12 17h.01 M10.3 4.5 3.3 17a2 2 0 0 0 1.7 3h14a2 2 0 0 0 1.7-3l-7-12.5a2 2 0 0 0-3.4 0Z',
+    review: 'M12 6v6l4 2 M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z'
+  }[status] || 'M12 5v7 M12 17h.01'
+}
+
 function decisionLabel(decision) {
   return {
     PASS: '允许通过',
@@ -306,6 +423,134 @@ function materialRequirementLabel(material) {
   if (material.conditional) return '条件应交'
   return '官方应交'
 }
+
+async function openVerificationPage() {
+  if (!reviewResult.value) return
+  resultView.value = 'verification'
+  startVerificationConclusion(reviewResult.value)
+}
+
+async function startVerificationConclusion(result) {
+  if (!result || verificationLoading.value) return
+  if (verificationConclusion.value) return
+
+  const sequence = verificationSequence + 1
+  verificationSequence = sequence
+  verificationLoading.value = true
+  verificationError.value = ''
+  try {
+    const conclusion = await requestJson('/api/fdh/review/conclusion', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(reviewResultForConclusion(result))
+    })
+    if (verificationSequence === sequence) {
+      verificationConclusion.value = conclusion
+      verificationError.value = conclusion.status === 'ok'
+        ? ''
+        : '模型响应暂不可用，已展示规则兜底结论。'
+    }
+  } catch (error) {
+    if (verificationSequence === sequence) {
+      verificationError.value = '核验结论暂未取得模型响应，已生成规则兜底结论。'
+      verificationConclusion.value = {
+        llmEnabled: false,
+        status: 'frontend_fallback',
+        model: '',
+        text: localVerificationConclusion(result)
+      }
+    }
+  } finally {
+    if (verificationSequence === sequence) {
+      verificationLoading.value = false
+    }
+  }
+}
+
+function reviewResultForConclusion(result) {
+  return {
+    ...result,
+    fields: result.fields.map((field) => ({
+      ...field,
+      sources: field.sources.map((source) => ({
+        ...source,
+        snapshotDataUrl: ''
+      }))
+    }))
+  }
+}
+
+function localVerificationConclusion(result) {
+  const lines = [
+    `整体结论：${result.decision} - ${result.decisionText}`,
+    '材料识别结果：'
+  ]
+  result.materials
+    .filter((material) => material.applicable)
+    .forEach((material) => {
+      lines.push(`- ${material.shortName}：${material.statusText}；${material.blocking ? '影响最终通过' : '不影响最终通过'}；出处：${material.templateId || material.shortName}`)
+    })
+  lines.push('字段识别结果：')
+  result.fields.forEach((field) => {
+    const statusText = field.status === 'pass'
+      ? 'PASS'
+      : field.status === 'review'
+        ? '需人工审核'
+        : field.issue?.includes('不一致')
+          ? '不通过，跨文件字段不一致，需人工审核'
+          : '不通过'
+    const sources = field.sources.length
+      ? field.sources.map((source) => `${source.documentName} / ${source.section} / ${source.fieldName}`).join('；')
+      : '未取得可用字段证据'
+    lines.push(`- ${field.label}：${field.normalizedValue || '未识别'}；${statusText}${field.issue ? `；${field.issue}` : ''}；出处：${sources}`)
+  })
+  return lines.join('\n')
+}
+
+function parseVerificationConclusion(text) {
+  const view = {
+    overall: '',
+    materials: [],
+    fields: [],
+    other: []
+  }
+  let section = 'other'
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim()
+    if (!line) continue
+    if (line.startsWith('整体结论：')) {
+      view.overall = line.replace(/^整体结论：/, '')
+      section = 'other'
+      continue
+    }
+    if (line.startsWith('材料识别结果')) {
+      section = 'materials'
+      continue
+    }
+    if (line.startsWith('字段识别结果')) {
+      section = 'fields'
+      continue
+    }
+    const item = {
+      text: line.replace(/^[-•]\s*/, ''),
+      status: verificationLineStatus(line)
+    }
+    if (section === 'materials') {
+      view.materials.push(item)
+    } else if (section === 'fields') {
+      view.fields.push(item)
+    } else {
+      view.other.push(item)
+    }
+  }
+  return view
+}
+
+function verificationLineStatus(line) {
+  if (/不通过|FAIL|缺|未识别|不一致/.test(line)) return 'fail'
+  if (/需人工审核|人工复核|REVIEW|低置信|无法确认/.test(line)) return 'review'
+  return 'pass'
+}
 </script>
 
 <template>
@@ -319,14 +564,6 @@ function materialRequirementLabel(material) {
         </p>
       </div>
 
-      <label class="scenario-pill" for="scenario-select">
-        <span>模拟结果</span>
-        <select id="scenario-select" v-model="selectedScenarioId" :disabled="processing">
-          <option v-for="scenario in scenarios" :key="scenario.id" :value="scenario.id">
-            {{ scenario.label }}
-          </option>
-        </select>
-      </label>
     </header>
 
     <section v-if="!reviewResult" class="upload-stage">
@@ -371,7 +608,11 @@ function materialRequirementLabel(material) {
               class="material-row"
               :class="[`status-${material.status}`, { core: material.core }]"
             >
-              <span class="fake-checkbox" :class="{ checked: material.applicable }" aria-hidden="true"></span>
+              <span
+                class="material-readonly-marker"
+                :class="{ applicable: material.applicable }"
+                aria-hidden="true"
+              ></span>
               <div class="material-main">
                 <strong>{{ material.no }}. {{ material.name }}</strong>
                 <span>{{ material.shortName }} · {{ material.templateId }} · {{ material.expectedPages }}{{ material.note ? ` · ${material.note}` : '' }}</span>
@@ -389,7 +630,6 @@ function materialRequirementLabel(material) {
               <h2 id="upload-title">上传申请材料包</h2>
               <p>当前阶段点击上传会生成模拟多文件列表；文件内容暂不解析。</p>
             </div>
-            <span class="scenario-note">{{ selectedScenario.shortLabel }}</span>
           </div>
 
           <div class="upload-grid">
@@ -467,7 +707,7 @@ function materialRequirementLabel(material) {
                   </div>
                 </article>
               </div>
-              <div v-else class="empty-panel">尚未选择材料。可上传真实文件；如直接开始识别，将使用右上角模拟结果。</div>
+              <div v-else class="empty-panel">尚未选择材料。可上传真实文件；如直接开始识别，将使用内置演示数据。</div>
             </div>
           </div>
 
@@ -499,15 +739,43 @@ function materialRequirementLabel(material) {
           <strong>{{ selectedApplicationType.label }}</strong>
           <span>{{ reviewResult.uploadedFiles.length }} 份上传材料</span>
         </div>
-        <div class="toolbar-actions">
-          <span class="status-chip" :class="`decision-${reviewResult.decision.toLowerCase()}`">
-            {{ reviewResult.decision }} · {{ decisionLabel(reviewResult.decision) }}
-          </span>
-          <button class="secondary-action" type="button" @click="resetDemo">重新上传</button>
+        <div class="result-view-controls">
+          <div class="result-tabs" role="tablist" aria-label="结果视图切换">
+            <button
+              type="button"
+              :class="{ active: resultView === 'recognition' }"
+              @click="resultView = 'recognition'"
+            >
+              识别结果
+            </button>
+            <button
+              type="button"
+              :class="{ active: resultView === 'json' }"
+              @click="resultView = 'json'"
+            >
+              JSON
+            </button>
+          </div>
+          <div class="toolbar-actions">
+            <span class="status-chip" :class="`decision-${reviewResult.decision.toLowerCase()}`">
+              {{ reviewResult.decision }} · {{ decisionLabel(reviewResult.decision) }}
+            </span>
+            <button
+              v-if="resultView !== 'verification'"
+              class="secondary-action"
+              type="button"
+              :disabled="verificationLoading"
+              @click="openVerificationPage"
+            >
+              进入核验结果页
+            </button>
+            <button v-else class="secondary-action" type="button" @click="resultView = 'recognition'">返回识别结果</button>
+            <button class="secondary-action" type="button" @click="resetDemo">重新上传</button>
+          </div>
         </div>
       </div>
 
-      <div class="review-workspace">
+      <div v-if="resultView === 'recognition'" class="review-workspace">
         <aside class="review-sidebar">
           <section class="decision-card" :class="`decision-${reviewResult.decision.toLowerCase()}`">
             <span>整体结论</span>
@@ -625,6 +893,18 @@ function materialRequirementLabel(material) {
                         <strong>{{ source.documentName }}</strong>
                         <span>{{ source.section }}</span>
                         <span>{{ source.fieldName }}</span>
+                        <div class="evidence-value-block">
+                          <span class="evidence-value-label">识别值</span>
+                          <strong class="evidence-value">
+                            <template
+                              v-for="(segment, index) in sourceValueSegments(field, source)"
+                              :key="`${index}:${segment.text}:${segment.diff}`"
+                            >
+                              <mark v-if="segment.diff" class="value-diff-char">{{ segment.text }}</mark>
+                              <span v-else>{{ segment.text }}</span>
+                            </template>
+                          </strong>
+                        </div>
                         <small>置信度 {{ source.confidence }}%</small>
                       </div>
                     </article>
@@ -656,6 +936,132 @@ function materialRequirementLabel(material) {
           </section>
         </section>
       </div>
+      <section v-else-if="resultView === 'json'" class="json-result-panel">
+        <div class="panel-heading">
+          <div>
+            <h2>JSON</h2>
+            <p>包含材料完整性、字段清单识别结果，以及字段审核结论；图片快照仅保留是否存在，不输出 base64。</p>
+          </div>
+        </div>
+        <pre class="json-preview">{{ reviewJsonPreview }}</pre>
+      </section>
+      <section v-else class="verification-page">
+        <div class="panel-heading">
+          <div>
+            <h2>核验结果页</h2>
+            <p>以 Minutes 草拟模板形式回填标准化字段；跨文件不一致字段保留草拟建议值，并交由人工兜底复核。</p>
+          </div>
+          <span class="status-chip" :class="`decision-${reviewResult.decision.toLowerCase()}`">
+            {{ reviewResult.decision }} · {{ decisionLabel(reviewResult.decision) }}
+          </span>
+        </div>
+
+        <div v-if="verificationLoading" class="verification-loading" aria-live="polite">
+          正在生成 Minutes 草拟建议...
+        </div>
+        <div v-if="verificationError" class="verification-note" role="status">
+          {{ verificationError }}
+        </div>
+        <div v-if="verificationTemplate" class="verification-output">
+          <div class="verification-summary-card" :class="`decision-${reviewResult.decision.toLowerCase()}`">
+            <span>整体结论</span>
+            <strong>{{ reviewResult.decision }} - {{ reviewResult.decisionText }}</strong>
+            <p>{{ verificationTemplate.summaryText }}</p>
+            <ul class="overall-bullet-list">
+              <li v-for="item in verificationTemplate.overallBullets" :key="item.label">
+                <span>{{ item.label }}：</span>
+                <strong>{{ item.value }}</strong>
+              </li>
+            </ul>
+          </div>
+
+          <div class="template-status-legend" aria-label="字段状态图例">
+            <span v-for="item in templateStatusLegend" :key="item.status" class="template-status-pill" :class="item.status">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path :d="templateStatusIconPath(item.status)" />
+              </svg>
+              <strong>{{ item.label }}</strong>
+              <small>{{ item.text }}</small>
+            </span>
+          </div>
+
+          <section class="verification-section">
+            <div class="panel-heading">
+              <h3>材料层核验</h3>
+              <p>材料缺失、缺页、模板错误属于材料层面；不展示当前类别不要求的材料。</p>
+            </div>
+            <table class="material-template-table">
+              <thead>
+                <tr>
+                  <th>材料</th>
+                  <th>模板 / 页尾标识</th>
+                  <th>核验状态</th>
+                  <th>备注</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="material in verificationTemplate.materialRows" :key="material.id">
+                  <td>{{ material.no }}. {{ material.shortName }}</td>
+                  <td>{{ material.templateId }}</td>
+                  <td>
+                    <span class="status-badge" :class="material.status">{{ material.statusLabel }}</span>
+                  </td>
+                  <td>{{ material.issue || '已纳入材料完整性判断。' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
+
+          <section v-for="section in verificationTemplate.sections" :key="section.id" class="verification-section">
+            <div class="panel-heading">
+              <h3>{{ section.title }}</h3>
+              <p>按香港入境处材料字段清单顺序回填；待复核字段保留建议值和冲突来源。</p>
+            </div>
+            <table class="minutes-template-table">
+              <thead>
+                <tr>
+                  <th>字段</th>
+                  <th>回填值</th>
+                  <th>状态</th>
+                  <th>出处与草拟备注</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="fieldRow in section.rows" :key="fieldRow.key" :class="`field-${fieldRow.status}`">
+                  <td>
+                    <strong>{{ fieldRow.label }}</strong>
+                    <code>{{ fieldRow.key }}</code>
+                  </td>
+                  <td>
+                    <strong class="template-field-value">{{ fieldRow.displayValue }}</strong>
+                  </td>
+                  <td>
+                    <span class="template-status-pill compact" :class="fieldRow.status">
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path :d="templateStatusIconPath(fieldRow.status)" />
+                      </svg>
+                      {{ fieldRow.statusLabel }}
+                    </span>
+                  </td>
+                  <td>
+                    <p>{{ fieldRow.note }}</p>
+                    <ul v-if="fieldRow.conflicts.length > 1" class="conflict-list">
+                      <li v-for="conflict in fieldRow.conflicts" :key="`${fieldRow.key}:${conflict.value}`">
+                        <strong>{{ conflict.value }}</strong>
+                        <span>{{ conflict.sources.join('；') }}</span>
+                      </li>
+                    </ul>
+                    <small v-else-if="fieldRow.sources.length">
+                      {{ fieldRow.sources.map((source) => `${source.documentName} / ${source.section} / ${source.fieldName}`).join('；') }}
+                    </small>
+                    <small v-else>未取得可用字段证据</small>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
+        </div>
+      </section>
     </section>
   </main>
 </template>

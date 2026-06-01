@@ -20,18 +20,31 @@ test('standardized field cards render source evidence and normalized values', ()
   assert.match(app, /source\.documentName/)
   assert.match(app, /source\.section/)
   assert.match(app, /source\.fieldName/)
+  assert.match(app, /sourceValueSegments\(field, source\)/)
   assert.match(app, /field\.normalizedValue/)
   assert.match(css, /\.snapshot-card\s*\{/)
   assert.match(css, /\.evidence-card\s*\{/)
+  assert.match(css, /\.evidence-value\s*\{/)
+  assert.match(css, /\.value-diff-char\s*\{/)
 })
 
-test('upload page supports application type selection and mock scenario switching', () => {
+test('upload page supports application type selection while hiding mock scenario switching', () => {
   assert.match(app, /applicationTypes/)
   assert.match(app, /selectedApplicationTypeId/)
   assert.match(app, /scenarios/)
   assert.match(app, /selectedScenarioId/)
   assert.match(app, /function simulateUpload/)
   assert.match(app, /function startRecognition/)
+  assert.doesNotMatch(app, /id="scenario-select"/)
+  assert.doesNotMatch(app, /<label class="scenario-pill"/)
+})
+
+test('official material checklist uses read-only indicators instead of checkbox affordance', () => {
+  assert.match(app, /class="material-readonly-marker"/)
+  assert.match(css, /\.material-readonly-marker\s*\{/)
+  assert.match(css, /\.material-readonly-marker\.applicable::after\s*\{/)
+  assert.doesNotMatch(app, /fake-checkbox/)
+  assert.doesNotMatch(css, /\.fake-checkbox/)
 })
 
 test('review output prioritizes overall decision, material completeness, and field findings', () => {
@@ -41,6 +54,38 @@ test('review output prioritizes overall decision, material completeness, and fie
   assert.match(app, /标准化字段核验/)
   assert.match(app, /材料 1-3 纳入最终判定/)
   assert.match(app, /材料 4-12 只展示是否上传/)
+})
+
+test('result page exposes recognition JSON and LLM verification views', () => {
+  assert.match(app, /resultView === 'recognition'/)
+  assert.match(app, /resultView === 'json'/)
+  assert.match(app, /reviewJsonPreview/)
+  assert.match(app, /verificationTemplate\.summaryText/)
+  assert.match(app, /verificationTemplate\.overallBullets/)
+  assert.match(app, /template-status-legend/)
+  assert.match(app, /minutes-template-table/)
+  assert.match(app, /templateStatusIconPath/)
+  assert.match(app, /fieldRow\.displayValue/)
+  assert.doesNotMatch(app, /case-template-grid/)
+  assert.match(app, /材料完整性、字段清单识别结果/)
+  assert.match(app, /进入核验结果页/)
+  assert.match(app, /\/api\/fdh\/review\/conclusion/)
+  assert.match(app, /核验结果页/)
+  assert.match(css, /\.result-tabs\s*\{/)
+  assert.match(css, /\.json-result-panel\s*,/)
+  assert.match(css, /\.verification-page\s*\{/)
+  assert.match(css, /\.verification-summary-card\s*,/)
+  assert.match(css, /\.minutes-template-table\s*\{/)
+  assert.match(css, /\.template-status-pill\s*\{/)
+  assert.doesNotMatch(app, /模型：/)
+  assert.doesNotMatch(css, /\.verification-text\s*\{/)
+})
+
+test('verification conclusion generation starts after recognition completes', () => {
+  assert.match(app, /startVerificationConclusion\(result\)/)
+  assert.match(app, /startVerificationConclusion\(reviewResult\.value\)/)
+  assert.match(app, /核验结论暂未取得模型响应，已生成规则兜底结论/)
+  assert.doesNotMatch(app, /HTTP\/1\.1 header parser received no bytes/)
 })
 
 test('field filters expose all, issue, review, and required views', () => {
