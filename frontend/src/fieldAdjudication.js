@@ -21,7 +21,7 @@ export function applyFieldAdjudications(fields = [], adjudications = []) {
     .map((item) => [item.key, normalizeAdjudication(item)]))
 
   return fields.map((field) => {
-    const adjudication = remoteMap.get(field.key) || localMap.get(field.key)
+    const adjudication = chooseAdjudication(field.key, remoteMap.get(field.key), localMap.get(field.key))
     const rawNormalizedValue = cleanValue(field.normalizedValue)
     if (!adjudication) {
       return {
@@ -43,6 +43,24 @@ export function applyFieldAdjudications(fields = [], adjudications = []) {
       correctionApplied: corrected
     }
   })
+}
+
+function chooseAdjudication(fieldKey, remote, local) {
+  if (
+    cleanValue(fieldKey) === 'contract.dh_contract_no' &&
+    remote &&
+    local &&
+    remote.suggestedValue !== local.suggestedValue
+  ) {
+    return {
+      ...remote,
+      suggestedValue: local.suggestedValue,
+      status: 'review',
+      corrected: true,
+      reason: local.reason || remote.reason
+    }
+  }
+  return remote || local
 }
 
 function localFieldAdjudication(field = {}) {
@@ -117,17 +135,37 @@ function normalizeDhContractNumber(value) {
 
 function suggestionReason(fieldKey, suggestedValue) {
   if (cleanValue(fieldKey) === 'contract.dh_contract_no') {
-    return `规则兜底建议采用值“${suggestedValue}”；标准雇佣合约编号前缀必须为 FH-CON-，该字段跨文件不一致，仍需人工复核。`
+    return `规则兜底建议采用值“${suggestedValue}”；标准雇佣合约编号前缀必须为 FH-CON-，年份优先选择不超过当前年份且最接近当前年份的值；该字段跨文件不一致，仍需人工复核。`
   }
   return `规则兜底建议采用值“${suggestedValue}”；该字段跨文件不一致，仍需人工复核。`
 }
 
 function chooseSuggestedValue(field = {}, groups = []) {
   return [...groups].sort((left, right) => {
-    if (right.priority !== left.priority) return right.priority - left.priority
-    if (right.confidence !== left.confidence) return right.confidence - left.confidence
-    return right.sources.length - left.sources.length
+    if (cleanValue(field.key) === 'contract.dh_contract_no') {
+      const currentYear = new Date().getFullYear()
+      const leftYear = contractYearRank(left.value, currentYear)
+      const rightYear = contractYearRank(right.value, currentYear)
+      if (rightYear !== leftYear) return rightYear > leftYear ? 1 : -1
+    }
+    return compareByReliability(left, right)
   })[0]
+}
+
+function compareByReliability(left, right) {
+  if (right.priority !== left.priority) return right.priority - left.priority
+  if (right.confidence !== left.confidence) return right.confidence - left.confidence
+  return right.sources.length - left.sources.length
+}
+
+function contractYearRank(value, currentYear) {
+  const year = contractYear(value)
+  return Number.isInteger(year) && year <= currentYear ? year : Number.NEGATIVE_INFINITY
+}
+
+function contractYear(value) {
+  const match = cleanValue(value).match(/(?:^|[^0-9])((?:19|20)\d{2})(?=$|[^0-9])/)
+  return match ? Number(match[1]) : null
 }
 
 function sourcePriority(fieldKey, documentName) {

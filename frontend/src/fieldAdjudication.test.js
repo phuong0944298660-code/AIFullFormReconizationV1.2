@@ -46,10 +46,76 @@ test('applyFieldAdjudications lets backend LLM suggestion override local rule fa
   assert.equal(field.rawNormalizedValue, conflictField.normalizedValue)
 })
 
+test('applyFieldAdjudications keeps the contract year rule when backend suggestion uses a future year', () => {
+  const currentYear = new Date().getFullYear()
+  const futureYear = currentYear + 10
+  const fieldWithFutureCandidate = {
+    ...conflictField,
+    normalizedValue: `FH-CON-IDN-${currentYear}-0612 / RFH-CON-IDN-${futureYear}-0612`,
+    sources: [
+      { documentName: 'ID 988A', section: 'Undertaking', fieldName: 'Employment contract no.', value: `FH-CON-IDN-${currentYear}-0612`, confidence: 98 },
+      { documentName: 'ID 407', section: 'Contract cover', fieldName: 'Contract No.', value: `RFH-CON-IDN-${futureYear}-0612`, confidence: 98 }
+    ]
+  }
+
+  const [field] = applyFieldAdjudications([fieldWithFutureCandidate], [
+    {
+      key: 'contract.dh_contract_no',
+      suggestedValue: `RFH-CON-IDN-${futureYear}-0612`,
+      status: 'review',
+      corrected: true,
+      reason: 'LLM suggested the future-year value.'
+    }
+  ])
+
+  assert.equal(field.suggestedValue, `FH-CON-IDN-${currentYear}-0612`)
+  assert.equal(field.status, 'review')
+  assert.equal(field.correctionApplied, true)
+  assert.match(field.suggestionReason, /current year|当前年份|褰撳墠骞翠唤/)
+})
+
 test('contract number adjudication normalizes smudged leading R to the required FH-CON prefix', () => {
   const [field] = applyFieldAdjudications([conflictField], [])
 
   assert.equal(field.suggestedValue, 'FH-CON-IDN-2026-0612')
   assert.equal(field.status, 'review')
   assert.equal(field.correctionApplied, true)
+})
+
+test('contract number adjudication prefers the closest non-future year', () => {
+  const currentYear = new Date().getFullYear()
+  const oldYear = currentYear - 10
+  const [adjudication] = localFieldAdjudications({
+    fields: [{
+      ...conflictField,
+      normalizedValue: `FH-COW-PH${currentYear}-0708 / FH-CW-PH${currentYear}-0708 / RFH-CON-IDN-${oldYear}-0612`,
+      sources: [
+        { documentName: 'ID 988A', section: 'Undertaking', fieldName: 'Employment contract no.', value: `FH-COW-PH${currentYear}-0708`, confidence: 98 },
+        { documentName: 'ID 988B', section: 'Undertaking', fieldName: 'Employment contract no.', value: `FH-CW-PH${currentYear}-0708`, confidence: 98 },
+        { documentName: 'ID 407', section: 'Contract cover', fieldName: 'Contract No.', value: `RFH-CON-IDN-${oldYear}-0612`, confidence: 98 }
+      ]
+    }]
+  })
+
+  assert.equal(adjudication.suggestedValue, `FH-COW-PH${currentYear}-0708`)
+  assert.equal(adjudication.status, 'review')
+  assert.match(adjudication.reason, /current year|当前年份|褰撳墠骞翠唤/)
+})
+
+test('contract number adjudication ignores future years when choosing the suggested value', () => {
+  const currentYear = new Date().getFullYear()
+  const futureYear = currentYear + 10
+  const [adjudication] = localFieldAdjudications({
+    fields: [{
+      ...conflictField,
+      normalizedValue: `FH-CON-IDN-${currentYear}-0612 / RFH-CON-IDN-${futureYear}-0612`,
+      sources: [
+        { documentName: 'ID 988A', section: 'Undertaking', fieldName: 'Employment contract no.', value: `FH-CON-IDN-${currentYear}-0612`, confidence: 98 },
+        { documentName: 'ID 407', section: 'Contract cover', fieldName: 'Contract No.', value: `RFH-CON-IDN-${futureYear}-0612`, confidence: 98 }
+      ]
+    }]
+  })
+
+  assert.equal(adjudication.suggestedValue, `FH-CON-IDN-${currentYear}-0612`)
+  assert.equal(adjudication.status, 'review')
 })

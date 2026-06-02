@@ -14,6 +14,7 @@ import java.net.http.HttpHeaders;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.time.Year;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -156,6 +157,44 @@ class FdhReviewConclusionServiceTest {
   }
 
   @Test
+  void modelContractSuggestionCannotOverrideClosestNonFutureYearRule() throws Exception {
+    int currentYear = Year.now().getValue();
+    int futureYear = currentYear + 10;
+    ObjectMapper objectMapper = new ObjectMapper();
+    String modelText = objectMapper.writeValueAsString(Map.of(
+        "text", "整体结论：REVIEW - 合约编号需要人工复核。\n材料识别结果：\n- ID 988A：PASS\n字段识别结果：\n- 标准雇佣合约编号：REVIEW",
+        "fieldAdjudications", List.of(Map.of(
+            "key", "contract.dh_contract_no",
+            "suggestedValue", "RFH-CON-IDN-" + futureYear + "-0612",
+            "status", "review",
+            "corrected", true,
+            "reason", "LLM suggested the future-year value."
+        ))
+    ));
+    FdhReviewConclusionService service = new FdhReviewConclusionService(
+        new LlmProperties(true, "https://apie.zhisuaninfo.com/v1", "test-key", "Qwen3.6-35B-A3B", 2048, 20, 2),
+        new StableHttpClient(jsonResponse(objectMapper, modelText)),
+        objectMapper
+    );
+
+    FdhReviewConclusionResponse response = service.generate(contractNumberResult(
+        "FH-CON-IDN-" + currentYear + "-0612 / RFH-CON-IDN-" + futureYear + "-0612",
+        List.of(
+            new FdhReviewResult.FieldSource("ID 988A", "A.pdf", "Undertaking", "Employment contract no.", "FH-CON-IDN-" + currentYear + "-0612", 98, "", ""),
+            new FdhReviewResult.FieldSource("ID 407", "407.pdf", "Contract cover", "Contract No.", "RFH-CON-IDN-" + futureYear + "-0612", 98, "", "")
+        )
+    ));
+
+    assertThat(response.status()).isEqualTo("ok");
+    assertThat(response.fieldAdjudications()).singleElement()
+        .satisfies(adjudication -> {
+          assertThat(adjudication.suggestedValue()).isEqualTo("FH-CON-IDN-" + currentYear + "-0612");
+          assertThat(adjudication.status()).isEqualTo("review");
+          assertThat(adjudication.reason()).contains("当前年份");
+        });
+  }
+
+  @Test
   void deterministicContractNumberAdjudicationNormalizesRequiredPrefix() {
     FdhReviewConclusionService service = new FdhReviewConclusionService(
         new LlmProperties(false, "https://apie.zhisuaninfo.com/v1", "", "Qwen3.6-35B-A3B", 2048, 20, 2),
@@ -170,6 +209,56 @@ class FdhReviewConclusionServiceTest {
           assertThat(adjudication.suggestedValue()).isEqualTo("FH-CON-IDN-2026-0612");
           assertThat(adjudication.status()).isEqualTo("review");
           assertThat(adjudication.corrected()).isTrue();
+        });
+  }
+
+  @Test
+  void deterministicContractNumberAdjudicationPrefersClosestNonFutureYear() {
+    int currentYear = Year.now().getValue();
+    int oldYear = currentYear - 10;
+    FdhReviewConclusionService service = new FdhReviewConclusionService(
+        new LlmProperties(false, "https://apie.zhisuaninfo.com/v1", "", "Qwen3.6-35B-A3B", 2048, 20, 2),
+        new ObjectMapper()
+    );
+
+    FdhReviewConclusionResponse response = service.generate(contractNumberResult(
+        "FH-COW-PH" + currentYear + "-0708 / FH-CW-PH" + currentYear + "-0708 / RFH-CON-IDN-" + oldYear + "-0612",
+        List.of(
+            new FdhReviewResult.FieldSource("ID 988A", "A.pdf", "Undertaking", "Employment contract no.", "FH-COW-PH" + currentYear + "-0708", 98, "", ""),
+            new FdhReviewResult.FieldSource("ID 988B", "B.pdf", "Undertaking", "Employment contract no.", "FH-CW-PH" + currentYear + "-0708", 98, "", ""),
+            new FdhReviewResult.FieldSource("ID 407", "407.pdf", "Contract cover", "Contract No.", "RFH-CON-IDN-" + oldYear + "-0612", 98, "", "")
+        )
+    ));
+
+    assertThat(response.fieldAdjudications()).singleElement()
+        .satisfies(adjudication -> {
+          assertThat(adjudication.suggestedValue()).isEqualTo("FH-COW-PH" + currentYear + "-0708");
+          assertThat(adjudication.status()).isEqualTo("review");
+          assertThat(adjudication.reason()).contains("当前年份");
+        });
+  }
+
+  @Test
+  void deterministicContractNumberAdjudicationIgnoresFutureYears() {
+    int currentYear = Year.now().getValue();
+    int futureYear = currentYear + 10;
+    FdhReviewConclusionService service = new FdhReviewConclusionService(
+        new LlmProperties(false, "https://apie.zhisuaninfo.com/v1", "", "Qwen3.6-35B-A3B", 2048, 20, 2),
+        new ObjectMapper()
+    );
+
+    FdhReviewConclusionResponse response = service.generate(contractNumberResult(
+        "FH-CON-IDN-" + currentYear + "-0612 / RFH-CON-IDN-" + futureYear + "-0612",
+        List.of(
+            new FdhReviewResult.FieldSource("ID 988A", "A.pdf", "Undertaking", "Employment contract no.", "FH-CON-IDN-" + currentYear + "-0612", 98, "", ""),
+            new FdhReviewResult.FieldSource("ID 407", "407.pdf", "Contract cover", "Contract No.", "RFH-CON-IDN-" + futureYear + "-0612", 98, "", "")
+        )
+    ));
+
+    assertThat(response.fieldAdjudications()).singleElement()
+        .satisfies(adjudication -> {
+          assertThat(adjudication.suggestedValue()).isEqualTo("FH-CON-IDN-" + currentYear + "-0612");
+          assertThat(adjudication.status()).isEqualTo("review");
         });
   }
 
@@ -254,6 +343,47 @@ class FdhReviewConclusionServiceTest {
         )),
         decision,
         "字段需要人工复核。",
+        new FdhReviewResult.FieldStats(1, 0, 0, 1, 1),
+        "2026-06-01"
+    );
+  }
+
+  private FdhReviewResult contractNumberResult(String normalizedValue, List<FdhReviewResult.FieldSource> sources) {
+    return new FdhReviewResult(
+        "entry_visa",
+        List.of(),
+        List.of(new FdhReviewResult.MaterialRow(
+            "id407",
+            3,
+            "ID 407",
+            "ID 407",
+            "ID 407 (11/2016)",
+            4,
+            true,
+            true,
+            true,
+            true,
+            false,
+            "pass",
+            "PASS",
+            "blocking",
+            List.of("ID407.pdf"),
+            ""
+        )),
+        List.of(new FdhReviewResult.StandardField(
+            "contract.dh_contract_no",
+            "contract",
+            "standard employment contract number",
+            true,
+            normalizedValue,
+            "review",
+            "cross-file mismatch",
+            true,
+            sources,
+            "ID 988A, ID 988B and ID 407 contract numbers must be complete and consistent."
+        )),
+        "REVIEW",
+        "field requires review",
         new FdhReviewResult.FieldStats(1, 0, 0, 1, 1),
         "2026-06-01"
     );

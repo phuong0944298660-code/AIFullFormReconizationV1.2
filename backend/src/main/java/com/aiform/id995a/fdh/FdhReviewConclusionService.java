@@ -10,6 +10,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Year;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -18,11 +19,15 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
 public class FdhReviewConclusionService {
+
+  private static final Pattern CONTRACT_YEAR_PATTERN = Pattern.compile("(?:^|[^0-9])((?:19|20)\\d{2})(?=$|[^0-9])");
 
   private final LlmProperties properties;
   private final HttpClient httpClient;
@@ -171,7 +176,7 @@ public class FdhReviewConclusionService {
         字段建议规则：
         - 对跨文件字段不一致，结合材料名称、章节、字段名称和香港入境处材料规则建议一个采用值。
         - ID 407 是标准雇佣合约本体；ID 988A / ID 988B 中的合约编号是对该合约编号的引用。
-        - 标准雇佣合约编号 contract.dh_contract_no 的开头必须为 FH-CON-；若识别到 RFH-CON- 等可判断为前缀涂抹或误写的结果，建议采用值应归一为 FH-CON- 开头，但 status 仍为 review。
+        - 标准雇佣合约编号 contract.dh_contract_no 的开头必须为 FH-CON-；若识别到 RFH-CON- 等可判断为前缀涂抹或误写的结果，建议采用值应归一为 FH-CON- 开头；年份优先选择不超过当前年份且最接近当前年份的值，例如 2016/2026 取 2026，2026/2036 取 2026；但 status 仍为 review。
         - 若只是格式或 OCR 噪声差异，可建议采用更可信材料值；若年份、号码等实质差异仍须 corrected=true 且 status=review。
         - 不要把经历纠偏的字段改成 pass。
 
@@ -244,10 +249,30 @@ public class FdhReviewConclusionService {
     }
     for (FdhFieldAdjudication adjudication : model == null ? List.<FdhFieldAdjudication>of() : model) {
       if (!blank(adjudication.key()) && !blank(adjudication.suggestedValue())) {
-        merged.put(adjudication.key(), adjudication);
+        merged.put(adjudication.key(), protectContractAdjudication(merged.get(adjudication.key()), adjudication));
       }
     }
     return List.copyOf(merged.values());
+  }
+
+  private FdhFieldAdjudication protectContractAdjudication(
+      FdhFieldAdjudication fallback,
+      FdhFieldAdjudication model
+  ) {
+    if (!"contract.dh_contract_no".equals(clean(model.key()))
+        || fallback == null
+        || blank(fallback.suggestedValue())
+        || clean(fallback.suggestedValue()).equals(clean(model.suggestedValue()))) {
+      return model;
+    }
+    return new FdhFieldAdjudication(
+        model.key(),
+        fallback.suggestedValue(),
+        "review",
+        true,
+        model.source(),
+        fallback.reason()
+    );
   }
 
   private Map<String, Object> compactResult(FdhReviewResult result) {
@@ -336,12 +361,7 @@ public class FdhReviewConclusionService {
     if (groups.size() <= 1) {
       return Optional.empty();
     }
-    ValueGroup suggested = groups.stream()
-        .max(Comparator
-            .comparingInt(ValueGroup::priority)
-            .thenComparingDouble(ValueGroup::confidence)
-            .thenComparingInt(ValueGroup::sourceCount))
-        .orElse(groups.get(0));
+    ValueGroup suggested = chooseSuggestedValue(field, groups);
     return Optional.of(new FdhFieldAdjudication(
         field.key(),
         suggested.value(),
@@ -350,6 +370,35 @@ public class FdhReviewConclusionService {
         "rules_fallback",
         suggestionReason(field.key(), suggested.value())
     ));
+  }
+
+  private ValueGroup chooseSuggestedValue(FdhReviewResult.StandardField field, List<ValueGroup> groups) {
+    Comparator<ValueGroup> reliability = Comparator
+        .comparingInt(ValueGroup::priority)
+        .thenComparingDouble(ValueGroup::confidence)
+        .thenComparingInt(ValueGroup::sourceCount);
+    if ("contract.dh_contract_no".equals(clean(field.key()))) {
+      int currentYear = Year.now().getValue();
+      Optional<ValueGroup> closestNonFutureYear = groups.stream()
+          .filter(group -> contractYear(group.value())
+              .map(year -> year <= currentYear)
+              .orElse(false))
+          .max(Comparator
+              .comparingInt((ValueGroup group) -> contractYear(group.value()).orElse(Integer.MIN_VALUE))
+              .thenComparing(reliability));
+      if (closestNonFutureYear.isPresent()) {
+        return closestNonFutureYear.get();
+      }
+    }
+    return groups.stream().max(reliability).orElse(groups.get(0));
+  }
+
+  private Optional<Integer> contractYear(String value) {
+    Matcher matcher = CONTRACT_YEAR_PATTERN.matcher(clean(value));
+    if (!matcher.find()) {
+      return Optional.empty();
+    }
+    return Optional.of(Integer.parseInt(matcher.group(1)));
   }
 
   private List<ValueGroup> valueGroups(FdhReviewResult.StandardField field) {
@@ -402,7 +451,7 @@ public class FdhReviewConclusionService {
 
   private String suggestionReason(String fieldKey, String suggestedValue) {
     if ("contract.dh_contract_no".equals(clean(fieldKey))) {
-      return "规则兜底建议采用值“" + suggestedValue + "”；标准雇佣合约编号前缀必须为 FH-CON-，该字段跨文件不一致，仍需人工复核。";
+      return "规则兜底建议采用值“" + suggestedValue + "”；标准雇佣合约编号前缀必须为 FH-CON-，年份优先选择不超过当前年份且最接近当前年份的值；该字段跨文件不一致，仍需人工复核。";
     }
     return "规则兜底建议采用值“" + suggestedValue + "”；该字段跨文件不一致，仍需人工复核。";
   }
