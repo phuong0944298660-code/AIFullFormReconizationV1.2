@@ -33,6 +33,7 @@ let uploadBatchSequence = 0
 let verificationSequence = 0
 const FDH_JOB_POLL_INTERVAL_MS = 1000
 const FDH_JOB_POLL_LIMIT = 1500
+const demoFlowDescription = '本Demo主要演示「申请材料上传→文档解析识别→字段结构化提取与归一→跨档智能校验→自动生成审核结论」端到端全流程'
 
 const selectedApplicationType = computed(() => {
   return applicationTypes.find((item) => item.id === selectedApplicationTypeId.value) || applicationTypes[0]
@@ -560,7 +561,7 @@ function verificationLineStatus(line) {
         <p class="eyebrow">FDH Entry Visa Review Demo</p>
         <h1>外籍家庭傭工入境簽證材料核验</h1>
         <p class="header-copy">
-          先用纯前端模拟多文件上传、材料分类、字段核验和审批结论；后续后端可替换同一数据结构。
+          {{ demoFlowDescription }}
         </p>
       </div>
 
@@ -949,7 +950,7 @@ function verificationLineStatus(line) {
         <div class="panel-heading">
           <div>
             <h2>核验结果页</h2>
-            <p>以 Minutes 草拟模板形式回填标准化字段；跨文件不一致字段保留草拟建议值，并交由人工兜底复核。</p>
+            <p>{{ demoFlowDescription }}</p>
           </div>
           <span class="status-chip" :class="`decision-${reviewResult.decision.toLowerCase()}`">
             {{ reviewResult.decision }} · {{ decisionLabel(reviewResult.decision) }}

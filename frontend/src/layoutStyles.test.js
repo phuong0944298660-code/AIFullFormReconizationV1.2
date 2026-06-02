@@ -57,6 +57,10 @@ test('review output prioritizes overall decision, material completeness, and fie
 })
 
 test('result page exposes recognition JSON and LLM verification views', () => {
+  assert.match(app, /demoFlowDescription/)
+  assert.match(app, /申请材料上传→文档解析识别→字段结构化提取与归一→跨档智能校验→自动生成审核结论/)
+  assert.doesNotMatch(app, /先用纯前端模拟多文件上传/)
+  assert.doesNotMatch(app, /以 Minutes 草拟模板形式回填标准化字段/)
   assert.match(app, /resultView === 'recognition'/)
   assert.match(app, /resultView === 'json'/)
   assert.match(app, /reviewJsonPreview/)
