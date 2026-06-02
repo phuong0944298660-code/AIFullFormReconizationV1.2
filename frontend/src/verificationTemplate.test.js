@@ -101,6 +101,6 @@ test('verification template displays suggested value and keeps corrected fields 
 
   const contractRow = template.fieldRows.find((row) => row.key === 'contract.dh_contract_no')
   assert.equal(contractRow.status, 'review')
-  assert.equal(contractRow.displayValue, 'RFH-CON-IDN-2026-0612')
+  assert.equal(contractRow.displayValue, 'FH-CON-IDN-2026-0612')
   assert.match(contractRow.note, /建议采用/)
 })

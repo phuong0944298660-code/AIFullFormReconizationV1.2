@@ -24,7 +24,7 @@ test('localFieldAdjudications keeps corrected conflict fields in review with a s
   assert.equal(adjudication.key, 'contract.dh_contract_no')
   assert.equal(adjudication.status, 'review')
   assert.equal(adjudication.corrected, true)
-  assert.equal(adjudication.suggestedValue, 'RFH-CON-IDN-2026-0612')
+  assert.equal(adjudication.suggestedValue, 'FH-CON-IDN-2026-0612')
   assert.match(adjudication.reason, /建议采用值/)
 })
 
@@ -40,8 +40,16 @@ test('applyFieldAdjudications lets backend LLM suggestion override local rule fa
   ])
 
   assert.equal(field.status, 'review')
-  assert.equal(field.suggestedValue, 'RFH-CON-IDN-2026-0612')
+  assert.equal(field.suggestedValue, 'FH-CON-IDN-2026-0612')
   assert.equal(field.correctionApplied, true)
   assert.match(field.suggestionReason, /ID 407/)
   assert.equal(field.rawNormalizedValue, conflictField.normalizedValue)
+})
+
+test('contract number adjudication normalizes smudged leading R to the required FH-CON prefix', () => {
+  const [field] = applyFieldAdjudications([conflictField], [])
+
+  assert.equal(field.suggestedValue, 'FH-CON-IDN-2026-0612')
+  assert.equal(field.status, 'review')
+  assert.equal(field.correctionApplied, true)
 })

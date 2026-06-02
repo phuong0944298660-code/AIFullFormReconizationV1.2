@@ -148,10 +148,28 @@ class FdhReviewConclusionServiceTest {
     assertThat(response.fieldAdjudications()).singleElement()
         .satisfies(adjudication -> {
           assertThat(adjudication.key()).isEqualTo("contract.dh_contract_no");
-          assertThat(adjudication.suggestedValue()).isEqualTo("RFH-CON-IDN-2026-0612");
+          assertThat(adjudication.suggestedValue()).isEqualTo("FH-CON-IDN-2026-0612");
           assertThat(adjudication.status()).isEqualTo("review");
           assertThat(adjudication.corrected()).isTrue();
           assertThat(adjudication.reason()).contains("人工复核");
+        });
+  }
+
+  @Test
+  void deterministicContractNumberAdjudicationNormalizesRequiredPrefix() {
+    FdhReviewConclusionService service = new FdhReviewConclusionService(
+        new LlmProperties(false, "https://apie.zhisuaninfo.com/v1", "", "Qwen3.6-35B-A3B", 2048, 20, 2),
+        new ObjectMapper()
+    );
+
+    FdhReviewConclusionResponse response = service.generate(conflictingContractResult("REVIEW"));
+
+    assertThat(response.fieldAdjudications()).singleElement()
+        .satisfies(adjudication -> {
+          assertThat(adjudication.key()).isEqualTo("contract.dh_contract_no");
+          assertThat(adjudication.suggestedValue()).isEqualTo("FH-CON-IDN-2026-0612");
+          assertThat(adjudication.status()).isEqualTo("review");
+          assertThat(adjudication.corrected()).isTrue();
         });
   }
 

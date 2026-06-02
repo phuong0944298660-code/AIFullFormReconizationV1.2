@@ -171,6 +171,7 @@ public class FdhReviewConclusionService {
         字段建议规则：
         - 对跨文件字段不一致，结合材料名称、章节、字段名称和香港入境处材料规则建议一个采用值。
         - ID 407 是标准雇佣合约本体；ID 988A / ID 988B 中的合约编号是对该合约编号的引用。
+        - 标准雇佣合约编号 contract.dh_contract_no 的开头必须为 FH-CON-；若识别到 RFH-CON- 等可判断为前缀涂抹或误写的结果，建议采用值应归一为 FH-CON- 开头，但 status 仍为 review。
         - 若只是格式或 OCR 噪声差异，可建议采用更可信材料值；若年份、号码等实质差异仍须 corrected=true 且 status=review。
         - 不要把经历纠偏的字段改成 pass。
 
@@ -221,7 +222,7 @@ public class FdhReviewConclusionService {
       boolean corrected = item.path("corrected").asBoolean(false);
       adjudications.add(new FdhFieldAdjudication(
           key,
-          item.path("suggestedValue").asText(""),
+          normalizeFieldValue(key, item.path("suggestedValue").asText("")),
           corrected ? "review" : item.path("status").asText("review"),
           corrected,
           "llm",
@@ -347,14 +348,14 @@ public class FdhReviewConclusionService {
         "review",
         true,
         "rules_fallback",
-        "规则兜底建议采用值“" + suggested.value() + "”；该字段跨文件不一致，仍需人工复核。"
+        suggestionReason(field.key(), suggested.value())
     ));
   }
 
   private List<ValueGroup> valueGroups(FdhReviewResult.StandardField field) {
     Map<String, ValueGroup> groups = new LinkedHashMap<>();
     for (FdhReviewResult.FieldSource source : field.sources()) {
-      String value = clean(source.value());
+      String value = normalizeFieldValue(field.key(), source.value());
       if (blank(value)) {
         continue;
       }
@@ -376,6 +377,34 @@ public class FdhReviewConclusionService {
       }
     }
     return List.copyOf(groups.values());
+  }
+
+  private String normalizeFieldValue(String fieldKey, String value) {
+    String cleaned = clean(value);
+    if ("contract.dh_contract_no".equals(clean(fieldKey))) {
+      return normalizeDhContractNumber(cleaned);
+    }
+    return cleaned;
+  }
+
+  private String normalizeDhContractNumber(String value) {
+    String requiredPrefix = "FH-CON-";
+    String upper = value.toUpperCase(Locale.ROOT);
+    int prefixIndex = upper.indexOf(requiredPrefix);
+    if (prefixIndex == 0) {
+      return requiredPrefix + value.substring(requiredPrefix.length());
+    }
+    if (prefixIndex > 0 && prefixIndex <= 3) {
+      return requiredPrefix + value.substring(prefixIndex + requiredPrefix.length());
+    }
+    return value;
+  }
+
+  private String suggestionReason(String fieldKey, String suggestedValue) {
+    if ("contract.dh_contract_no".equals(clean(fieldKey))) {
+      return "规则兜底建议采用值“" + suggestedValue + "”；标准雇佣合约编号前缀必须为 FH-CON-，该字段跨文件不一致，仍需人工复核。";
+    }
+    return "规则兜底建议采用值“" + suggestedValue + "”；该字段跨文件不一致，仍需人工复核。";
   }
 
   private int sourcePriority(String fieldKey, String documentName) {

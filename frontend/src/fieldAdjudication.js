@@ -57,14 +57,15 @@ function localFieldAdjudication(field = {}) {
     status: 'review',
     corrected: true,
     source: 'rules_fallback',
-    reason: `规则兜底建议采用值“${suggested.value}”；该字段跨文件不一致，仍需人工复核。`
+    reason: suggestionReason(field.key, suggested.value)
   }
 }
 
 function normalizeAdjudication(item = {}) {
+  const key = cleanValue(item.key)
   return {
-    key: cleanValue(item.key),
-    suggestedValue: cleanValue(item.suggestedValue),
+    key,
+    suggestedValue: normalizeFieldValue(key, item.suggestedValue),
     status: cleanValue(item.status) || 'review',
     corrected: Boolean(item.corrected),
     source: cleanValue(item.source),
@@ -75,7 +76,7 @@ function normalizeAdjudication(item = {}) {
 function sourceValueGroups(field = {}) {
   const groups = new Map()
   for (const source of field.sources || []) {
-    const value = cleanValue(source.value)
+    const value = normalizeFieldValue(field.key, source.value)
     if (!hasValue(value)) continue
     if (!groups.has(value)) {
       groups.set(value, {
@@ -91,6 +92,34 @@ function sourceValueGroups(field = {}) {
     group.sources.push(source)
   }
   return Array.from(groups.values())
+}
+
+function normalizeFieldValue(fieldKey, value) {
+  const cleaned = cleanValue(value)
+  if (cleanValue(fieldKey) === 'contract.dh_contract_no') {
+    return normalizeDhContractNumber(cleaned)
+  }
+  return cleaned
+}
+
+function normalizeDhContractNumber(value) {
+  const upper = value.toUpperCase()
+  const requiredPrefix = 'FH-CON-'
+  const prefixIndex = upper.indexOf(requiredPrefix)
+  if (prefixIndex === 0) {
+    return requiredPrefix + value.slice(requiredPrefix.length)
+  }
+  if (prefixIndex > 0 && prefixIndex <= 3) {
+    return requiredPrefix + value.slice(prefixIndex + requiredPrefix.length)
+  }
+  return value
+}
+
+function suggestionReason(fieldKey, suggestedValue) {
+  if (cleanValue(fieldKey) === 'contract.dh_contract_no') {
+    return `规则兜底建议采用值“${suggestedValue}”；标准雇佣合约编号前缀必须为 FH-CON-，该字段跨文件不一致，仍需人工复核。`
+  }
+  return `规则兜底建议采用值“${suggestedValue}”；该字段跨文件不一致，仍需人工复核。`
 }
 
 function chooseSuggestedValue(field = {}, groups = []) {
