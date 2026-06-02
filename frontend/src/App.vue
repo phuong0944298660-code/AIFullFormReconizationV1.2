@@ -7,6 +7,7 @@ import {
   materials,
   scenarios
 } from './fdhMockData.js'
+import { applyFieldAdjudications, localFieldAdjudications } from './fieldAdjudication.js'
 import { sourceValueSegments } from './fieldDiff.js'
 import {
   buildVerificationTemplate,
@@ -47,7 +48,29 @@ const checklistPreview = computed(() => {
   return buildReviewResult(selectedApplicationTypeId.value, selectedScenarioId.value).materials
 })
 
-const fieldRows = computed(() => reviewResult.value?.fields || [])
+const fieldAdjudications = computed(() => {
+  const local = localFieldAdjudications(reviewResult.value || {})
+  const merged = new Map(local.map((item) => [item.key, item]))
+  for (const item of verificationConclusion.value?.fieldAdjudications || []) {
+    if (item?.key) merged.set(item.key, item)
+  }
+  return Array.from(merged.values())
+})
+
+const fieldRows = computed(() => {
+  return applyFieldAdjudications(reviewResult.value?.fields || [], fieldAdjudications.value)
+})
+
+const displayFieldStats = computed(() => {
+  const rows = fieldRows.value
+  return {
+    total: rows.length,
+    pass: rows.filter((field) => field.status === 'pass').length,
+    fail: rows.filter((field) => field.status === 'fail').length,
+    review: rows.filter((field) => field.status === 'review').length,
+    required: rows.filter((field) => field.required).length
+  }
+})
 
 const filteredFields = computed(() => {
   const rows = fieldRows.value
@@ -69,7 +92,7 @@ const blockingFindings = computed(() => {
       source: `${item.shortName} · ${item.templateId}`
     }))
 
-  const fieldFindings = reviewResult.value.fields
+  const fieldFindings = fieldRows.value
     .filter((field) => field.blocking && (field.status === 'fail' || field.status === 'review'))
     .map((field) => ({
       id: `field:${field.key}`,
@@ -117,14 +140,17 @@ const reviewJsonPayload = computed(() => {
       uploadedFilenames: material.uploadedFilenames || [],
       issue: material.issue || ''
     })),
-    fieldRecognitionAndAudit: reviewResult.value.fields.map((field) => ({
+    fieldAdjudications: fieldAdjudications.value,
+    fieldRecognitionAndAudit: fieldRows.value.map((field) => ({
       key: field.key,
       category: field.category,
       label: field.label,
       required: field.required,
-      normalizedValue: field.normalizedValue,
+      normalizedValue: field.rawNormalizedValue || field.normalizedValue,
+      suggestedValue: field.suggestedValue || '',
+      correctionApplied: Boolean(field.correctionApplied),
       status: field.status,
-      issue: field.issue || '',
+      issue: field.suggestionReason || field.issue || '',
       blocking: field.blocking,
       rule: field.rule,
       sources: field.sources.map((source) => ({
@@ -148,7 +174,10 @@ const verificationView = computed(() => {
 
 const verificationTemplate = computed(() => {
   if (!reviewResult.value) return null
-  return buildVerificationTemplate(reviewResult.value, {
+  return buildVerificationTemplate({
+    ...reviewResult.value,
+    fields: fieldRows.value
+  }, {
     applicationTypeLabel: selectedApplicationType.value.label
   })
 })
@@ -855,10 +884,10 @@ function verificationLineStatus(line) {
                 <p>字段按统一 key 聚合；同一字段可展示多份材料的局部快照证据。</p>
               </div>
               <div class="field-metrics" aria-label="字段统计">
-                <span><strong>{{ reviewResult.stats.total }}</strong>全部字段</span>
-                <span><strong>{{ reviewResult.stats.pass }}</strong>通过</span>
-                <span><strong>{{ reviewResult.stats.fail }}</strong>问题</span>
-                <span><strong>{{ reviewResult.stats.review }}</strong>待复核</span>
+                <span><strong>{{ displayFieldStats.total }}</strong>全部字段</span>
+                <span><strong>{{ displayFieldStats.pass }}</strong>通过</span>
+                <span><strong>{{ displayFieldStats.fail }}</strong>问题</span>
+                <span><strong>{{ displayFieldStats.review }}</strong>待复核</span>
               </div>
             </div>
 
@@ -920,14 +949,20 @@ function verificationLineStatus(line) {
 
                   <div class="field-value-panel">
                     <div>
-                      <span>归一化结果</span>
-                      <strong>{{ field.normalizedValue }}</strong>
+                      <span>{{ field.correctionApplied ? '建议采用值' : '归一化结果' }}</span>
+                      <strong>{{ field.suggestedValue || field.normalizedValue }}</strong>
+                      <small v-if="field.correctionApplied" class="field-original-value">
+                        原始归一结果：{{ field.rawNormalizedValue }}
+                      </small>
                     </div>
                     <div>
                       <span>核查标准</span>
                       <p>{{ field.rule }}</p>
                     </div>
-                    <div v-if="field.issue" class="issue-box" :class="field.status">
+                    <div v-if="field.correctionApplied" class="issue-box review">
+                      {{ field.suggestionReason }}
+                    </div>
+                    <div v-else-if="field.issue" class="issue-box" :class="field.status">
                       {{ field.issue }}
                     </div>
                   </div>

@@ -10,10 +10,14 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -40,22 +44,35 @@ public class FdhReviewConclusionService {
 
   public FdhReviewConclusionResponse generate(FdhReviewResult result) {
     String fallback = deterministicConclusion(result);
+    List<FdhFieldAdjudication> fallbackAdjudications = deterministicFieldAdjudications(result);
     if (!properties.enabled() || blank(properties.apiKey())) {
-      return new FdhReviewConclusionResponse(false, "disabled", properties.model(), fallback);
+      return new FdhReviewConclusionResponse(false, "disabled", properties.model(), fallback, fallbackAdjudications);
     }
 
     try {
-      String text = callModelWithRetry(result);
-      if (blank(text)) {
-        return new FdhReviewConclusionResponse(true, "empty_fallback", properties.model(), fallback);
+      ModelConclusion modelConclusion = parseModelConclusion(callModelWithRetry(result));
+      if (blank(modelConclusion.text())) {
+        return new FdhReviewConclusionResponse(true, "empty_fallback", properties.model(), fallback, fallbackAdjudications);
       }
-      String trimmed = text.trim();
+      String trimmed = modelConclusion.text().trim();
       if (!usableConclusion(trimmed, result.decision())) {
-        return new FdhReviewConclusionResponse(true, "format_fallback", properties.model(), fallback);
+        return new FdhReviewConclusionResponse(true, "format_fallback", properties.model(), fallback, fallbackAdjudications);
       }
-      return new FdhReviewConclusionResponse(true, "ok", properties.model(), trimmed);
+      return new FdhReviewConclusionResponse(
+          true,
+          "ok",
+          properties.model(),
+          trimmed,
+          mergeAdjudications(fallbackAdjudications, modelConclusion.fieldAdjudications())
+      );
     } catch (Exception exception) {
-      return new FdhReviewConclusionResponse(true, "error_fallback: " + exception.getMessage(), properties.model(), fallback);
+      return new FdhReviewConclusionResponse(
+          true,
+          "error_fallback: " + exception.getMessage(),
+          properties.model(),
+          fallback,
+          fallbackAdjudications
+      );
     }
   }
 
@@ -108,8 +125,10 @@ public class FdhReviewConclusionService {
         "messages", List.of(
             Map.of("role", "system", "content", """
                 你是香港入境处外籍家庭佣工材料核验结果整理助手。
-                只能基于输入 JSON 输出中文纯文本，不得添加未提供事实、建议、解决方案、Markdown 表格或标题层级。
-                必须分点说明材料识别结果和字段识别结果；字段不一致、必填缺失、材料缺失或低置信时，要明确标注“需人工审核”或“不通过”。
+                只能基于输入 JSON 和香港入境处外籍家庭佣工申请材料规则输出结论，不得添加未提供事实。
+                必须返回合法 JSON，不得返回 Markdown 代码块。
+                对跨文件字段不一致的情况，可以给出一个建议采用值；但只要经历过纠偏或建议取值，字段状态必须保持 review，并说明需人工复核。
+                材料缺失、缺页、模板错误属于材料层面，不得用字段建议值覆盖材料层阻断结论。
                 """),
             Map.of("role", "user", "content", buildPrompt(result))
         )
@@ -135,15 +154,99 @@ public class FdhReviewConclusionService {
 
   private String buildPrompt(FdhReviewResult result) throws IOException {
     return """
-        请严格按以下格式输出：
-        整体结论：<PASS/REVIEW/FAIL> - <一句话解释>
-        材料识别结果：
-        - <材料名称>：<状态>；<是否影响通过>；出处：<模板或文件>
-        字段识别结果：
-        - <字段名称>：<识别值>；<PASS/REVIEW/FAIL>；<如不一致或需人工审核，必须写清楚原因和材料来源>
+        请严格输出 JSON：
+        {
+          "text": "整体结论：<PASS/REVIEW/FAIL> - <一句话解释>\\n材料识别结果：\\n- <材料名称>：<状态>；<是否影响通过>；出处：<模板或文件>\\n字段识别结果：\\n- <字段名称>：<识别值或建议采用值>；<PASS/REVIEW/FAIL>；<原因和材料来源>",
+          "fieldAdjudications": [
+            {
+              "key": "<字段 key>",
+              "suggestedValue": "<建议采用值；无法建议则为空>",
+              "status": "pass|review|fail",
+              "corrected": true|false,
+              "reason": "<结合材料规则和来源解释为什么建议该值>"
+            }
+          ]
+        }
+
+        字段建议规则：
+        - 对跨文件字段不一致，结合材料名称、章节、字段名称和香港入境处材料规则建议一个采用值。
+        - ID 407 是标准雇佣合约本体；ID 988A / ID 988B 中的合约编号是对该合约编号的引用。
+        - 若只是格式或 OCR 噪声差异，可建议采用更可信材料值；若年份、号码等实质差异仍须 corrected=true 且 status=review。
+        - 不要把经历纠偏的字段改成 pass。
 
         下面是机器识别与规则审核 JSON，已移除图片 base64：
         """ + objectMapper.writeValueAsString(compactResult(result));
+  }
+
+  private ModelConclusion parseModelConclusion(String rawText) throws IOException {
+    String trimmed = stripJsonFence(rawText == null ? "" : rawText.trim());
+    if (trimmed.isBlank()) {
+      return new ModelConclusion("", List.of());
+    }
+    try {
+      JsonNode root = objectMapper.readTree(trimmed);
+      if (root.isObject() && (root.has("text") || root.has("fieldAdjudications"))) {
+        String text = root.path("text").asText("");
+        return new ModelConclusion(text, parseFieldAdjudications(root.path("fieldAdjudications")));
+      }
+    } catch (IOException ignored) {
+      // Some local models may still return the legacy plain-text conclusion.
+    }
+    return new ModelConclusion(trimmed, List.of());
+  }
+
+  private String stripJsonFence(String value) {
+    if (value.startsWith("```")) {
+      return value
+          .replaceFirst("^```(?:json)?\\s*", "")
+          .replaceFirst("\\s*```$", "")
+          .trim();
+    }
+    return value;
+  }
+
+  private List<FdhFieldAdjudication> parseFieldAdjudications(JsonNode node) {
+    if (node == null || !node.isArray()) {
+      return List.of();
+    }
+    List<FdhFieldAdjudication> adjudications = new ArrayList<>();
+    for (JsonNode item : node) {
+      if (!item.isObject()) {
+        continue;
+      }
+      String key = item.path("key").asText("");
+      if (blank(key)) {
+        continue;
+      }
+      boolean corrected = item.path("corrected").asBoolean(false);
+      adjudications.add(new FdhFieldAdjudication(
+          key,
+          item.path("suggestedValue").asText(""),
+          corrected ? "review" : item.path("status").asText("review"),
+          corrected,
+          "llm",
+          item.path("reason").asText("")
+      ));
+    }
+    return adjudications;
+  }
+
+  private List<FdhFieldAdjudication> mergeAdjudications(
+      List<FdhFieldAdjudication> fallback,
+      List<FdhFieldAdjudication> model
+  ) {
+    Map<String, FdhFieldAdjudication> merged = new LinkedHashMap<>();
+    for (FdhFieldAdjudication adjudication : fallback == null ? List.<FdhFieldAdjudication>of() : fallback) {
+      if (!blank(adjudication.key())) {
+        merged.put(adjudication.key(), adjudication);
+      }
+    }
+    for (FdhFieldAdjudication adjudication : model == null ? List.<FdhFieldAdjudication>of() : model) {
+      if (!blank(adjudication.key()) && !blank(adjudication.suggestedValue())) {
+        merged.put(adjudication.key(), adjudication);
+      }
+    }
+    return List.copyOf(merged.values());
   }
 
   private Map<String, Object> compactResult(FdhReviewResult result) {
@@ -152,7 +255,21 @@ public class FdhReviewConclusionService {
         "decision", result.decision(),
         "decisionText", result.decisionText(),
         "materials", result.materials().stream().map(this::compactMaterial).toList(),
-        "fields", result.fields().stream().map(this::compactField).toList()
+        "fields", result.fields().stream().map(this::compactField).toList(),
+        "ruleFallbackFieldAdjudications", deterministicFieldAdjudications(result).stream()
+            .map(this::compactFieldAdjudication)
+            .toList()
+    );
+  }
+
+  private Map<String, Object> compactFieldAdjudication(FdhFieldAdjudication adjudication) {
+    return Map.of(
+        "key", adjudication.key(),
+        "suggestedValue", adjudication.suggestedValue(),
+        "status", adjudication.status(),
+        "corrected", adjudication.corrected(),
+        "source", adjudication.source(),
+        "reason", adjudication.reason()
     );
   }
 
@@ -197,6 +314,94 @@ public class FdhReviewConclusionService {
         "value", source.value(),
         "confidence", source.confidence()
     );
+  }
+
+  private List<FdhFieldAdjudication> deterministicFieldAdjudications(FdhReviewResult result) {
+    if (result == null) {
+      return List.of();
+    }
+    return result.fields().stream()
+        .map(this::deterministicFieldAdjudication)
+        .filter(Optional::isPresent)
+        .map(Optional::get)
+        .toList();
+  }
+
+  private Optional<FdhFieldAdjudication> deterministicFieldAdjudication(FdhReviewResult.StandardField field) {
+    if (!Set.of("fail", "review").contains(field.status())) {
+      return Optional.empty();
+    }
+    List<ValueGroup> groups = valueGroups(field);
+    if (groups.size() <= 1) {
+      return Optional.empty();
+    }
+    ValueGroup suggested = groups.stream()
+        .max(Comparator
+            .comparingInt(ValueGroup::priority)
+            .thenComparingDouble(ValueGroup::confidence)
+            .thenComparingInt(ValueGroup::sourceCount))
+        .orElse(groups.get(0));
+    return Optional.of(new FdhFieldAdjudication(
+        field.key(),
+        suggested.value(),
+        "review",
+        true,
+        "rules_fallback",
+        "规则兜底建议采用值“" + suggested.value() + "”；该字段跨文件不一致，仍需人工复核。"
+    ));
+  }
+
+  private List<ValueGroup> valueGroups(FdhReviewResult.StandardField field) {
+    Map<String, ValueGroup> groups = new LinkedHashMap<>();
+    for (FdhReviewResult.FieldSource source : field.sources()) {
+      String value = clean(source.value());
+      if (blank(value)) {
+        continue;
+      }
+      ValueGroup existing = groups.get(value);
+      if (existing == null) {
+        groups.put(value, new ValueGroup(
+            value,
+            source.confidence(),
+            sourcePriority(field.key(), source.documentName()),
+            1
+        ));
+      } else {
+        groups.put(value, new ValueGroup(
+            existing.value(),
+            Math.max(existing.confidence(), source.confidence()),
+            Math.max(existing.priority(), sourcePriority(field.key(), source.documentName())),
+            existing.sourceCount() + 1
+        ));
+      }
+    }
+    return List.copyOf(groups.values());
+  }
+
+  private int sourcePriority(String fieldKey, String documentName) {
+    String key = clean(fieldKey);
+    String document = clean(documentName);
+    if ("contract.dh_contract_no".equals(key)) {
+      if (document.contains("ID 407")) {
+        return 80;
+      }
+      if (document.contains("ID 988A")) {
+        return 70;
+      }
+      if (document.contains("ID 988B")) {
+        return 60;
+      }
+    }
+    if (document.contains("ID 407")) {
+      return 40;
+    }
+    if (document.contains("ID 988A")) {
+      return 35;
+    }
+    if (document.contains("ID 988B")) {
+      return 30;
+    }
+    return 10;
   }
 
   private String deterministicConclusion(FdhReviewResult result) {
@@ -283,12 +488,16 @@ public class FdhReviewConclusionService {
     if (!text.startsWith("整体结论：" + expectedDecision)) {
       return false;
     }
-    List<String> forbiddenMarkers = List.of("```", "#", "|", "Markdown", "解决方案", "建议");
+    List<String> forbiddenMarkers = List.of("```", "#", "|", "Markdown");
     return forbiddenMarkers.stream().noneMatch(text::contains);
   }
 
   private boolean blank(String value) {
     return value == null || value.isBlank();
+  }
+
+  private String clean(String value) {
+    return value == null ? "" : value.trim();
   }
 
   private String trimTrailingSlash(String value) {
@@ -297,4 +506,13 @@ public class FdhReviewConclusionService {
     }
     return value.endsWith("/") ? value.substring(0, value.length() - 1) : value;
   }
+
+  private record ModelConclusion(String text, List<FdhFieldAdjudication> fieldAdjudications) {
+    private ModelConclusion {
+      text = text == null ? "" : text;
+      fieldAdjudications = fieldAdjudications == null ? List.of() : List.copyOf(fieldAdjudications);
+    }
+  }
+
+  private record ValueGroup(String value, double confidence, int priority, int sourceCount) {}
 }

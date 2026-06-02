@@ -1525,6 +1525,16 @@ svg {
   overflow-wrap: anywhere;
 }
 
+.field-original-value {
+  display: block;
+  margin-top: 6px;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .field-value-panel p {
   color: #344054;
   font-size: 13px;

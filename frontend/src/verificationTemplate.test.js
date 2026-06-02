@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { buildReviewResult } from './fdhMockData.js'
+import { applyFieldAdjudications } from './fieldAdjudication.js'
 import {
   buildVerificationTemplate,
   TEMPLATE_FIELD_ORDER,
@@ -69,4 +70,37 @@ test('verification template merges case summary into overall conclusion bullets'
   assert.equal(template.overallBullets[1].value, '转换雇主')
   assert.match(template.overallBullets[2].value, /^\d+\/\d+$/)
   assert.match(template.overallBullets[3].value, /必填字段\(\d+\)，必填未填写\(\d+\)，未识别\(\d+\)，待复核\(\d+\)/)
+})
+
+test('verification template displays suggested value and keeps corrected fields in review', () => {
+  const field = {
+    key: 'contract.dh_contract_no',
+    category: '合约字段',
+    label: '标准雇佣合约编号',
+    required: true,
+    normalizedValue: 'FH-CON-IDN2026-0612 / FH-CON-IDN2016-0612 / RFH-CON-IDN-2026-0612',
+    status: 'fail',
+    issue: '跨文件字段值明显不一致。',
+    sources: [
+      { documentName: 'ID 988A', section: '承诺', fieldName: 'Employment contract no.', value: 'FH-CON-IDN2026-0612', confidence: 98 },
+      { documentName: 'ID 988B', section: '承诺', fieldName: 'Employment contract no.', value: 'FH-CON-IDN2016-0612', confidence: 95 },
+      { documentName: 'ID 407', section: '合约首页', fieldName: 'Contract No.', value: 'RFH-CON-IDN-2026-0612', confidence: 98 }
+    ],
+    rule: 'ID 988A、ID 988B 与 ID 407 的标准雇佣合约编号必须完整填写并保持一致。'
+  }
+  const [adjudicatedField] = applyFieldAdjudications([field], [])
+
+  const template = buildVerificationTemplate({
+    decision: 'REVIEW',
+    decisionText: '字段需复核。',
+    uploadedFiles: [],
+    materials: [],
+    fields: [adjudicatedField],
+    stats: { required: 1 }
+  })
+
+  const contractRow = template.fieldRows.find((row) => row.key === 'contract.dh_contract_no')
+  assert.equal(contractRow.status, 'review')
+  assert.equal(contractRow.displayValue, 'RFH-CON-IDN-2026-0612')
+  assert.match(contractRow.note, /建议采用/)
 })

@@ -122,6 +122,39 @@ class FdhReviewConclusionServiceTest {
     assertThat(response.text()).doesNotContain("模型错误改写");
   }
 
+  @Test
+  void parsesModelFieldAdjudicationSuggestionsFromJsonResponse() throws Exception {
+    ObjectMapper objectMapper = new ObjectMapper();
+    String modelText = objectMapper.writeValueAsString(Map.of(
+        "text", "整体结论：REVIEW - 合约编号存在跨文件差异，建议采用 ID 407 值并人工复核。\n材料识别结果：\n- ID 988A：PASS\n字段识别结果：\n- 标准雇佣合约编号：REVIEW",
+        "fieldAdjudications", List.of(Map.of(
+            "key", "contract.dh_contract_no",
+            "suggestedValue", "RFH-CON-IDN-2026-0612",
+            "status", "review",
+            "corrected", true,
+            "reason", "LLM 结合香港入境处材料规则，优先采用 ID 407 合约首页值；跨文件仍需人工复核。"
+        ))
+    ));
+    FdhReviewConclusionService service = new FdhReviewConclusionService(
+        new LlmProperties(true, "https://apie.zhisuaninfo.com/v1", "test-key", "Qwen3.6-35B-A3B", 2048, 20, 2),
+        new StableHttpClient(jsonResponse(objectMapper, modelText)),
+        objectMapper
+    );
+
+    FdhReviewConclusionResponse response = service.generate(conflictingContractResult("REVIEW"));
+
+    assertThat(response.status()).isEqualTo("ok");
+    assertThat(response.text()).startsWith("整体结论：REVIEW");
+    assertThat(response.fieldAdjudications()).singleElement()
+        .satisfies(adjudication -> {
+          assertThat(adjudication.key()).isEqualTo("contract.dh_contract_no");
+          assertThat(adjudication.suggestedValue()).isEqualTo("RFH-CON-IDN-2026-0612");
+          assertThat(adjudication.status()).isEqualTo("review");
+          assertThat(adjudication.corrected()).isTrue();
+          assertThat(adjudication.reason()).contains("人工复核");
+        });
+  }
+
   private FdhReviewResult sampleResult() {
     return new FdhReviewResult(
         "entry_visa",
@@ -159,6 +192,51 @@ class FdhReviewConclusionServiceTest {
         "PASS",
         "允许通过。",
         new FdhReviewResult.FieldStats(1, 1, 0, 0, 1),
+        "2026-06-01"
+    );
+  }
+
+  private FdhReviewResult conflictingContractResult(String decision) {
+    return new FdhReviewResult(
+        "entry_visa",
+        List.of(),
+        List.of(new FdhReviewResult.MaterialRow(
+            "id407",
+            3,
+            "新标准雇佣合约正本一份",
+            "ID 407",
+            "ID 407 (11/2016)",
+            4,
+            true,
+            true,
+            true,
+            true,
+            false,
+            "pass",
+            "核心材料齐全",
+            "影响最终结论",
+            List.of("ID407.pdf"),
+            ""
+        )),
+        List.of(new FdhReviewResult.StandardField(
+            "contract.dh_contract_no",
+            "合约字段",
+            "标准雇佣合约编号",
+            true,
+            "FH-CON-IDN2026-0612 / FH-CON-IDN2016-0612 / RFH-CON-IDN-2026-0612",
+            "review",
+            "跨文件字段值明显不一致。",
+            true,
+            List.of(
+                new FdhReviewResult.FieldSource("ID 988A", "A.pdf", "承诺", "Employment contract no.", "FH-CON-IDN2026-0612", 98, "", ""),
+                new FdhReviewResult.FieldSource("ID 988B", "B.pdf", "承诺", "Employment contract no.", "FH-CON-IDN2016-0612", 95, "", ""),
+                new FdhReviewResult.FieldSource("ID 407", "407.pdf", "合约首页", "Contract No.", "RFH-CON-IDN-2026-0612", 98, "", "")
+            ),
+            "ID 988A、ID 988B 与 ID 407 的标准雇佣合约编号必须完整填写并保持一致。"
+        )),
+        decision,
+        "字段需要人工复核。",
+        new FdhReviewResult.FieldStats(1, 0, 0, 1, 1),
         "2026-06-01"
     );
   }

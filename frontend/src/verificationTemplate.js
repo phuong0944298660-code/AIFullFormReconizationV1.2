@@ -107,7 +107,7 @@ function shouldShowField(field) {
 function toTemplateFieldRow(field) {
   const status = templateFieldStatus(field)
   const conflicts = fieldConflicts(field)
-  const recommendedValue = recommendedFieldValue(field, conflicts)
+  const recommendedValue = field.suggestedValue || recommendedFieldValue(field, conflicts)
   return {
     key: field.key,
     category: field.category,
@@ -181,6 +181,9 @@ function fieldNote(field, status, conflicts, recommendedValue) {
   if (status === 'pass') return '已识别并通过。'
   if (status === 'required_missing') return field.issue || '必填字段未填写，需退回补正。'
   if (status === 'unrecognized') return field.issue || '未取得可靠识别结果，需要人工查看原件。'
+  if (field.correctionApplied) {
+    return field.suggestionReason || `建议采用“${recommendedValue}”，该字段仍需人工复核。`
+  }
   if (conflicts.length > 1) {
     return `跨文件不一致，Minutes 草拟建议采用“${recommendedValue}”，需人工复核。`
   }
