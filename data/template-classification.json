@@ -8,7 +8,7 @@
     "confidence" : 90,
     "structureHash" : "fec483b166b46dce",
     "firstSeenAt" : "2026-05-25 15:14:07",
-    "lastSeenAt" : "2026-06-01 16:23:55"
+    "lastSeenAt" : "2026-06-02 15:23:36"
   }, {
     "filename" : "陈丽萍-A.pdf",
     "templateId" : "id988a_2024_06",
@@ -18,7 +18,7 @@
     "confidence" : 92,
     "structureHash" : "280f6f677211b755",
     "firstSeenAt" : "2026-05-25 15:14:18",
-    "lastSeenAt" : "2026-06-01 16:22:55"
+    "lastSeenAt" : "2026-06-02 15:23:31"
   }, {
     "filename" : "陈丽萍-B.pdf",
     "templateId" : "id988b_2024_06",
@@ -28,7 +28,7 @@
     "confidence" : 90,
     "structureHash" : "5a6cfd2df0b2bd60",
     "firstSeenAt" : "2026-05-25 15:14:28",
-    "lastSeenAt" : "2026-06-01 16:22:55"
+    "lastSeenAt" : "2026-06-02 15:24:28"
   }, {
     "filename" : "陈志萍-B.pdf",
     "templateId" : "id988b_2024_06",
@@ -156,9 +156,9 @@
     "pageCount" : 5,
     "matchSource" : "visual_layout_footer",
     "confidence" : 92,
-    "structureHash" : "5775259a84367265",
+    "structureHash" : "ec393313f82b3f1c",
     "firstSeenAt" : "2026-05-25 15:16:01",
-    "lastSeenAt" : "2026-05-25 15:16:01"
+    "lastSeenAt" : "2026-06-02 15:19:25"
   }, {
     "filename" : "周咏诗-B-V6.pdf",
     "templateId" : "id988b_2024_06",
@@ -166,9 +166,9 @@
     "pageCount" : 4,
     "matchSource" : "visual_layout_footer",
     "confidence" : 90,
-    "structureHash" : "a5b17035d8321f6c",
+    "structureHash" : "f4db5a90a7c862bc",
     "firstSeenAt" : "2026-05-25 15:16:04",
-    "lastSeenAt" : "2026-05-26 10:06:48"
+    "lastSeenAt" : "2026-06-02 15:20:07"
   }, {
     "filename" : "ID988A_06-2024.pdf",
     "templateId" : "id988a_2024_06",

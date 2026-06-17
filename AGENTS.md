@@ -112,4 +112,5 @@ mvn '-Dtest=FdhReviewConclusionServiceTest,FdhReviewControllerTest' test
 - 不要提交日志、本地凭据、临时生成文件或真实 API key。
 - 提交时尽量只包含与当前需求相关的文件。
 - 推送时遵循用户指定分支。当前用户常用分支为 `dev` 和 `UAT`。
-
+- 粤在信 Git 远端为 `http://192.168.5.221:8081/yuezaixin/immd.git`。
+- 后续提交或推送到粤在信 `master` 分支前，必须先获得用户明确同意。
