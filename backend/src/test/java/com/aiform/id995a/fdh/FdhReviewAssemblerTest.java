@@ -103,6 +103,24 @@ class FdhReviewAssemblerTest {
   }
 
   @Test
+  void id988aSplitHelperNameUsesGivenNamesBeforeSurnameForWesternDisplay() throws Exception {
+    FdhReviewResult result = assembler.assemble(
+        "change_employer",
+        List.of(
+            id988aWithHelperName("CRUZ", "ANGELICA"),
+            id988b(),
+            id407("ANGELICA CRUZ", "HK$5,100", "HK$1,236")
+        )
+    );
+
+    FdhReviewResult.StandardField helperName = field(result, "helper.name.full_en");
+    assertThat(helperName.status()).isEqualTo("pass");
+    assertThat(helperName.normalizedValue()).isEqualTo("ANGELICA CRUZ");
+    assertThat(helperName.sources()).extracting(FdhReviewResult.FieldSource::value)
+        .containsExactly("ANGELICA CRUZ", "ANGELICA CRUZ");
+  }
+
+  @Test
   void id988bSplitEmployerEnglishNameParticipatesInCrossDocumentCheck() throws Exception {
     FdhReviewResult result = assembler.assemble(
         "entry_visa",
@@ -173,6 +191,70 @@ class FdhReviewAssemblerTest {
         .containsExactly("ID 988A", "ID 988B", "ID 407");
     assertThat(contractNo.sources()).extracting(FdhReviewResult.FieldSource::value)
         .containsExactly(CONTRACT_NO, CONTRACT_NO, CONTRACT_NO);
+  }
+
+  @Test
+  void includesAllExtractedMaterialFieldsAndMergesMatchingRows() throws Exception {
+    FdhReviewResult result = assembler.assemble(
+        "entry_visa",
+        List.of(id988aWithExtraFields(), id988bWithExtraFields(), id407("SITI NURHALIZA", "HK$5,100", "HK$1,236"))
+    );
+
+    FdhReviewResult.StandardField mobilePhone = field(result, "extracted.mobile_phone_number");
+    assertThat(mobilePhone.required()).isFalse();
+    assertThat(mobilePhone.blocking()).isFalse();
+    assertThat(mobilePhone.status()).isEqualTo("pass");
+    assertThat(mobilePhone.normalizedValue()).isEqualTo("91234567");
+    assertThat(mobilePhone.sources()).extracting(FdhReviewResult.FieldSource::documentName)
+        .containsExactly("ID 988A", "ID 988B");
+    assertThat(mobilePhone.sources()).extracting(FdhReviewResult.FieldSource::fieldName)
+        .containsExactly("mobile phone no", "mobile phone number");
+
+    FdhReviewResult.StandardField email = field(result, "extracted.email_address");
+    assertThat(email.status()).isEqualTo("pass");
+    assertThat(email.normalizedValue()).isEqualTo("helper@example.com");
+    assertThat(email.sources()).singleElement()
+        .extracting(FdhReviewResult.FieldSource::documentName)
+        .isEqualTo("ID 988A");
+    assertThat(email.issue()).doesNotContain("未识别");
+  }
+
+  @Test
+  void extractedMaterialFieldsOmitValuesAlreadyCoveredByStandardFields() throws Exception {
+    FdhReviewResult result = assembler.assemble(
+        "entry_visa",
+        List.of(id988aWithExtraFields(), id988bWithExtraFields(), id407("SITI NURHALIZA", "HK$5,100", "HK$1,236"))
+    );
+
+    List<String> extractedKeys = result.fields().stream()
+        .map(FdhReviewResult.StandardField::key)
+        .filter(key -> key.startsWith("extracted."))
+        .toList();
+
+    // 已被标准化字段消费的识别值（姓名/合约号/工资/膳食津贴/申请类别/签名等）
+    // 不再以 extracted.* 重复出现。
+    assertThat(extractedKeys).doesNotContain(
+        "extracted.surname_en",
+        "extracted.given_names_en",
+        "extracted.employment_contract_number",
+        "extracted.contract_number",
+        "extracted.monthly_wages",
+        "extracted.food_allowance",
+        "extracted.application_type",
+        "extracted.employer_name",
+        "extracted.name_of_helper",
+        "extracted.name_of_employer",
+        "extracted.signature_of_applicant",
+        "extracted.signature_of_employer"
+    );
+
+    // 未被标准化字段覆盖的字段仍保留，并跨材料归一（mobile 跨 988A/988B 合并）。
+    assertThat(extractedKeys)
+        .containsExactlyInAnyOrder("extracted.mobile_phone_number", "extracted.email_address");
+
+    FdhReviewResult.StandardField mobilePhone = field(result, "extracted.mobile_phone_number");
+    assertThat(mobilePhone.sources()).extracting(FdhReviewResult.FieldSource::documentName)
+        .containsExactlyInAnyOrder("ID 988A", "ID 988B");
   }
 
   @Test
@@ -315,6 +397,10 @@ class FdhReviewAssemblerTest {
   }
 
   private FdhReviewDocument id988a() throws Exception {
+    return id988aWithHelperName("NURHALIZA", "SITI");
+  }
+
+  private FdhReviewDocument id988aWithExtraFields() throws Exception {
     return document(
         "ID988A.pdf",
         "id988a",
@@ -326,8 +412,38 @@ class FdhReviewAssemblerTest {
               "page_1": {
                 "application_type": "Entry visa - Domestic helper from abroad",
                 "part_2_personal_particulars": {
-                  "surname_en": "SITI",
-                  "given_names_en": "NURHALIZA",
+                  "surname_en": "NURHALIZA",
+                  "given_names_en": "SITI",
+                  "travel_document_no": "C8923745",
+                  "date_of_birth": "27/11/1992",
+                  "nationality": "Indonesian",
+                  "signature_of_applicant": "signature detected",
+                  "mobile_phone_no": "91234567",
+                  "email_address": "helper@example.com"
+                }
+              },
+              "page_4": {
+                "employment_contract_no": "%s"
+              }
+            }
+            """.formatted(CONTRACT_NO)
+    );
+  }
+
+  private FdhReviewDocument id988aWithHelperName(String surname, String givenNames) throws Exception {
+    return document(
+        "ID988A.pdf",
+        "id988a",
+        5,
+        "id988a_2024_06",
+        "ID 988A (06/2024)",
+        """
+            {
+              "page_1": {
+                "application_type": "Entry visa - Domestic helper from abroad",
+                "part_2_personal_particulars": {
+                  "surname_en": "%s",
+                  "given_names_en": "%s",
                   "travel_document_no": "C8923745",
                   "date_of_birth": "27/11/1992",
                   "nationality": "Indonesian",
@@ -338,7 +454,7 @@ class FdhReviewAssemblerTest {
                 "employment_contract_no": "%s"
               }
             }
-            """.formatted(CONTRACT_NO)
+            """.formatted(surname, givenNames, CONTRACT_NO)
     );
   }
 
@@ -364,8 +480,8 @@ class FdhReviewAssemblerTest {
 %s
                 },
                 "part_2_personal_particulars": {
-                  "surname_en": "SITI",
-                  "given_names_en": "NURHALIZA",
+                  "surname_en": "NURHALIZA",
+                  "given_names_en": "SITI",
                   "travel_document_no": "C8923745",
                   "date_of_birth": "27/11/1992",
                   "nationality": "Indonesian",
@@ -382,6 +498,34 @@ class FdhReviewAssemblerTest {
 
   private FdhReviewDocument id988b() throws Exception {
     return id988bWithContractNo(CONTRACT_NO);
+  }
+
+  private FdhReviewDocument id988bWithExtraFields() throws Exception {
+    return document(
+        "ID988B.pdf",
+        "id988b",
+        4,
+        "id988b_2024_06",
+        "ID 988B (06/2024)",
+        """
+            {
+              "page_1": {
+                "employer_particulars": {
+                  "employer_name": "CHAN TAI MAN",
+                  "mobile_phone_number": "91234567"
+                }
+              },
+              "page_3": {
+                "employment_contract_no": "%s"
+              },
+              "page_4": {
+                "declaration": {
+                  "signature_of_employer": "signature detected"
+                }
+              }
+            }
+            """.formatted(CONTRACT_NO)
+    );
   }
 
   private FdhReviewDocument id988bWithPageCount(int pages) throws Exception {

@@ -44,6 +44,23 @@ public class FdhReviewAssembler {
   private static final String ID988A_REMAINING_CONTRACT_LABEL =
       "Complete the remaining/extended period of the current contract";
 
+  // 姓名/雇主名相关 token 组：这些字段由标准化字段 helper.name.full_en /
+  // employer.name.full_en 拼接消费，extractedMaterialFields 需按语义跳过，避免与标准化字段重复展示。
+  private static final List<List<String>> NAME_TOKEN_GROUPS = List.of(
+      group("surname"),
+      group("given"),
+      group("family", "name"),
+      group("given", "name"),
+      group("helper", "name"),
+      group("name", "helper"),
+      group("full", "name"),
+      group("english", "name"),
+      group("employer", "name"),
+      group("name", "employer"),
+      group("name", "chinese"),
+      group("chinese", "name")
+  );
+
   private final int minimumMonthlyWageHkd;
   private final int minimumFoodAllowanceHkd;
   private final Clock clock;
@@ -362,7 +379,19 @@ public class FdhReviewAssembler {
         "如雇主不免费提供膳食，膳食津贴不得低于当前政府公布的最低金额。"
     ));
     fields.add(documentFooterField(documents));
+    Set<String> consumedKeys = collectConsumedFieldKeys(fields);
+    fields.addAll(extractedMaterialFields(documents, consumedKeys));
     return fields;
+  }
+
+  private static Set<String> collectConsumedFieldKeys(List<FdhReviewResult.StandardField> fields) {
+    Set<String> keys = new LinkedHashSet<>();
+    for (FdhReviewResult.StandardField field : fields) {
+      for (FdhReviewResult.FieldSource source : field.sources()) {
+        keys.add(source.filename() + "|" + source.section() + "|" + normalizeTokens(source.value()));
+      }
+    }
+    return keys;
   }
 
   private FdhReviewResult.StandardField applicationTypeField(
@@ -671,6 +700,121 @@ public class FdhReviewAssembler {
     );
   }
 
+  private List<FdhReviewResult.StandardField> extractedMaterialFields(
+      List<FdhReviewDocument> documents,
+      Set<String> consumedKeys
+  ) {
+    Map<String, ExtractedFieldGroup> groups = new LinkedHashMap<>();
+    for (FdhReviewDocument document : documents == null ? List.<FdhReviewDocument>of() : documents) {
+      String documentName = FdhMaterialCatalog.displayName(document.materialId());
+      for (ExtractedValue value : flatten(document)) {
+        if (!shouldDisplayExtractedValue(value)) {
+          continue;
+        }
+        if (isConsumedByStandardField(value, document, consumedKeys)) {
+          continue;
+        }
+        String key = supplementalFieldKey(value);
+        if (key.isBlank()) {
+          continue;
+        }
+        ExtractedFieldGroup group = groups.computeIfAbsent(
+            key,
+            ignored -> new ExtractedFieldGroup(
+                key,
+                "材料识别字段",
+                supplementalFieldLabel(value)
+            )
+        );
+        group.add(new FdhReviewResult.FieldSource(
+            documentName,
+            document.filename(),
+            value.section(),
+            value.fieldName(),
+            value.value(),
+            value.confidence(),
+            value.value(),
+            value.snapshotDataUrl()
+        ));
+      }
+    }
+    return groups.values().stream()
+        .map(ExtractedFieldGroup::toStandardField)
+        .toList();
+  }
+
+  private boolean shouldDisplayExtractedValue(ExtractedValue value) {
+    if (value == null || value.value().isBlank()) {
+      return false;
+    }
+    String path = value.path();
+    if (path == null || path.isBlank()) {
+      return false;
+    }
+    for (String part : path.split("\\.")) {
+      String normalized = normalizeTokens(part);
+      if (part.startsWith("_")
+          || normalized.equals("field confidence")
+          || normalized.equals("source image data url")
+          || normalized.equals("raw structured text")
+          || normalized.equals("characters")
+          || normalized.equals("bbox")) {
+        return false;
+      }
+    }
+    return !supplementalFieldKey(value).isBlank();
+  }
+
+  private boolean isConsumedByStandardField(
+      ExtractedValue value,
+      FdhReviewDocument document,
+      Set<String> consumedKeys
+  ) {
+    // 直传型标准化字段（护照号/出生日期/国籍/合约号/工资/签名等）消费的同一识别记录：
+    // (filename, section, value) 三元组与标准化字段 source 同源，可精确命中。
+    String directKey = document.filename() + "|" + value.section() + "|" + normalizeTokens(value.value());
+    if (consumedKeys.contains(directKey)) {
+      return true;
+    }
+    // 申请类别：已被 case.application_type 标准化字段覆盖。
+    if (applicationTypeCandidate(value).isPresent()) {
+      return true;
+    }
+    // 姓名/雇主名：标准化字段为拼接值，三元组无法命中原始 surname/given/name，按语义跳过。
+    return matchesAnyGroup(value.searchText(), NAME_TOKEN_GROUPS);
+  }
+
+  private String supplementalFieldKey(ExtractedValue value) {
+    String normalized = normalizeFieldName(supplementalFieldLabel(value));
+    if (normalized.isBlank() || normalized.matches("\\d+")) {
+      return "";
+    }
+    return "extracted." + normalized.replace(' ', '_');
+  }
+
+  private String supplementalFieldLabel(ExtractedValue value) {
+    String fieldName = value.fieldName();
+    if (fieldName == null || fieldName.isBlank()) {
+      return fieldNameFromPath(value.path());
+    }
+    return fieldName.trim();
+  }
+
+  private String normalizeFieldName(String value) {
+    String normalized = normalizeTokens(value);
+    if (normalized.isBlank()) {
+      return "";
+    }
+    normalized = (" " + normalized + " ")
+        .replace(" no ", " number ")
+        .replace(" nos ", " numbers ")
+        .replace(" tel ", " telephone ")
+        .replace(" dob ", " date birth ")
+        .trim()
+        .replaceAll("\\s+", " ");
+    return normalized;
+  }
+
   private FdhReviewResult.StandardField standardField(
       String key,
       String category,
@@ -775,17 +919,18 @@ public class FdhReviewAssembler {
         List.of(group("given"), group("given", "name"))
     );
     if (surname.isPresent() && given.isPresent()) {
-      FdhReviewResult.FieldSource first = surname.get();
-      FdhReviewResult.FieldSource second = given.get();
+      FdhReviewResult.FieldSource surnameSource = surname.get();
+      FdhReviewResult.FieldSource givenSource = given.get();
+      String fullName = givenSource.value() + " " + surnameSource.value();
       return Optional.of(new FdhReviewResult.FieldSource(
-          first.documentName(),
-          first.filename(),
-          first.section(),
-          "Surname / Given names",
-          first.value() + " " + second.value(),
-          Math.min(first.confidence(), second.confidence()),
-          first.value() + " " + second.value(),
-          first.snapshotDataUrl().isBlank() ? second.snapshotDataUrl() : first.snapshotDataUrl()
+          surnameSource.documentName(),
+          surnameSource.filename(),
+          surnameSource.section(),
+          "Given names / Surname",
+          fullName,
+          Math.min(surnameSource.confidence(), givenSource.confidence()),
+          fullName,
+          surnameSource.snapshotDataUrl().isBlank() ? givenSource.snapshotDataUrl() : surnameSource.snapshotDataUrl()
       ));
     }
     Optional<FdhReviewResult.FieldSource> full = evidence(
@@ -874,7 +1019,7 @@ public class FdhReviewAssembler {
     if (path.isBlank() || path.startsWith("_")) {
       return Optional.empty();
     }
-    String normalizedPath = normalizeTokens(path);
+    String normalizedPath = normalizeTokens(value.searchText());
     if (!normalizedPath.contains("application type")) {
       return Optional.empty();
     }
@@ -940,7 +1085,7 @@ public class FdhReviewAssembler {
   private Optional<ExtractedValue> findValue(FdhReviewDocument document, List<List<String>> tokenGroups) {
     List<ExtractedValue> fields = flatten(document);
     return fields.stream()
-        .filter(value -> matchesAnyGroup(value.path(), tokenGroups))
+        .filter(value -> matchesAnyGroup(value.searchText(), tokenGroups))
         .max(Comparator.comparingDouble(ExtractedValue::confidence));
   }
 
@@ -952,7 +1097,8 @@ public class FdhReviewAssembler {
         for (StructuredFieldDetail detail : page.structuredFields()) {
           if (detail.displayValue() != null && !detail.displayValue().isBlank()) {
             values.add(new ExtractedValue(
-                detail.path() + " " + detail.label(),
+                detail.path(),
+                detail.label(),
                 sectionFromPath(detail.path()),
                 detail.displayValue(),
                 detail.confidence(),
@@ -984,7 +1130,7 @@ public class FdhReviewAssembler {
     }
     String value = node.asText("");
     if (!value.isBlank()) {
-      values.add(new ExtractedValue(path, sectionFromPath(path), value, 78, ""));
+      values.add(new ExtractedValue(path, fieldNameFromPath(path), sectionFromPath(path), value, 78, ""));
     }
   }
 
@@ -1001,6 +1147,18 @@ public class FdhReviewAssembler {
       return path;
     }
     return parts[0] + "." + parts[1];
+  }
+
+  private String fieldNameFromPath(String path) {
+    if (path == null || path.isBlank()) {
+      return "field";
+    }
+    String[] parts = path.split("\\.");
+    String leaf = parts.length == 0 ? path : parts[parts.length - 1];
+    return leaf
+        .replaceAll("[_-]+", " ")
+        .replaceAll("\\s+", " ")
+        .trim();
   }
 
   private boolean matchesAnyGroup(String path, List<List<String>> groups) {
@@ -1115,10 +1273,14 @@ public class FdhReviewAssembler {
   }
 
   private static String normalizeDisplayValue(List<FdhReviewResult.FieldSource> sources) {
-    Set<String> values = new LinkedHashSet<>();
+    Set<String> comparableValues = new LinkedHashSet<>();
+    List<String> values = new ArrayList<>();
     for (FdhReviewResult.FieldSource source : sources) {
       if (source.value() != null && !source.value().isBlank()) {
-        values.add(source.value().trim());
+        String value = source.value().trim();
+        if (comparableValues.add(normalizeTokens(value))) {
+          values.add(value);
+        }
       }
     }
     return String.join(" / ", values);
@@ -1273,13 +1435,78 @@ public class FdhReviewAssembler {
       String label
   ) {}
 
+  private static final class ExtractedFieldGroup {
+    private final String key;
+    private final String category;
+    private final String label;
+    private final Map<String, FdhReviewResult.FieldSource> sources = new LinkedHashMap<>();
+
+    private ExtractedFieldGroup(String key, String category, String label) {
+      this.key = key;
+      this.category = category;
+      this.label = label == null || label.isBlank() ? key : label;
+    }
+
+    private void add(FdhReviewResult.FieldSource source) {
+      String sourceKey = String.join(
+          "|",
+          source.documentName(),
+          source.filename(),
+          source.section(),
+          source.fieldName(),
+          normalizeTokens(source.value())
+      );
+      FdhReviewResult.FieldSource existing = sources.get(sourceKey);
+      if (existing == null || source.confidence() > existing.confidence()) {
+        sources.put(sourceKey, source);
+      }
+    }
+
+    private FdhReviewResult.StandardField toStandardField() {
+      List<FdhReviewResult.FieldSource> sourceRows = List.copyOf(sources.values());
+      FieldAssessment assessment = assessment(sourceRows);
+      return new FdhReviewResult.StandardField(
+          key,
+          category,
+          label,
+          false,
+          normalizeDisplayValue(sourceRows),
+          assessment.status(),
+          assessment.issue(),
+          false,
+          sourceRows,
+          "从上传材料结构化识别结果展示；同名字段按材料来源合并，建议归一值取最高置信来源。"
+      );
+    }
+
+    private FieldAssessment assessment(List<FdhReviewResult.FieldSource> sourceRows) {
+      if (sourceRows.stream().anyMatch(source -> source.confidence() < 70)) {
+        return new FieldAssessment("review", "字段识别置信度较低，需要人工复核。");
+      }
+      long distinctValues = sourceRows.stream()
+          .map(source -> normalizeTokens(source.value()))
+          .filter(value -> !value.isBlank())
+          .distinct()
+          .count();
+      if (distinctValues > 1) {
+        return new FieldAssessment("review", "同名字段在不同材料中的识别值不一致，需要人工复核。");
+      }
+      return new FieldAssessment("pass", "");
+    }
+  }
+
   private record ExtractedValue(
       String path,
+      String fieldName,
       String section,
       String value,
       double confidence,
       String snapshotDataUrl
-  ) {}
+  ) {
+    private String searchText() {
+      return path + " " + fieldName;
+    }
+  }
 
   private record FieldAssessment(String status, String issue) {}
 }
