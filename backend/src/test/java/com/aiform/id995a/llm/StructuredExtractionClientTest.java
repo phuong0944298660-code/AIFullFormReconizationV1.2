@@ -2,6 +2,7 @@ package com.aiform.id995a.llm;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.aiform.id995a.ocr.DocumentTemplate;
 import com.aiform.id995a.ocr.RenderedOcrPage;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -447,6 +448,99 @@ class StructuredExtractionClientTest {
         "attempt-started:1:1:initial",
         "attempt-completed:1:1:initial:true"
     );
+  }
+
+  @Test
+  void recognizesOfficialFooterPageNumbersWithFullPageImages() throws Exception {
+    StubHttpClient httpClient = new StubHttpClient(jsonResponse("""
+        {"pages":[
+          {"uploaded_page":1,"form_id":"ID 988B","version":"06/2024","page_no":1,"confidence":98,"evidence":"footer number 1"},
+          {"uploaded_page":2,"form_id":"ID 988B","version":"06/2024","page_no":3,"confidence":96,"evidence":"footer number 3"}
+        ]}
+        """));
+    StructuredExtractionClient client = new StructuredExtractionClient(
+        new LlmProperties(true, "https://apie.zhisuaninfo.com/v1", "test-key", "Qwen3.6-35B-A3B", 4096, 60, 4),
+        httpClient,
+        objectMapper
+    );
+
+    List<OfficialPageNumberRecognitionResult> results = client.recognizeOfficialPageNumbers(
+        "sample.pdf",
+        new DocumentTemplate("id988b_2024_06", "ID 988B (06/2024)", 2, 98, "test", "hash"),
+        List.of(
+            new RenderedOcrPage(1, new byte[] {1}, "data:image/png;base64,page1", 1000, 1400),
+            new RenderedOcrPage(2, new byte[] {2}, "data:image/png;base64,page2", 1000, 1400)
+        ),
+        new LlmModelProfile(
+            "local-qwen3.6-35b-a3b",
+            "test",
+            "Qwen3.6-35B-A3B",
+            "OpenAI-compatible local gateway",
+            "https://apie.zhisuaninfo.com/v1",
+            "test-key",
+            false,
+            true,
+            ""
+        )
+    );
+
+    JsonNode payload = objectMapper.readTree(httpClient.lastRequestBody());
+    String requestText = payload.toString();
+    assertThat(results).extracting(OfficialPageNumberRecognitionResult::officialPageNumber)
+        .containsExactly(1, 3);
+    assertThat(requestText).contains("Identify the official printed footer page number");
+    assertThat(requestText).contains("do not rely on upload order");
+    assertThat(payload.path("messages").get(1).path("content").get(1).path("image_url").path("url").asText())
+        .isEqualTo("data:image/png;base64,page1");
+    assertThat(payload.path("messages").get(1).path("content").get(2).path("image_url").path("url").asText())
+        .isEqualTo("data:image/png;base64,page2");
+  }
+
+  @Test
+  void recognizesId988aApplicationTypeSelectionsWithFullPageImage() throws Exception {
+    StubHttpClient httpClient = new StubHttpClient(jsonResponse("""
+        {"options":[
+          {"option_key":"entry_to_hong_kong_to_take_up_employment_as_a_domestic_helper_from_abroad","value":"entry visa","checked":"yes","confidence":97,"evidence":"first checkbox ticked"},
+          {"option_key":"contract_renewal_entry_visa","value":"entry visa","checked":false,"confidence":93,"evidence":"empty box"},
+          {"option_key":"complete_the_remaining_extended_period_of_the_current_contract","value":"Extension of Stay","checked":true,"confidence":95,"evidence":"last checkbox ticked"}
+        ]}
+        """));
+    StructuredExtractionClient client = new StructuredExtractionClient(
+        new LlmProperties(true, "https://apie.zhisuaninfo.com/v1", "test-key", "Qwen3.6-35B-A3B", 4096, 60, 4),
+        httpClient,
+        objectMapper
+    );
+
+    List<ApplicationTypeSelectionRecognitionResult> results = client.recognizeApplicationTypeSelections(
+        "ID988A.pdf",
+        new RenderedOcrPage(1, new byte[] {1}, "data:image/png;base64,page1", 1000, 1400),
+        new DocumentTemplate("id988a_2024_06", "ID 988A (06/2024)", 5, 98, "test", "hash"),
+        new LlmModelProfile(
+            "local-qwen3.6-35b-a3b",
+            "test",
+            "Qwen3.6-35B-A3B",
+            "OpenAI-compatible local gateway",
+            "https://apie.zhisuaninfo.com/v1",
+            "test-key",
+            false,
+            true,
+            ""
+        )
+    );
+
+    JsonNode payload = objectMapper.readTree(httpClient.lastRequestBody());
+    String requestText = payload.toString();
+    assertThat(results).hasSize(3);
+    assertThat(results).filteredOn(ApplicationTypeSelectionRecognitionResult::selected)
+        .extracting(ApplicationTypeSelectionRecognitionResult::optionKey)
+        .containsExactly(
+            "entry_to_hong_kong_to_take_up_employment_as_a_domestic_helper_from_abroad",
+            "complete_the_remaining_extended_period_of_the_current_contract"
+        );
+    assertThat(requestText).contains("Inspect only section 1, Application Type");
+    assertThat(requestText).contains("Return every option, including unselected options");
+    assertThat(payload.path("messages").get(1).path("content").get(1).path("image_url").path("url").asText())
+        .isEqualTo("data:image/png;base64,page1");
   }
 
   @Test

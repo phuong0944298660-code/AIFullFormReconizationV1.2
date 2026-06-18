@@ -41,3 +41,6 @@ docs/5.12_full_tests/
 
 # Accidental local Maven cache path created during development
 backend/%MAVEN_HOME%/
+
+# Office lock/temp files (e.g. opened Excel/Word lock files)
+~$*

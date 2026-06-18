@@ -26,6 +26,7 @@ test('localFieldAdjudications keeps corrected conflict fields in review with a s
   assert.equal(adjudication.corrected, true)
   assert.equal(adjudication.suggestedValue, 'FH-CON-IDN-2026-0612')
   assert.match(adjudication.reason, /建议采用值/)
+  assert.doesNotMatch(adjudication.reason, /规则兜底/)
 })
 
 test('applyFieldAdjudications lets backend LLM suggestion override local rule fallback', () => {
@@ -78,6 +79,22 @@ test('contract number adjudication normalizes smudged leading R to the required 
   const [field] = applyFieldAdjudications([conflictField], [])
 
   assert.equal(field.suggestedValue, 'FH-CON-IDN-2026-0612')
+  assert.equal(field.status, 'review')
+  assert.equal(field.correctionApplied, true)
+})
+
+test('contract number adjudication repairs a leading letter misread to the required FH-CON prefix', () => {
+  const currentYear = new Date().getFullYear()
+  const [field] = applyFieldAdjudications([{
+    ...conflictField,
+    normalizedValue: `TH-CON-IDN${currentYear}-0411 / FH-CON-IDN${currentYear}-0411`,
+    sources: [
+      { documentName: 'ID 988A', section: 'Undertaking', fieldName: 'Employment contract no.', value: `TH-CON-IDN${currentYear}-0411`, confidence: 98 },
+      { documentName: 'ID 988B', section: 'Undertaking', fieldName: 'Employment contract no.', value: `FH-CON-IDN${currentYear}-0411`, confidence: 98 }
+    ]
+  }], [])
+
+  assert.equal(field.suggestedValue, `FH-CON-IDN${currentYear}-0411`)
   assert.equal(field.status, 'review')
   assert.equal(field.correctionApplied, true)
 })

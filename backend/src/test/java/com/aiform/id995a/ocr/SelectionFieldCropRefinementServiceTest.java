@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.aiform.id995a.llm.FieldCropTranscriptionGateway;
 import com.aiform.id995a.llm.FieldCropTranscriptionRequest;
 import com.aiform.id995a.llm.FieldCropTranscriptionResult;
+import com.aiform.id995a.llm.ApplicationTypeSelectionRecognitionGateway;
+import com.aiform.id995a.llm.ApplicationTypeSelectionRecognitionResult;
 import com.aiform.id995a.llm.LlmModelProfile;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -502,6 +504,58 @@ class SelectionFieldCropRefinementServiceTest {
   }
 
   @Test
+  void restoresEntryApplicationTypeFromActualHeJiaxuanFirstPage() throws Exception {
+    FakeFieldCropTranscriptionGateway gateway = new FakeFieldCropTranscriptionGateway(List.of());
+    SelectionFieldCropRefinementService service = new SelectionFieldCropRefinementService(gateway, objectMapper);
+    JsonNode structuredData = objectMapper.readTree("""
+        {
+          "page_1": {
+            "application_type": "Entry visa"
+          }
+        }
+        """);
+
+    SelectionFieldCropRefinementResult result = service.restoreTemplateSelections(
+        structuredData,
+        List.of(renderActualFirstPageByPrefix("\u4f55\u5609\u8431-A")),
+        template("id988a_2024_06")
+    );
+
+    assertThat(result.data().at("/page_1/application_type/entry_to_hong_kong_to_take_up_employment_as_a_domestic_helper_from_abroad").asText())
+        .isEqualTo("entry visa");
+    assertThat(result.data().at("/page_1/application_type/contract_renewal_with_the_same_employer_or_change_of_employer").isMissingNode())
+        .isTrue();
+    assertThat(result.data().at("/page_1/application_type/complete_the_remaining_extended_period_of_the_current_contract").isMissingNode())
+        .isTrue();
+  }
+
+  @Test
+  void restoresEntryApplicationTypeFromActualHeJiaxuanFirstPageWithLocalImageLimit() throws Exception {
+    FakeFieldCropTranscriptionGateway gateway = new FakeFieldCropTranscriptionGateway(List.of());
+    SelectionFieldCropRefinementService service = new SelectionFieldCropRefinementService(gateway, objectMapper);
+    JsonNode structuredData = objectMapper.readTree("""
+        {
+          "page_1": {
+            "application_type": "Entry visa"
+          }
+        }
+        """);
+
+    SelectionFieldCropRefinementResult result = service.restoreTemplateSelections(
+        structuredData,
+        List.of(renderActualFirstPageByPrefix("\u4f55\u5609\u8431-A", 1800)),
+        template("id988a_2024_06")
+    );
+
+    assertThat(result.data().at("/page_1/application_type/entry_to_hong_kong_to_take_up_employment_as_a_domestic_helper_from_abroad").asText())
+        .isEqualTo("entry visa");
+    assertThat(result.data().at("/page_1/application_type/contract_renewal_with_the_same_employer_or_change_of_employer").isMissingNode())
+        .isTrue();
+    assertThat(result.data().at("/page_1/application_type/complete_the_remaining_extended_period_of_the_current_contract").isMissingNode())
+        .isTrue();
+  }
+
+  @Test
   void restoresContractRenewalEntryVisaFromActualLiJunxianFirstPageAndClearsGenericVisaType() throws Exception {
     FakeFieldCropTranscriptionGateway gateway = new FakeFieldCropTranscriptionGateway(List.of());
     SelectionFieldCropRefinementService service = new SelectionFieldCropRefinementService(gateway, objectMapper);
@@ -558,6 +612,59 @@ class SelectionFieldCropRefinementServiceTest {
         .isTrue();
     assertThat(result.data().at("/_field_evidence/page_1/application_type/contract_renewal_with_the_same_employer_or_change_of_employer/selection_crop_status").asText())
         .isEqualTo("detected");
+  }
+
+  @Test
+  void restoresApplicationTypeRowsFromLlmRecognitionForFdhFastPath() throws Exception {
+    FakeFieldCropTranscriptionGateway gateway = new FakeFieldCropTranscriptionGateway(List.of());
+    FakeApplicationTypeSelectionRecognitionGateway applicationTypeGateway =
+        new FakeApplicationTypeSelectionRecognitionGateway(List.of(
+            new ApplicationTypeSelectionRecognitionResult(
+                "entry_to_hong_kong_to_take_up_employment_as_a_domestic_helper_from_abroad",
+                "entry visa",
+                true,
+                96,
+                "The first row Entry visa checkbox is ticked."
+            ),
+            new ApplicationTypeSelectionRecognitionResult(
+                "complete_the_remaining_extended_period_of_the_current_contract",
+                "Extension of Stay",
+                true,
+                94,
+                "The remaining/extended period row checkbox is ticked."
+            )
+        ));
+    SelectionFieldCropRefinementService service = new SelectionFieldCropRefinementService(
+        gateway,
+        applicationTypeGateway,
+        objectMapper
+    );
+    JsonNode structuredData = objectMapper.readTree("""
+        {
+          "page_1": {
+            "application_type": "Entry visa"
+          }
+        }
+        """);
+
+    SelectionFieldCropRefinementResult result = service.restoreTemplateSelections(
+        "ID988A.pdf",
+        structuredData,
+        List.of(renderedApplicationTypePage(false, false, false, false)),
+        modelProfile(),
+        template("id988a_2024_06")
+    );
+
+    assertThat(result.attempted()).isZero();
+    assertThat(result.updated()).isEqualTo(2);
+    assertThat(gateway.requests).isEmpty();
+    assertThat(applicationTypeGateway.requests).hasSize(1);
+    assertThat(result.data().at("/page_1/application_type/entry_to_hong_kong_to_take_up_employment_as_a_domestic_helper_from_abroad").asText())
+        .isEqualTo("entry visa");
+    assertThat(result.data().at("/page_1/application_type/complete_the_remaining_extended_period_of_the_current_contract").asText())
+        .isEqualTo("Extension of Stay");
+    assertThat(result.data().at("/_field_evidence/page_1/application_type/entry_to_hong_kong_to_take_up_employment_as_a_domestic_helper_from_abroad/selection_crop_status").asText())
+        .isEqualTo("llm_detected");
   }
 
   private RenderedOcrPage renderedPage(int page) throws Exception {
@@ -716,6 +823,10 @@ class SelectionFieldCropRefinementServiceTest {
   }
 
   private RenderedOcrPage renderActualFirstPageByPrefix(String filenamePrefix) throws Exception {
+    return renderActualFirstPageByPrefix(filenamePrefix, 0);
+  }
+
+  private RenderedOcrPage renderActualFirstPageByPrefix(String filenamePrefix, int maxImageLongSide) throws Exception {
     Path samplesDir = Files.exists(Path.of("..", "docs", "5.12_full_tests"))
         ? Path.of("..", "docs", "5.12_full_tests")
         : Path.of("docs", "5.12_full_tests");
@@ -726,7 +837,7 @@ class SelectionFieldCropRefinementServiceTest {
           .findFirst()
           .orElseThrow();
     }
-    return new BaiduOcrPageRenderer(BaiduOcrPageRenderer.DEFAULT_RENDER_DPI, 0)
+    return new BaiduOcrPageRenderer(BaiduOcrPageRenderer.DEFAULT_RENDER_DPI, maxImageLongSide)
         .render(path.getFileName().toString(), "application/pdf", Files.readAllBytes(path))
         .get(0);
   }
@@ -771,6 +882,28 @@ class SelectionFieldCropRefinementServiceTest {
         LlmModelProfile modelProfile
     ) {
       requests.addAll(crops);
+      return results;
+    }
+  }
+
+  private static final class FakeApplicationTypeSelectionRecognitionGateway
+      implements ApplicationTypeSelectionRecognitionGateway {
+
+    private final List<ApplicationTypeSelectionRecognitionResult> results;
+    private final List<RenderedOcrPage> requests = new ArrayList<>();
+
+    private FakeApplicationTypeSelectionRecognitionGateway(List<ApplicationTypeSelectionRecognitionResult> results) {
+      this.results = List.copyOf(results);
+    }
+
+    @Override
+    public List<ApplicationTypeSelectionRecognitionResult> recognizeApplicationTypeSelections(
+        String filename,
+        RenderedOcrPage page,
+        DocumentTemplate template,
+        LlmModelProfile modelProfile
+    ) {
+      requests.add(page);
       return results;
     }
   }

@@ -20,6 +20,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -125,7 +126,7 @@ public class FdhReviewAssembler {
       status = "muted";
     } else if (!uploaded && core) {
       status = "fail";
-      issue = "该申请类别必须提交 " + material.shortName() + "，但未识别到对应材料。";
+      issue = "未上传：" + "该申请类别必须提交 " + material.shortName() + "，但未识别到对应材料。";
     } else if (!uploaded) {
       status = "warn";
       issue = "官方清单要求或条件要求材料未上传；本 demo 不将材料 4-12 纳入最终通过判定。";
@@ -156,7 +157,7 @@ public class FdhReviewAssembler {
         core,
         material.conditional(),
         status,
-        materialStatusText(status, core),
+        materialStatusText(status, core, uploaded),
         materialScopeText(applicable, core),
         documents.stream().map(FdhReviewDocument::filename).toList(),
         issue
@@ -164,6 +165,9 @@ public class FdhReviewAssembler {
   }
 
   private String pageStatus(int expectedPages, FdhReviewDocument document) {
+    if (!missingOfficialPages(document, expectedPages).isEmpty()) {
+      return "fail";
+    }
     if (document.pageCount() < expectedPages) {
       return "fail";
     }
@@ -179,8 +183,10 @@ public class FdhReviewAssembler {
 
   private String materialIssue(FdhMaterialDefinition material, FdhReviewDocument document, String status) {
     if ("fail".equals(status)) {
-      return material.shortName() + " 页数少于官方模板预期，预期 "
-          + material.expectedPageCount().orElse(0) + " 页，识别到 " + document.pageCount() + " 页。";
+      int expected = material.expectedPageCount().orElse(0);
+      return material.shortName() + " 已上传，但页数少于官方模板预期，预期 "
+          + expected + " 页，识别到 " + document.pageCount() + " 页"
+          + missingPageSuffix(document, expected) + "。";
     }
     if ("review".equals(status)) {
       return material.shortName() + " 页数或模板置信度异常，需人工确认是否缺页、错页或重复页。";
@@ -188,10 +194,53 @@ public class FdhReviewAssembler {
     return "";
   }
 
-  private String materialStatusText(String status, boolean core) {
+  private String missingPageSuffix(FdhReviewDocument document, int expected) {
+    if (expected <= 0) {
+      return "";
+    }
+    List<Integer> missingPages = missingOfficialPages(document, expected);
+    if (document == null || document.officialPageNumbers() == null || document.officialPageNumbers().isEmpty()) {
+      int observed = document == null ? 0 : document.pageCount();
+      return observed < expected ? "，缺失页码位置未识别" : "";
+    }
+    if (missingPages.isEmpty()) {
+      int observed = document == null ? 0 : document.pageCount();
+      if (observed >= expected) {
+        return "";
+      }
+      for (int page = observed + 1; page <= expected; page += 1) {
+        missingPages.add(page);
+      }
+    }
+    if (missingPages.isEmpty()) {
+      return "";
+    }
+    return "，缺" + missingPages.stream()
+        .map(page -> "第 " + page + " 页")
+        .collect(Collectors.joining("、"));
+  }
+
+  private List<Integer> missingOfficialPages(FdhReviewDocument document, int expected) {
+    if (document == null || expected <= 0) {
+      return new ArrayList<>();
+    }
+    List<Integer> officialPageNumbers = document.officialPageNumbers();
+    if (officialPageNumbers == null || officialPageNumbers.isEmpty()) {
+      return new ArrayList<>();
+    }
+    List<Integer> missing = new ArrayList<>();
+    for (int page = 1; page <= expected; page += 1) {
+      if (!officialPageNumbers.contains(page)) {
+        missing.add(page);
+      }
+    }
+    return missing;
+  }
+
+  private String materialStatusText(String status, boolean core, boolean uploaded) {
     return switch (status) {
       case "pass" -> core ? "核心材料齐全" : "已上传";
-      case "fail" -> "缺核心材料或缺页";
+      case "fail" -> uploaded ? "缺页" : core ? "未上传核心材料" : "未上传";
       case "review" -> "需人工复核";
       case "warn" -> "未上传，不阻断";
       default -> "不适用";
@@ -344,10 +393,17 @@ public class FdhReviewAssembler {
         .distinct()
         .count();
     if (distinctRows > 1) {
-      assessment = new FieldAssessment(
-          "fail",
-          "ID 988A application type has more than one selected business row."
-      );
+      boolean selectedRowsContainHomepageChoice = extractedTypes.stream()
+          .anyMatch(extracted -> applicationTypeMatches(applicationTypeId, extracted));
+      assessment = selectedRowsContainHomepageChoice
+          ? new FieldAssessment(
+              "review",
+              "ID 988A application type has multiple selected business rows including the homepage choice; auditor review is required."
+          )
+          : new FieldAssessment(
+              "fail",
+              "Homepage application type is not among the selected ID 988A business rows."
+          );
     } else if (!sources.isEmpty() && !applicationTypeMatches(applicationTypeId, extractedTypes.get(0))) {
       assessment = new FieldAssessment(
           "fail",

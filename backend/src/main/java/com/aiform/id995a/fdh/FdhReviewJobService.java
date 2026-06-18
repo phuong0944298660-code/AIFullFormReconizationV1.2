@@ -37,6 +37,7 @@ public class FdhReviewJobService {
   private final TemplateDetectionService templateDetectionService;
   private final OcrDemoService ocrDemoService;
   private final FdhReviewAssembler reviewAssembler;
+  private final FdhOfficialPageNumberDetector officialPageNumberDetector;
   private final int fileConcurrency;
   private final ConcurrentMap<String, JobState> jobs = new ConcurrentHashMap<>();
   private final ExecutorService executor = Executors.newCachedThreadPool();
@@ -47,12 +48,14 @@ public class FdhReviewJobService {
       TemplateDetectionService templateDetectionService,
       OcrDemoService ocrDemoService,
       FdhReviewAssembler reviewAssembler,
+      FdhOfficialPageNumberDetector officialPageNumberDetector,
       @Value("${fdh.review.file-concurrency:2}") int fileConcurrency
   ) {
     this.pageRenderer = pageRenderer;
     this.templateDetectionService = templateDetectionService;
     this.ocrDemoService = ocrDemoService;
     this.reviewAssembler = reviewAssembler;
+    this.officialPageNumberDetector = officialPageNumberDetector;
     this.fileConcurrency = Math.max(1, Math.min(3, fileConcurrency));
   }
 
@@ -62,7 +65,7 @@ public class FdhReviewJobService {
       OcrDemoService ocrDemoService,
       FdhReviewAssembler reviewAssembler
   ) {
-    this(pageRenderer, templateDetectionService, ocrDemoService, reviewAssembler, DEFAULT_FILE_CONCURRENCY);
+    this(pageRenderer, templateDetectionService, ocrDemoService, reviewAssembler, new FdhOfficialPageNumberDetector(), DEFAULT_FILE_CONCURRENCY);
   }
 
   public FdhReviewJobStatusResponse start(
@@ -208,6 +211,7 @@ public class FdhReviewJobService {
     List<RenderedOcrPage> pages = pageRenderer.render(upload.filename(), upload.contentType(), upload.bytes());
     DocumentTemplate template = templateDetectionService.detect(upload.filename(), upload.contentType(), upload.bytes(), pages);
     String materialId = FdhMaterialCatalog.classify(template, upload.filename());
+    List<Integer> officialPageNumbers = officialPageNumberDetector.detect(upload.filename(), template, pages, modelId);
     log.info(
         "FDH review job {} rendered and classified {} as {} (template={}, pages={}, source={}) in {} ms",
         state.jobId,
@@ -222,7 +226,7 @@ public class FdhReviewJobService {
       return null;
     }
     long extractionStartedAt = System.nanoTime();
-    List<RenderedOcrPage> extractionPages = extractionPages(template, pages);
+    List<RenderedOcrPage> extractionPages = extractionPages(template, pages, officialPageNumbers);
     state.markActive(upload.filename(), "正在按已识别模板执行字段提取");
     OcrDemoResponse response = ocrDemoService.recognizeRenderedForFdhReview(
         upload.filename(),
@@ -246,24 +250,44 @@ public class FdhReviewJobService {
             pages.size(),
             template,
             response,
-            materialId
+            materialId,
+            officialPageNumbers
         )
     );
   }
 
-  private List<RenderedOcrPage> extractionPages(DocumentTemplate template, List<RenderedOcrPage> pages) {
+  private List<RenderedOcrPage> extractionPages(
+      DocumentTemplate template,
+      List<RenderedOcrPage> pages,
+      List<Integer> officialPageNumbers
+  ) {
     List<RenderedOcrPage> safePages = pages == null ? List.of() : pages;
     if (template == null) {
       return safePages;
     }
     String templateId = template.templateId();
-    if ("id988a_2024_06".equals(templateId)) {
-      return safePages.stream().filter(page -> page.page() != 5).toList();
+    int skippedOfficialPage = nonFillableOfficialPage(templateId);
+    if (skippedOfficialPage <= 0) {
+      return safePages;
     }
-    if ("id988b_2024_06".equals(templateId)) {
-      return safePages.stream().filter(page -> page.page() != 4).toList();
+    if (officialPageNumbers != null && officialPageNumbers.size() == safePages.size()) {
+      List<RenderedOcrPage> filtered = new ArrayList<>();
+      for (int index = 0; index < safePages.size(); index += 1) {
+        if (officialPageNumbers.get(index) != skippedOfficialPage) {
+          filtered.add(safePages.get(index));
+        }
+      }
+      return List.copyOf(filtered);
     }
-    return safePages;
+    return safePages.stream().filter(page -> page.page() != skippedOfficialPage).toList();
+  }
+
+  private int nonFillableOfficialPage(String templateId) {
+    return switch (templateId) {
+      case "id988a_2024_06" -> 5;
+      case "id988b_2024_06" -> 4;
+      default -> 0;
+    };
   }
 
   private void runJob(JobState state, List<ReviewUpload> uploads, String modelId) {

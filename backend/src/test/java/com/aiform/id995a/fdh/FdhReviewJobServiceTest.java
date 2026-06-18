@@ -268,6 +268,51 @@ class FdhReviewJobServiceTest {
     assertThat(uploadedFile(completed.result(), "id407").pages()).isEqualTo(4);
   }
 
+  @Test
+  void usesDetectedOfficialPageNumbersForMissingMiddlePageAndNonFillablePageSkipping() throws Exception {
+    BaiduOcrPageRenderer renderer = mock(BaiduOcrPageRenderer.class);
+    TemplateDetectionService templateDetectionService = mock(TemplateDetectionService.class);
+    OcrDemoService ocrDemoService = mock(OcrDemoService.class);
+    FdhOfficialPageNumberDetector officialPageNumberDetector = mock(FdhOfficialPageNumberDetector.class);
+    FdhReviewJobService service = new FdhReviewJobService(
+        renderer,
+        templateDetectionService,
+        ocrDemoService,
+        new FdhReviewAssembler(5100, 1236, Clock.systemUTC()),
+        officialPageNumberDetector,
+        1
+    );
+    Map<String, List<Integer>> extractedPagesByFilename = new ConcurrentHashMap<>();
+
+    when(renderer.render(anyString(), anyString(), any())).thenReturn(renderedPages(3));
+    when(templateDetectionService.detect(anyString(), anyString(), any(), anyList()))
+        .thenReturn(template("id988b_2024_06", "ID 988B (06/2024)", 4));
+    when(officialPageNumberDetector.detect(anyString(), any(DocumentTemplate.class), anyList(), any()))
+        .thenReturn(List.of(1, 3, 4));
+    when(ocrDemoService.recognizeRenderedForFdhReview(
+        anyString(),
+        anyList(),
+        any(ExtractionProgressListener.class),
+        any(),
+        any(DocumentTemplate.class)
+    )).thenAnswer(invocation -> {
+      String filename = invocation.getArgument(0);
+      List<RenderedOcrPage> pages = invocation.getArgument(1);
+      extractedPagesByFilename.put(filename, pages.stream().map(RenderedOcrPage::page).toList());
+      return response(filename, invocation.getArgument(4), pages.size());
+    });
+
+    FdhReviewJobStatusResponse started = service.start("entry_visa", List.of(file("ID988B.pdf")), null);
+    FdhReviewJobStatusResponse completed = waitForCompletion(service, started.jobId());
+
+    FdhReviewResult.MaterialRow id988b = material(completed.result(), "id988b");
+    assertThat(completed.status()).isEqualTo("completed");
+    assertThat(extractedPagesByFilename.get("ID988B.pdf")).containsExactly(1, 2);
+    assertThat(uploadedFile(completed.result(), "id988b").pages()).isEqualTo(3);
+    assertThat(id988b.status()).isEqualTo("fail");
+    assertThat(id988b.issue()).contains("\u7f3a\u7b2c 2 \u9875").doesNotContain("\u7f3a\u7b2c 4 \u9875");
+  }
+
   private FdhReviewJobStatusResponse waitForCompletion(FdhReviewJobService service, String jobId) throws Exception {
     FdhReviewJobStatusResponse status = service.status(jobId);
     for (int attempt = 0; attempt < 30; attempt += 1) {
@@ -368,6 +413,13 @@ class FdhReviewJobServiceTest {
   private FdhReviewResult.UploadedFile uploadedFile(FdhReviewResult result, String materialId) {
     return result.uploadedFiles().stream()
         .filter(file -> materialId.equals(file.materialId()))
+        .findFirst()
+        .orElseThrow();
+  }
+
+  private FdhReviewResult.MaterialRow material(FdhReviewResult result, String materialId) {
+    return result.materials().stream()
+        .filter(row -> materialId.equals(row.id()))
         .findFirst()
         .orElseThrow();
   }

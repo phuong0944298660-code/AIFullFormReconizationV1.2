@@ -66,7 +66,15 @@ function chooseAdjudication(fieldKey, remote, local) {
 function localFieldAdjudication(field = {}) {
   if (!['fail', 'review'].includes(cleanValue(field.status))) return null
   const conflicts = sourceValueGroups(field)
-  if (conflicts.length <= 1) return null
+  if (conflicts.length <= 1) {
+    if (
+      cleanValue(field.key) !== 'contract.dh_contract_no' ||
+      conflicts.length !== 1 ||
+      !hasContractNumberPrefixRepair(field)
+    ) {
+      return null
+    }
+  }
 
   const suggested = chooseSuggestedValue(field, conflicts)
   return {
@@ -77,6 +85,13 @@ function localFieldAdjudication(field = {}) {
     source: 'rules_fallback',
     reason: suggestionReason(field.key, suggested.value)
   }
+}
+
+function hasContractNumberPrefixRepair(field = {}) {
+  return (field.sources || []).some((source) => {
+    const raw = cleanValue(source.value)
+    return hasValue(raw) && raw !== normalizeFieldValue(field.key, raw)
+  })
 }
 
 function normalizeAdjudication(item = {}) {
@@ -121,23 +136,27 @@ function normalizeFieldValue(fieldKey, value) {
 }
 
 function normalizeDhContractNumber(value) {
-  const upper = value.toUpperCase()
+  const compact = value.replace(/\s+/g, '')
+  const upper = compact.toUpperCase()
   const requiredPrefix = 'FH-CON-'
   const prefixIndex = upper.indexOf(requiredPrefix)
   if (prefixIndex === 0) {
-    return requiredPrefix + value.slice(requiredPrefix.length)
+    return requiredPrefix + compact.slice(requiredPrefix.length)
   }
   if (prefixIndex > 0 && prefixIndex <= 3) {
-    return requiredPrefix + value.slice(prefixIndex + requiredPrefix.length)
+    return requiredPrefix + compact.slice(prefixIndex + requiredPrefix.length)
+  }
+  if (/^[A-Z0-9]H-CON-[A-Z]{2,3}-?\d{2,4}-\d{3,}$/i.test(compact)) {
+    return `F${compact.slice(1)}`
   }
   return value
 }
 
 function suggestionReason(fieldKey, suggestedValue) {
   if (cleanValue(fieldKey) === 'contract.dh_contract_no') {
-    return `规则兜底建议采用值“${suggestedValue}”；标准雇佣合约编号前缀必须为 FH-CON-，年份优先选择不超过当前年份且最接近当前年份的值；该字段跨文件不一致，仍需人工复核。`
+    return `建议采用值“${suggestedValue}”；标准雇佣合约编号前缀必须为 FH-CON-，年份优先选择不超过当前年份且最接近当前年份的值；该字段跨文件不一致，仍需人工复核。`
   }
-  return `规则兜底建议采用值“${suggestedValue}”；该字段跨文件不一致，仍需人工复核。`
+  return `建议采用值“${suggestedValue}”；该字段跨文件不一致，仍需人工复核。`
 }
 
 function chooseSuggestedValue(field = {}, groups = []) {

@@ -209,6 +209,33 @@ class FdhReviewConclusionServiceTest {
           assertThat(adjudication.suggestedValue()).isEqualTo("FH-CON-IDN-2026-0612");
           assertThat(adjudication.status()).isEqualTo("review");
           assertThat(adjudication.corrected()).isTrue();
+          assertThat(adjudication.reason()).contains("建议采用值");
+          assertThat(adjudication.reason()).doesNotContain("规则兜底");
+        });
+  }
+
+  @Test
+  void deterministicContractNumberAdjudicationRepairsLeadingLetterMisreadToRequiredPrefix() {
+    int currentYear = Year.now().getValue();
+    FdhReviewConclusionService service = new FdhReviewConclusionService(
+        new LlmProperties(false, "https://apie.zhisuaninfo.com/v1", "", "Qwen3.6-35B-A3B", 2048, 20, 2),
+        new ObjectMapper()
+    );
+
+    FdhReviewConclusionResponse response = service.generate(contractNumberResult(
+        "TH-CON-IDN" + currentYear + "-0411 / FH-CON-IDN" + currentYear + "-0411",
+        List.of(
+            new FdhReviewResult.FieldSource("ID 988A", "A.pdf", "Undertaking", "Employment contract no.", "TH-CON-IDN" + currentYear + "-0411", 98, "", ""),
+            new FdhReviewResult.FieldSource("ID 988B", "B.pdf", "Undertaking", "Employment contract no.", "FH-CON-IDN" + currentYear + "-0411", 98, "", "")
+        )
+    ));
+
+    assertThat(response.fieldAdjudications()).singleElement()
+        .satisfies(adjudication -> {
+          assertThat(adjudication.key()).isEqualTo("contract.dh_contract_no");
+          assertThat(adjudication.suggestedValue()).isEqualTo("FH-CON-IDN" + currentYear + "-0411");
+          assertThat(adjudication.status()).isEqualTo("review");
+          assertThat(adjudication.corrected()).isTrue();
         });
   }
 

@@ -359,6 +359,19 @@ public class FdhReviewConclusionService {
     }
     List<ValueGroup> groups = valueGroups(field);
     if (groups.size() <= 1) {
+      if ("contract.dh_contract_no".equals(clean(field.key()))
+          && groups.size() == 1
+          && hasContractNumberPrefixRepair(field)) {
+        ValueGroup suggested = groups.get(0);
+        return Optional.of(new FdhFieldAdjudication(
+            field.key(),
+            suggested.value(),
+            "review",
+            true,
+            "rules_fallback",
+            suggestionReason(field.key(), suggested.value())
+        ));
+      }
       return Optional.empty();
     }
     ValueGroup suggested = chooseSuggestedValue(field, groups);
@@ -370,6 +383,16 @@ public class FdhReviewConclusionService {
         "rules_fallback",
         suggestionReason(field.key(), suggested.value())
     ));
+  }
+
+  private boolean hasContractNumberPrefixRepair(FdhReviewResult.StandardField field) {
+    for (FdhReviewResult.FieldSource source : field.sources()) {
+      String raw = clean(source.value());
+      if (!blank(raw) && !raw.equals(normalizeFieldValue(field.key(), raw))) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private ValueGroup chooseSuggestedValue(FdhReviewResult.StandardField field, List<ValueGroup> groups) {
@@ -437,23 +460,27 @@ public class FdhReviewConclusionService {
   }
 
   private String normalizeDhContractNumber(String value) {
+    String compact = value.replaceAll("\\s+", "");
     String requiredPrefix = "FH-CON-";
-    String upper = value.toUpperCase(Locale.ROOT);
+    String upper = compact.toUpperCase(Locale.ROOT);
     int prefixIndex = upper.indexOf(requiredPrefix);
     if (prefixIndex == 0) {
-      return requiredPrefix + value.substring(requiredPrefix.length());
+      return requiredPrefix + compact.substring(requiredPrefix.length());
     }
     if (prefixIndex > 0 && prefixIndex <= 3) {
-      return requiredPrefix + value.substring(prefixIndex + requiredPrefix.length());
+      return requiredPrefix + compact.substring(prefixIndex + requiredPrefix.length());
+    }
+    if (upper.matches("^[A-Z0-9]H-CON-[A-Z]{2,3}-?\\d{2,4}-\\d{3,}$")) {
+      return "F" + compact.substring(1);
     }
     return value;
   }
 
   private String suggestionReason(String fieldKey, String suggestedValue) {
     if ("contract.dh_contract_no".equals(clean(fieldKey))) {
-      return "规则兜底建议采用值“" + suggestedValue + "”；标准雇佣合约编号前缀必须为 FH-CON-，年份优先选择不超过当前年份且最接近当前年份的值；该字段跨文件不一致，仍需人工复核。";
+      return "建议采用值“" + suggestedValue + "”；标准雇佣合约编号前缀必须为 FH-CON-，年份优先选择不超过当前年份且最接近当前年份的值；该字段跨文件不一致，仍需人工复核。";
     }
-    return "规则兜底建议采用值“" + suggestedValue + "”；该字段跨文件不一致，仍需人工复核。";
+    return "建议采用值“" + suggestedValue + "”；该字段跨文件不一致，仍需人工复核。";
   }
 
   private int sourcePriority(String fieldKey, String documentName) {

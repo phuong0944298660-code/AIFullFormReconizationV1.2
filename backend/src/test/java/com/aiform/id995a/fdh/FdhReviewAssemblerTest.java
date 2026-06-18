@@ -56,6 +56,24 @@ class FdhReviewAssemblerTest {
   }
 
   @Test
+  void distinguishesUploadedIncompleteMaterialFromNotUploadedMaterial() throws Exception {
+    FdhReviewResult result = assembler.assemble("entry_visa", List.of(id988a(), id988bWithOfficialPages(List.of(1, 3, 4))));
+
+    FdhReviewResult.MaterialRow id988b = material(result, "id988b");
+    FdhReviewResult.MaterialRow id407 = material(result, "id407");
+
+    assertThat(result.decision()).isEqualTo("FAIL");
+    assertThat(id988b.uploaded()).isTrue();
+    assertThat(id988b.status()).isEqualTo("fail");
+    assertThat(id988b.statusText()).isEqualTo("缺页");
+    assertThat(id988b.issue()).contains("已上传").contains("缺第 2 页").doesNotContain("缺第 4 页");
+    assertThat(id407.uploaded()).isFalse();
+    assertThat(id407.status()).isEqualTo("fail");
+    assertThat(id407.statusText()).isEqualTo("未上传核心材料");
+    assertThat(id407.issue()).contains("未上传").contains("ID 407");
+  }
+
+  @Test
   void materialRowsAfterThreeDoNotBlockFinalDecision() throws Exception {
     FdhReviewResult result = assembler.assemble(
         "entry_visa",
@@ -227,9 +245,71 @@ class FdhReviewAssemblerTest {
         .contains("entry visa");
   }
 
+  @Test
+  void reviewsWhenId988aSelectsMultipleApplicationTypeRows() throws Exception {
+    FdhReviewResult result = assembler.assemble(
+        "entry_visa",
+        List.of(
+            id988aApplicationTypes(List.of(
+                List.of(
+                    "entry_to_hong_kong_to_take_up_employment_as_a_domestic_helper_from_abroad",
+                    "entry visa"
+                ),
+                List.of(
+                    "contract_renewal_with_the_same_employer_or_change_of_employer",
+                    "entry visa"
+                )
+            )),
+            id988b(),
+            id407("SITI NURHALIZA", "HK$5,100", "HK$1,236")
+        )
+    );
+
+    FdhReviewResult.StandardField applicationType = field(result, "case.application_type");
+    assertThat(result.decision()).isEqualTo("REVIEW");
+    assertThat(applicationType.status()).isEqualTo("review");
+    assertThat(applicationType.issue()).contains("multiple").contains("review");
+    assertThat(applicationType.normalizedValue())
+        .contains("Entry to Hong Kong to take up employment as a domestic helper from abroad")
+        .contains("Contract renewal with the same employer or change of employer");
+  }
+
+  @Test
+  void failsWhenHomepageApplicationTypeIsNotAmongMultipleId988aSelections() throws Exception {
+    FdhReviewResult result = assembler.assemble(
+        "remaining_period",
+        List.of(
+            id988aApplicationTypes(List.of(
+                List.of(
+                    "entry_to_hong_kong_to_take_up_employment_as_a_domestic_helper_from_abroad",
+                    "entry visa"
+                ),
+                List.of(
+                    "contract_renewal_with_the_same_employer_or_change_of_employer",
+                    "entry visa"
+                )
+            )),
+            id988b(),
+            id407("SITI NURHALIZA", "HK$5,100", "HK$1,236")
+        )
+    );
+
+    FdhReviewResult.StandardField applicationType = field(result, "case.application_type");
+    assertThat(result.decision()).isEqualTo("FAIL");
+    assertThat(applicationType.status()).isEqualTo("fail");
+    assertThat(applicationType.issue()).contains("not among").contains("ID 988A");
+  }
+
   private FdhReviewResult.StandardField field(FdhReviewResult result, String key) {
     return result.fields().stream()
         .filter(field -> field.key().equals(key))
+        .findFirst()
+        .orElseThrow();
+  }
+
+  private FdhReviewResult.MaterialRow material(FdhReviewResult result, String id) {
+    return result.materials().stream()
+        .filter(row -> row.id().equals(id))
         .findFirst()
         .orElseThrow();
   }
@@ -263,6 +343,14 @@ class FdhReviewAssemblerTest {
   }
 
   private FdhReviewDocument id988aApplicationType(String applicationTypeKey, String value) throws Exception {
+    return id988aApplicationTypes(List.of(List.of(applicationTypeKey, value)));
+  }
+
+  private FdhReviewDocument id988aApplicationTypes(List<List<String>> applicationTypes) throws Exception {
+    String entries = applicationTypes.stream()
+        .map(entry -> "                  \"%s\": \"%s\"".formatted(entry.get(0), entry.get(1)))
+        .reduce((left, right) -> left + ",\n" + right)
+        .orElse("");
     return document(
         "ID988A.pdf",
         "id988a",
@@ -273,7 +361,7 @@ class FdhReviewAssemblerTest {
             {
               "page_1": {
                 "application_type": {
-                  "%s": "%s"
+%s
                 },
                 "part_2_personal_particulars": {
                   "surname_en": "SITI",
@@ -288,12 +376,47 @@ class FdhReviewAssemblerTest {
                 "employment_contract_no": "%s"
               }
             }
-            """.formatted(applicationTypeKey, value, CONTRACT_NO)
+            """.formatted(entries, CONTRACT_NO)
     );
   }
 
   private FdhReviewDocument id988b() throws Exception {
     return id988bWithContractNo(CONTRACT_NO);
+  }
+
+  private FdhReviewDocument id988bWithPageCount(int pages) throws Exception {
+    return document(
+        "ID988B.pdf",
+        "id988b",
+        pages,
+        "id988b_2024_06",
+        "ID 988B (06/2024)",
+        """
+            {
+              "page_1": {
+                "employer_particulars": {
+                  "employer_name": "CHAN TAI MAN"
+                }
+              },
+              "page_3": {
+                "employment_contract_no": "%s"
+              }
+            }
+            """.formatted(CONTRACT_NO)
+    );
+  }
+
+  private FdhReviewDocument id988bWithOfficialPages(List<Integer> officialPageNumbers) throws Exception {
+    FdhReviewDocument document = id988bWithPageCount(officialPageNumbers.size());
+    return new FdhReviewDocument(
+        document.filename(),
+        document.contentType(),
+        document.pageCount(),
+        document.template(),
+        document.ocrResult(),
+        document.materialId(),
+        officialPageNumbers
+    );
   }
 
   private FdhReviewDocument id988bWithContractNo(String contractNo) throws Exception {

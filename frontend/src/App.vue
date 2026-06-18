@@ -9,10 +9,12 @@ import {
 } from './fdhMockData.js'
 import { applyFieldAdjudications, localFieldAdjudications } from './fieldAdjudication.js'
 import { sourceValueSegments } from './fieldDiff.js'
+import { deriveFieldStats, deriveReviewDecision } from './reviewDecision.js'
 import {
   buildVerificationTemplate,
   TEMPLATE_STATUS_LEGEND
 } from './verificationTemplate.js'
+import { verificationNotice } from './verificationNotice.js'
 
 const selectedApplicationTypeId = ref(applicationTypes[0].id)
 const selectedScenarioId = ref('missing_core')
@@ -61,15 +63,13 @@ const fieldRows = computed(() => {
   return applyFieldAdjudications(reviewResult.value?.fields || [], fieldAdjudications.value)
 })
 
+const displayReviewResult = computed(() => {
+  if (!reviewResult.value) return null
+  return withDerivedDecision(reviewResult.value, fieldRows.value)
+})
+
 const displayFieldStats = computed(() => {
-  const rows = fieldRows.value
-  return {
-    total: rows.length,
-    pass: rows.filter((field) => field.status === 'pass').length,
-    fail: rows.filter((field) => field.status === 'fail').length,
-    review: rows.filter((field) => field.status === 'review').length,
-    required: rows.filter((field) => field.required).length
-  }
+  return deriveFieldStats(fieldRows.value)
 })
 
 const filteredFields = computed(() => {
@@ -113,17 +113,18 @@ const nonBlockingMaterialHints = computed(() => {
 })
 
 const reviewJsonPayload = computed(() => {
-  if (!reviewResult.value) return {}
+  const result = displayReviewResult.value
+  if (!result) return {}
   return {
     applicationType: {
-      id: reviewResult.value.applicationTypeId,
+      id: result.applicationTypeId,
       label: selectedApplicationType.value.label
     },
-    decision: reviewResult.value.decision,
-    decisionText: reviewResult.value.decisionText,
-    generatedAt: reviewResult.value.generatedAt,
-    stats: reviewResult.value.stats,
-    materialCompleteness: reviewResult.value.materials.map((material) => ({
+    decision: result.decision,
+    decisionText: result.decisionText,
+    generatedAt: result.generatedAt,
+    stats: result.stats,
+    materialCompleteness: result.materials.map((material) => ({
       no: material.no,
       id: material.id,
       name: material.name,
@@ -173,9 +174,10 @@ const verificationView = computed(() => {
 })
 
 const verificationTemplate = computed(() => {
-  if (!reviewResult.value) return null
+  const result = displayReviewResult.value
+  if (!result) return null
   return buildVerificationTemplate({
-    ...reviewResult.value,
+    ...result,
     fields: fieldRows.value
   }, {
     applicationTypeLabel: selectedApplicationType.value.label
@@ -476,18 +478,16 @@ async function startVerificationConclusion(result) {
     })
     if (verificationSequence === sequence) {
       verificationConclusion.value = conclusion
-      verificationError.value = conclusion.status === 'ok'
-        ? ''
-        : '模型响应暂不可用，已展示规则兜底结论。'
+      verificationError.value = verificationNotice(conclusion)
     }
   } catch (error) {
     if (verificationSequence === sequence) {
-      verificationError.value = '核验结论暂未取得模型响应，已生成规则兜底结论。'
+      verificationError.value = ''
       verificationConclusion.value = {
         llmEnabled: false,
         status: 'frontend_fallback',
         model: '',
-        text: localVerificationConclusion(result)
+        text: localVerificationConclusion(withLocalFieldAdjudications(result))
       }
     }
   } finally {
@@ -498,15 +498,37 @@ async function startVerificationConclusion(result) {
 }
 
 function reviewResultForConclusion(result) {
+  const adjusted = withLocalFieldAdjudications(result)
   return {
-    ...result,
-    fields: result.fields.map((field) => ({
+    ...adjusted,
+    fields: adjusted.fields.map((field) => ({
       ...field,
       sources: field.sources.map((source) => ({
         ...source,
         snapshotDataUrl: ''
       }))
     }))
+  }
+}
+
+function withLocalFieldAdjudications(result) {
+  if (!result) return result
+  const fields = applyFieldAdjudications(result.fields || [], localFieldAdjudications(result))
+  return withDerivedDecision(result, fields)
+}
+
+function withDerivedDecision(result, fields) {
+  const normalizedFields = fields || result.fields || []
+  const decision = deriveReviewDecision({
+    materials: result.materials || [],
+    fields: normalizedFields
+  })
+  return {
+    ...result,
+    fields: normalizedFields,
+    decision: decision.decision,
+    decisionText: decision.decisionText || result.decisionText || '',
+    stats: deriveFieldStats(normalizedFields)
   }
 }
 
@@ -787,8 +809,8 @@ function verificationLineStatus(line) {
             </button>
           </div>
           <div class="toolbar-actions">
-            <span class="status-chip" :class="`decision-${reviewResult.decision.toLowerCase()}`">
-              {{ reviewResult.decision }} · {{ decisionLabel(reviewResult.decision) }}
+            <span class="status-chip" :class="`decision-${displayReviewResult.decision.toLowerCase()}`">
+              {{ displayReviewResult.decision }} · {{ decisionLabel(displayReviewResult.decision) }}
             </span>
             <button
               v-if="resultView !== 'verification'"
@@ -807,10 +829,10 @@ function verificationLineStatus(line) {
 
       <div v-if="resultView === 'recognition'" class="review-workspace">
         <aside class="review-sidebar">
-          <section class="decision-card" :class="`decision-${reviewResult.decision.toLowerCase()}`">
+          <section class="decision-card" :class="`decision-${displayReviewResult.decision.toLowerCase()}`">
             <span>整体结论</span>
-            <strong>{{ reviewResult.decision }}</strong>
-            <p>{{ reviewResult.decisionText }}</p>
+            <strong>{{ displayReviewResult.decision }}</strong>
+            <p>{{ displayReviewResult.decisionText }}</p>
           </section>
 
           <section class="side-panel">
@@ -987,8 +1009,8 @@ function verificationLineStatus(line) {
             <h2>核验结果页</h2>
             <p>{{ demoFlowDescription }}</p>
           </div>
-          <span class="status-chip" :class="`decision-${reviewResult.decision.toLowerCase()}`">
-            {{ reviewResult.decision }} · {{ decisionLabel(reviewResult.decision) }}
+          <span class="status-chip" :class="`decision-${displayReviewResult.decision.toLowerCase()}`">
+            {{ displayReviewResult.decision }} · {{ decisionLabel(displayReviewResult.decision) }}
           </span>
         </div>
 
@@ -999,9 +1021,9 @@ function verificationLineStatus(line) {
           {{ verificationError }}
         </div>
         <div v-if="verificationTemplate" class="verification-output">
-          <div class="verification-summary-card" :class="`decision-${reviewResult.decision.toLowerCase()}`">
+          <div class="verification-summary-card" :class="`decision-${displayReviewResult.decision.toLowerCase()}`">
             <span>整体结论</span>
-            <strong>{{ reviewResult.decision }} - {{ reviewResult.decisionText }}</strong>
+            <strong>{{ displayReviewResult.decision }} - {{ displayReviewResult.decisionText }}</strong>
             <p>{{ verificationTemplate.summaryText }}</p>
             <ul class="overall-bullet-list">
               <li v-for="item in verificationTemplate.overallBullets" :key="item.label">

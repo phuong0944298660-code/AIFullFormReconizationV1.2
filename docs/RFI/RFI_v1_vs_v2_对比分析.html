@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>入境事務處 AI RFI v1 與 v2 對比分析</title>
+  <style>
+    :root {
+      --ink:#172033; --muted:#5b6475; --line:#dce3eb; --blue:#1f4d78;
+      --bg:#f7f9fc; --panel:#ffffff; --high:#b42318; --medium:#9a6700; --low:#067647;
+    }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:"Microsoft JhengHei","PingFang HK","Noto Sans CJK TC",Arial,sans-serif; color:var(--ink); background:var(--bg); line-height:1.62; }
+    header { background:#0b2545; color:white; padding:34px 40px 28px; border-bottom:5px solid #2e74b5; }
+    header h1 { margin:0 0 10px; font-size:30px; letter-spacing:0; }
+    header p { margin:0; color:#dce8f5; max-width:980px; }
+    .layout { display:grid; grid-template-columns:280px minmax(0,1fr); gap:24px; max-width:1360px; margin:0 auto; padding:24px; }
+    nav { position:sticky; top:16px; align-self:start; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:16px; max-height:calc(100vh - 32px); overflow:auto; }
+    nav h2 { margin:0 0 10px; font-size:16px; color:var(--blue); }
+    nav a { display:block; text-decoration:none; color:#27364a; padding:6px 0; border-bottom:1px solid #eef2f6; font-size:14px; }
+    nav a.toc-l3 { padding-left:14px; color:#526071; }
+    main { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:28px 34px; box-shadow:0 8px 24px rgba(15,23,42,.05); }
+    h1,h2,h3,h4 { color:var(--blue); line-height:1.28; margin:28px 0 12px; }
+    h1 { font-size:28px; margin-top:0; }
+    h2 { font-size:22px; border-top:1px solid var(--line); padding-top:22px; }
+    h3 { font-size:18px; color:#1f3a5f; }
+    p { margin:8px 0; }
+    .meta-box { background:#eef5fb; border-left:4px solid #2e74b5; padding:12px 16px; border-radius:6px; margin:12px 0 20px; }
+    .summary-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin:18px 0 8px; }
+    .summary-card { border:1px solid var(--line); background:#fbfdff; border-radius:8px; padding:12px 14px; }
+    .summary-card strong { display:block; color:#0b2545; font-size:18px; }
+    .summary-card span { color:var(--muted); font-size:13px; }
+    .table-wrap { overflow:auto; margin:14px 0 22px; border:1px solid var(--line); border-radius:8px; }
+    table { width:100%; border-collapse:collapse; min-width:760px; background:white; }
+    th { background:#e8eef5; color:#0b2545; text-align:left; font-weight:700; }
+    th,td { border:1px solid var(--line); padding:9px 10px; vertical-align:top; }
+    tr:nth-child(even) td { background:#fbfcfe; }
+    code { background:#eef2f7; border-radius:4px; padding:1px 4px; font-family:Consolas,monospace; }
+    .badge { display:inline-block; min-width:38px; text-align:center; border-radius:999px; padding:2px 10px; font-weight:700; color:white; }
+    .badge.high { background:var(--high); }
+    .badge.medium { background:var(--medium); }
+    .badge.low { background:var(--low); }
+    ul,ol { padding-left:1.4rem; }
+    hr { border:0; border-top:1px solid var(--line); margin:24px 0; }
+    .glossary { background:#fff8e6; border:1px solid #f3d27a; border-radius:8px; padding:14px 16px; margin:18px 0; }
+    .glossary h2 { border:0; padding:0; margin:0 0 8px; font-size:18px; color:#7a5a00; }
+    @media (max-width: 920px) {
+      .layout { display:block; padding:14px; }
+      nav { position:relative; top:0; margin-bottom:14px; max-height:none; }
+      main { padding:20px; }
+      header { padding:24px 20px; }
+      .summary-grid { grid-template-columns:1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>入境事務處人工智能資料邀請書 v1 與 v2 對比分析</h1>
+    <p>本 HTML 將原 Markdown 對比稿整理為可閱讀頁面，並將英文條款與標題翻譯為香港政府及入境處場景下較自然的中文用語；必要技術縮寫保留於括號或原位。</p>
+  </header>
+  <div class="layout">
+    <nav>
+      <h2>目錄</h2>
+      <a class="toc-l1" href="#入境事務處人工智能資料邀請書-v1-與-v2-對比分析">入境事務處人工智能資料邀請書 v1 與 v2 對比分析</a>
+<a class="toc-l2" href="#一-核心結論-核心摘要">一、核心結論（核心摘要）</a>
+<a class="toc-l2" href="#二-重大差異一覽表">二、重大差異一覽表</a>
+<a class="toc-l2" href="#三-分章節詳細對比">三、分章節詳細對比</a>
+<a class="toc-l3" href="#3-1-第一章-項目名稱與範圍-第1-3節">3.1 第一章：項目名稱與範圍（第1-3節）</a>
+<a class="toc-l3" href="#3-2-業務需求-第4-1節">3.2 業務需求（第4.1節）</a>
+<a class="toc-l3" href="#3-3-主要功能-第4-2節-概要">3.3 主要功能（第4.2節）概要</a>
+<a class="toc-l3" href="#3-4-系統需求-第4-3節">3.4 系統需求（第4.3節）</a>
+<a class="toc-l3" href="#3-5-數據保留-第4-3-15節">3.5 數據保留（第4.3.15節）</a>
+<a class="toc-l3" href="#3-6-實施與維護-第4-3-14-4-4節">3.6 實施與維護（第4.3.14／4.4節）</a>
+<a class="toc-l3" href="#3-7-附錄硬件-軟件要求">3.7 附錄硬件 / 軟件要求</a>
+<a class="toc-l2" href="#四-4-2-主要功能-變更記錄-逐條對比">四、4.2 主要功能 變更記錄（逐條對比）</a>
+<a class="toc-l3" href="#4-2-標題與總述">4.2 標題與總述</a>
+<a class="toc-l3" href="#4-2-1-自動文件分類">4.2.1 自動文件分類</a>
+<a class="toc-l3" href="#4-2-2-智能資料核驗">4.2.2 智能資料核驗</a>
+<a class="toc-l3" href="#4-2-3-智能審核紀錄草擬">4.2.3 智能審核紀錄草擬</a>
+<a class="toc-l3" href="#4-2-4-綜合工作流程">4.2.4 綜合工作流程</a>
+<a class="toc-l3" href="#4-2-5-ai-要求">4.2.5 AI 要求</a>
+<a class="toc-l3" href="#4-2-6-與入境處系統介接">4.2.6 與入境處系統介接</a>
+<a class="toc-l3" href="#4-2-變更趨勢總結">4.2 變更趨勢總結</a>
+<a class="toc-l3" href="#4-2-變更對-cmhk-方案的即時影響">4.2 變更對 CMHK 方案的即時影響</a>
+<a class="toc-l2" href="#五-對-cmhk-的影響分析">五、對 CMHK 的影響分析</a>
+<a class="toc-l3" href="#5-1-需要重新評估的方面">5.1 需要重新評估的方面</a>
+<a class="toc-l3" href="#5-2-對現有工作的影響">5.2 對現有工作的影響</a>
+<a class="toc-l2" href="#六-建議行動-行動項目">六、建議行動（行動項目）</a>
+<a class="toc-l3" href="#5-1-即時行動-本週">5.1 即時行動（本週）</a>
+<a class="toc-l3" href="#5-2-短期行動-6-月底前">5.2 短期行動（6 月底前）</a>
+<a class="toc-l3" href="#5-3-中期行動-7-月-6-日提交前">5.3 中期行動（7 月 6 日提交前）</a>
+<a class="toc-l2" href="#七-對競爭格局的判斷">七、對競爭格局的判斷</a>
+<a class="toc-l2" href="#八-風險提示">八、風險提示</a>
+    </nav>
+    <main>
+      <div class="summary-grid">
+        <div class="summary-card"><strong>範圍</strong><span>全面 APPLIES-2 轉為兩階段試點</span></div>
+        <div class="summary-card"><strong>合規</strong><span>ITAI／信創要求前置為正文門檻</span></div>
+        <div class="summary-card"><strong>容量</strong><span>年量約 54.5 萬，峰值按階段拆分</span></div>
+        <div class="summary-card"><strong>應對</strong><span>需更新容量估算、報價及供應商回覆</span></div>
+      </div>
+      <div class="glossary">
+        <h2>用詞處理</h2>
+        <p>ImmD 譯為「入境事務處」；Visa/Entry Permit 譯為「簽證／進入許可」；FDH 譯為「外籍家庭傭工」；Minutes Drafting 按本案語境譯為「審核紀錄草擬」；ITAI/Xinchuang 譯為「信息技術應用創新（ITAI／信創）」。</p>
+      </div>
+      <h1 id="入境事務處人工智能資料邀請書-v1-與-v2-對比分析">入境事務處人工智能資料邀請書 v1 與 v2 對比分析</h1>
+<div class="meta-box">
+<p><strong>文件用途</strong>：對比兩版 RFI 的差異，識別範圍、技術、合規與商務變化，為 報價邀請書（RFQ）響應與方案調整提供依據</p>
+<p><strong>對比文件</strong>：</p>
+<p>- v1: <code>RFI for Artificial Intelligence Total Solutions_v1.pdf</code> (2026年4月)</p>
+<p>- v2: <code>RFI for Artificial Intelligence Solution_v2.pdf</code> (2026年6月)</p>
+<p><strong>編制日期</strong>：2026-06-16</p>
+<p><strong>密級</strong>：內部</p>
+</div>
+<hr>
+<h2 id="一-核心結論-核心摘要">一、核心結論（核心摘要）</h2>
+<p>v2 並非單純修訂，而是一次<strong>範圍收窄但合規強化</strong>的重新發包：</p>
+<ol>
+<li><strong>從「全面 APPLIES-2」收窄為「試點」</strong>，先試行學生/IANG（第 1 階段），再擴展至外傭 外籍家庭傭工（FDH）（第 2 階段）。</li>
+<li><strong>信息技術應用創新（ITAI／信創）從「參考」升級為「戰略要求」</strong>，硬件原產地、軟件列名、國標 GB 合規成為強制門檻。</li>
+<li><strong>業務量重新拆分</strong>：年度總量由 50 萬略升至 54.5 萬，但峰值由單一 500 案/小時，拆分為 第 1 階段 265 + 第 2 階段 235 案/小時。</li>
+<li><strong>AI 軟件規格更明確</strong>：明確要求支持 Qwen3.5+/Qwen3-VL+、1,300 輸入 token／50 個輸出 token。</li>
+<li><strong>數據保留與審計要求更嚴</strong>：新增 AI 應用結果與推理/處理日誌 1 年歸檔保留。</li>
+</ol>
+<p>對 CMHK 而言，v2 帶來的主要挑戰是<strong>國產化適配與試點範圍的重新 容量估算</strong>；主要機會是競爭對手同樣面臨信創門檻，GW 的 Qwen 路線與我們的提前佈局較為匹配。</p>
+<hr>
+<h2 id="二-重大差異一覽表">二、重大差異一覽表</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>#</th><th>差異維度</th><th>v1（2026年4月）</th><th>v2（2026年6月）</th><th>影響等級</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><strong>項目名稱 / 性質</strong></td><td>為 APPLIES-2 供應人工智能整體方案</td><td>為簽證／進入許可申請供應<strong>試點</strong>人工智能基礎設施及實施方案</td><td><span class="badge high">高</span></td></tr>
+<tr><td>2</td><td><strong>實施範圍</strong></td><td>面向 APPLIES-2 系統整體</td><td>分 <strong>第 1 階段（學生／IANG）+ 第 2 階段（外籍家庭傭工（FDH））</strong> 兩階段試點</td><td><span class="badge high">高</span></td></tr>
+<tr><td>3</td><td><strong>年度申請量</strong></td><td>~500,000</td><td>第 1 階段 ~135,000 + 第 2 階段 ~410,000 = <strong>~545,000</strong></td><td><span class="badge medium">中</span></td></tr>
+<tr><td>4</td><td><strong>峰值處理量</strong></td><td>~500 案/小時（單一）</td><td>第 1 階段 <strong>265</strong> 案/小時 + 第 2 階段 <strong>235</strong> 案/小時</td><td><span class="badge high">高</span></td></tr>
+<tr><td>5</td><td><strong>提交截止日期</strong></td><td>2026年5月15日</td><td><strong>2026年7月6日</strong></td><td><span class="badge medium">中</span></td></tr>
+<tr><td>6</td><td><strong>ITAI / 信創要求</strong></td><td>僅在 附錄 B/C 作為參考要求</td><td>正文 <strong>4.3.6.1</strong> 明確為戰略要求：要求列入中國信息安全測評中心、原產地 中華人民共和國（PRC）、或開源</td><td><span class="badge high">高</span></td></tr>
+<tr><td>7</td><td><strong>AI 伺服器 功耗上限</strong></td><td>≤ 11 kW</td><td>≤ <strong>16 kW</strong>（並新增 HBM 要求）</td><td><span class="badge medium">中</span></td></tr>
+<tr><td>8</td><td><strong>模型版本要求</strong></td><td>Qwen / QwenVL</td><td><strong>Qwen3.5 或以上／Qwen3-VL 或以上</strong></td><td><span class="badge medium">中</span></td></tr>
+<tr><td>9</td><td><strong>推理 Token 規格</strong></td><td>未明確</td><td>明確 ≥ <strong>1,300 輸入 token／50 個輸出 token per request</strong></td><td><span class="badge medium">中</span></td></tr>
+<tr><td>10</td><td><strong>非生產環境</strong></td><td>DEV、SIT、UAT</td><td>DEV, SIT, <strong>iSIT</strong>, UAT, <strong>iUAT</strong>, <strong>應急處理環境</strong></td><td><span class="badge medium">中</span></td></tr>
+<tr><td>11</td><td><strong>數據保留期限</strong></td><td>申請資料 30天；審計日誌 60天</td><td>新增 AI 結果 / 推理日誌 60天線上 + <strong>1年歸檔</strong></td><td><span class="badge medium">中</span></td></tr>
+<tr><td>12</td><td><strong>實施變更人天</strong></td><td>實施期未列，維護期 140人天/年</td><td><strong>實施期 120人天</strong>，維護期 140人天/年</td><td><span class="badge medium">中</span></td></tr>
+<tr><td>13</td><td><strong>備份磁帶數量</strong></td><td>20 盒磁帶</td><td><strong>10 盒磁帶</strong></td><td><span class="badge low">低</span></td></tr>
+<tr><td>14</td><td><strong>新增業務聯繫人</strong></td><td>Mr. LAU Wing-fat</td><td>新增 <strong>Mr. YAU Ka-wai</strong>（業務）</td><td><span class="badge low">低</span></td></tr>
+<tr><td>15</td><td><strong>新增報表功能要求</strong></td><td>無</td><td>4.3.5.7 要求提供 AI <strong>審計追蹤 / statistics report / printing</strong></td><td><span class="badge medium">中</span></td></tr>
+<tr><td>16</td><td><strong>維護團隊駐地</strong></td><td>未特別強調</td><td>4.4.15 要求維護團隊在 <strong>Hong Kong 境內</strong>有足夠人手</td><td><span class="badge medium">中</span></td></tr>
+</tbody></table></div>
+<hr>
+<h2 id="三-分章節詳細對比">三、分章節詳細對比</h2>
+<h3 id="3-1-第一章-項目名稱與範圍-第1-3節">3.1 第一章：項目名稱與範圍（第1-3節）</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>項目</th><th>v1</th><th>v2</th><th>備註</th></tr></thead>
+<tbody>
+<tr><td>標題</td><td>APPLIES-2 人工智能整體方案</td><td><strong>試點</strong>人工智能基礎設施及實施方案（簽證／進入許可申請）</td><td>從「全面」改為「試點」</td></tr>
+<tr><td>日期</td><td>2026年4月</td><td>2026年6月</td><td>重新發包</td></tr>
+<tr><td>截止日</td><td>2026年5月15日</td><td><strong>2026年7月6日</strong></td><td>延長約 7 週</td></tr>
+<tr><td>主要聯繫人</td><td>LAU Wing-fat（業務）、William Mok（技術）</td><td><strong>新增 YAU Ka-wai</strong>（業務），William Mok（技術）</td><td>業務窗口增加</td></tr>
+</tbody></table></div>
+<h3 id="3-2-業務需求-第4-1節">3.2 業務需求（第4.1節）</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>項目</th><th>v1</th><th>v2</th><th>影響</th></tr></thead>
+<tbody>
+<tr><td>年度申請量</td><td>~500,000</td><td>第 1 階段 ~135,000（學生／IANG）+ 第 2 階段 ~410,000（外籍家庭傭工（FDH））</td><td>總量略升，但分階段實施</td></tr>
+<tr><td>峰值處理量</td><td>~500 / hour</td><td>第 1 階段 <strong>265 / hour</strong> + 第 2 階段 <strong>235 / hour</strong></td><td>單階段峰值下降，但需支持兩種業務模式</td></tr>
+<tr><td>每案附件數</td><td>~12</td><td>~12</td><td>不變</td></tr>
+<tr><td>年增長率</td><td>7% / 5年</td><td>7% / 5年</td><td>不變</td></tr>
+<tr><td>新增描述</td><td>較簡單</td><td>4.1.3 明確強調「文件處理自動化、提升資料核驗、協助個案主任」</td><td>與現有方案表述一致</td></tr>
+</tbody></table></div>
+<h3 id="3-3-主要功能-第4-2節-概要">3.3 主要功能（第4.2節）概要</h3>
+<p>兩版功能模組相同（文件分類 / 資料核驗 / 審核紀錄草擬），但 v2 描述更細緻、條款數量明顯增加，並將多項原本模糊的要求具體化。以下為概要，<strong>逐條變更詳見下一節「4.2 主要功能 變更記錄」</strong>。</p>
+<div class="table-wrap"><table>
+<thead><tr><th>功能</th><th>v2 新增 / 強化內容</th></tr></thead>
+<tbody>
+<tr><td><strong>文件分類</strong></td><td>新增「影像增強, 方向校正, 裁剪」等預處理要求；要求輸出 已校正文件；強調 審計追蹤</td></tr>
+<tr><td><strong>資料核驗</strong></td><td>明確需識別「缺失簽署, 不完整欄位, 資料不一致, 低質素影像」；要求 核驗狀態 與低置信度標記</td></tr>
+<tr><td><strong>審核紀錄草擬</strong></td><td>明確輸出 PDF/DOCX；強調與前兩功能數據整合</td></tr>
+<tr><td><strong>綜合工作流程</strong></td><td>新增支持 批量檔案傳輸 等整合機制；強調 工作流程狀態更新</td></tr>
+<tr><td><strong>AI 要求</strong></td><td>新增 <strong>Qwen3.5 或以上／Qwen3-VL 或以上</strong> 模型支持要求；推理規格 ≥1,300 輸入 token／50 個輸出 token</td></tr>
+</tbody></table></div>
+<hr>
+<h3 id="3-4-系統需求-第4-3節">3.4 系統需求（第4.3節）</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>項目</th><th>v1</th><th>v2</th><th>影響</th></tr></thead>
+<tbody>
+<tr><td><strong>ITAI / 信創</strong></td><td>附錄 B/C 參考要求</td><td><strong>4.3.6.1 正文強制</strong>：戰略性採用 ITAI／信創；硬件/軟件須列入中國信息安全測評中心；原產地 中華人民共和國（PRC） 或開源</td><td><span class="badge high">高</span> 重大合規門檻</td></tr>
+<tr><td><strong>非生產環境</strong></td><td>DEV／SIT／UAT</td><td>DEV／SIT／<strong>iSIT</strong>／UAT／<strong>iUAT</strong>／<strong>應急處理環境</strong></td><td>環境數量增加，成本上升</td></tr>
+<tr><td><strong>AI 伺服器 功耗</strong></td><td>≤ 11 kW</td><td>≤ <strong>16 kW</strong> + <strong>HBM</strong> 要求</td><td>對散熱與電力規劃影響大</td></tr>
+<tr><td><strong>Key Management</strong></td><td>覆蓋 SAN/backup</td><td>新增覆蓋 <strong>local storages</strong></td><td>範圍擴大</td></tr>
+<tr><td><strong>AI 報表/打印</strong></td><td>無</td><td>4.3.5.7 要求 審計追蹤 / statistics report / printing</td><td>需新增報表模組</td></tr>
+</tbody></table></div>
+<h3 id="3-5-數據保留-第4-3-15節">3.5 數據保留（第4.3.15節）</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>數據類型</th><th>v1</th><th>v2</th></tr></thead>
+<tbody>
+<tr><td>申請資料</td><td>30天（不含個人資料）</td><td>30天在線（<strong>含個人資料</strong>）</td></tr>
+<tr><td>AI 應用結果</td><td>未列明</td><td><strong>60天在線 + 1年歸檔</strong></td></tr>
+<tr><td>推理／處理日誌</td><td>未列明</td><td><strong>60天在線 + 1年歸檔</strong></td></tr>
+<tr><td>審計日誌</td><td>60天</td><td><strong>60天在線 + 1年歸檔</strong></td></tr>
+</tbody></table></div>
+<h3 id="3-6-實施與維護-第4-3-14-4-4節">3.6 實施與維護（第4.3.14／4.4節）</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>項目</th><th>v1</th><th>v2</th></tr></thead>
+<tbody>
+<tr><td>第 1 階段 UAT</td><td>第5-6個月</td><td>第5-6個月</td></tr>
+<tr><td><strong>生產試行</strong></td><td>無</td><td><strong>第6個月（新增）</strong></td></tr>
+<tr><td>第 1 階段 用戶培訓</td><td>第7個月</td><td>第6-7個月</td></tr>
+<tr><td>實施期變更人天</td><td>未明確</td><td><strong>120 人天</strong></td></tr>
+<tr><td>維護期變更人天</td><td>140 人天/年</td><td>140 人天/年</td></tr>
+<tr><td>維護團隊駐地</td><td>未特別強調</td><td>要求在香港境內有足夠人手</td></tr>
+<tr><td>合規評估</td><td>PIA / ITSRAA</td><td>PIA / ITSRAA / <strong>AI 應用影響評估</strong></td></tr>
+<tr><td>備份磁帶</td><td>20 盒磁帶</td><td>10 盒磁帶</td></tr>
+</tbody></table></div>
+<h3 id="3-7-附錄硬件-軟件要求">3.7 附錄硬件 / 軟件要求</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>項目</th><th>v1</th><th>v2</th></tr></thead>
+<tbody>
+<tr><td>AI 伺服器 功耗</td><td>≤ 11 kW</td><td>≤ <strong>16 kW</strong></td></tr>
+<tr><td>AI 伺服器 記憶體</td><td>≥ 1,024 GB</td><td>≥ 1,024 GB + <strong>HBM</strong></td></tr>
+<tr><td>軟件模型支持</td><td>Qwen, QwenVL</td><td><strong>Qwen3.5 or later, Qwen3-VL or later</strong></td></tr>
+<tr><td>Token 規格</td><td>未明確</td><td>≥ 1,300 input / ≥ 50 output token</td></tr>
+<tr><td>殺毒軟件兼容</td><td>Trellix 必須</td><td>Trellix 或與 EDR 整合</td></tr>
+</tbody></table></div>
+<hr>
+<h2 id="四-4-2-主要功能-變更記錄-逐條對比">四、4.2 主要功能 變更記錄（逐條對比）</h2>
+<div class="meta-box">
+<p>本節單獨對比兩版 RFI 中 <strong>第4.2節 主要功能 of the New AI Solution(s)</strong> 的逐條差異。v2 在功能劃分上由 4 個一級條款（4.2.1–4.2.4）擴展為 6 個（4.2.1–4.2.6），子條款總數由 17 條增至 28 條，且大量增加 <strong>審計追蹤 / 處理記錄 / 核驗狀態 / 置信度指標</strong> 等可追溯性要求。</p>
+</div>
+<h3 id="4-2-標題與總述">4.2 標題與總述</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>項目</th><th>v1</th><th>v2</th><th>變化</th></tr></thead>
+<tbody>
+<tr><td>標題</td><td>新 AI <strong>方案</strong>的主要功能</td><td>新 AI <strong>方案</strong>的主要功能</td><td>由複數改為單數，呼應 試點 性質</td></tr>
+<tr><td>總述</td><td>無</td><td>新增總述，列出三大功能（文件分類 / 資料核驗 / 審核紀錄草擬）並說明「建議 AI 系統須支援以下主要功能」</td><td>新增</td></tr>
+</tbody></table></div>
+<h3 id="4-2-1-自動文件分類">4.2.1 自動文件分類</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>條款</th><th>v1 原文</th><th>v2 原文</th><th>變化說明</th><th>影響</th></tr></thead>
+<tbody>
+<tr><td>4.2.1.1</td><td>須能按業務／工作流程邏輯，<strong>支援核驗</strong>申請文件及影像的完整性</td><td>須依據<strong>預先定義的業務規則及工作流程要求</strong>，<strong>自動核驗</strong>申請資料（包括多格式文件及影像）的完整性</td><td>① 從「支持驗證」升級為「自動驗證」；② 對象從 文件／影像 擴展為 申請資料；③ 強調 預先定義業務規則</td><td><span class="badge high">高</span></td></tr>
+<tr><td>4.2.1.2</td><td>須能提供並支援後續分類工作</td><td>須支援文件<strong>預處理及校正</strong>，包括<strong>影像增強、方向校正、裁剪</strong>及分類／核驗所需的其他準備工作</td><td>完全替換為預處理與矯正要求</td><td><span class="badge high">高</span></td></tr>
+<tr><td>4.2.1.3</td><td>須能檢查、處理並就問題項目提醒用戶</td><td>須將提交文件及影像分類至<strong>預先定義文件類別</strong>，並在適用情況下提供附有<strong>相關置信度指標</strong>的分類結果</td><td>原「問題項告警」內容移至 4.2.1.4；此處改為「分類到預定義類別 + 置信度指標」</td><td><span class="badge medium">中</span></td></tr>
+<tr><td>4.2.1.4</td><td>須產生並匯出相關統計資料及報告</td><td>須識別及偵測<strong>缺失、不完整、重複、不清晰、有問題或異常</strong>文件，並提醒用戶覆核或跟進</td><td>① 統計報告內容移至 4.2.1.6；② 此處承接原 4.2.1.3 的問題檢測，並大幅擴展問題類型（新增 duplicated, unclear, irregular）</td><td><span class="badge medium">中</span></td></tr>
+<tr><td>4.2.1.5</td><td>—</td><td>須產生分類結果，並按需要將相關檔案（包括<strong>已校正文件</strong>）匯出至智能資料核驗功能及其他介接的入境處系統</td><td><strong>新增</strong>：明確要求輸出矯正後文件至 資料核驗 模組</td><td><span class="badge medium">中</span></td></tr>
+<tr><td>4.2.1.6</td><td>—</td><td>須就文件分類活動產生並匯出相關統計、<strong>審計追蹤、處理記錄</strong>及報告</td><td><strong>新增</strong>：擴展統計範圍至審計追蹤與處理記錄</td><td><span class="badge medium">中</span></td></tr>
+</tbody></table></div>
+<h3 id="4-2-2-智能資料核驗">4.2.2 智能資料核驗</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>條款</th><th>v1 原文</th><th>v2 原文</th><th>變化說明</th><th>影響</th></tr></thead>
+<tbody>
+<tr><td>4.2.2.1</td><td>須能從文件及影像等非結構化資料抽取資料</td><td>須從非結構化資料來源抽取相關資料，例如含<strong>手寫內容</strong>的文件及影像，以便進一步處理</td><td>明確提及<strong>手寫內容</strong>（手寫內容）識別</td><td><span class="badge medium">中</span></td></tr>
+<tr><td>4.2.2.2</td><td>須能交叉參照抽取資料及申請人提供的其他結構化資料，並自動識別不一致或不完整資料</td><td>須比較申請人提交或從<strong>介接系統</strong>取得的抽取資料，以識別不一致、<strong>缺失資料或互相衝突資料</strong></td><td>① 數據來源擴展至 介接系統；② 增加 conflicting information</td><td><span class="badge medium">中</span></td></tr>
+<tr><td>4.2.2.3</td><td>須能按業務／工作流程邏輯檢查及識別任何不完整、有問題或異常內容，例如不完整資料、印章不清等</td><td>須根據<strong>預先定義的業務規則、工作流程邏輯及合規要求</strong>，<strong>核驗</strong>抽取資料及結構化資料</td><td>重大：從「識別問題內容」轉變為「根據業務規則與合規要求驗證數據」</td><td><span class="badge high">高</span></td></tr>
+<tr><td>4.2.2.4</td><td>須能在原件中裁剪／標示非結構化資料，以便用戶檢查有問題或異常內容</td><td>須識別不完整、有問題或異常內容，包括印章不清、<strong>缺失簽署、不完整欄位、資料不一致或低質素影像</strong></td><td>① 裁剪/highlighting 功能移至 4.2.2.5；② 問題類型明確擴展（新增 缺失簽署, 低質素影像 等）</td><td><span class="badge medium">中</span></td></tr>
+<tr><td>4.2.2.5</td><td>須產生並匯出相關統計資料及報告</td><td>須在原始文件或影像中<strong>裁剪、標示或指出</strong>相關區域，以協助用戶覆核抽取資料、差異及異常內容</td><td>① 統計報告內容移至 4.2.2.7；② 此處承接 裁剪/highlighting 功能</td><td><span class="badge medium">中</span></td></tr>
+<tr><td>4.2.2.6</td><td>—</td><td>須產生核驗結果、<strong>顯示核驗狀態</strong>，並<strong>標記低置信度、不一致或例外項目</strong>供用戶覆核</td><td><strong>新增</strong>：明確驗證結果輸出格式與低置信度標記</td><td><span class="badge medium">中</span></td></tr>
+<tr><td>4.2.2.7</td><td>—</td><td>須就相關活動產生並匯出相關統計、<strong>審計追蹤、處理記錄</strong>及報告</td><td><strong>新增</strong>：擴展統計與審計要求</td><td><span class="badge medium">中</span></td></tr>
+</tbody></table></div>
+<h3 id="4-2-3-智能審核紀錄草擬">4.2.3 智能審核紀錄草擬</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>條款</th><th>v1 原文</th><th>v2 原文</th><th>變化說明</th><th>影響</th></tr></thead>
+<tbody>
+<tr><td>4.2.3.1</td><td>須能按審核紀錄範本（DOCX 格式）產生審核紀錄草稿</td><td>須使用預先定義的範本產生審核紀錄草稿，例如 DOCX 格式</td><td>措辭調整，含義基本一致</td><td><span class="badge low">低</span></td></tr>
+<tr><td>4.2.3.2</td><td>須能根據結構化資料、上述 4.2.1 及 4.2.2 功能的結果，以及業務／工作流程邏輯產生審核紀錄</td><td>須按<strong>預先定義的規則及邏輯</strong>產生審核紀錄草稿</td><td>① 原「根據前序功能結果生成」移至 4.2.3.3；② 此處強調預定義規則</td><td><span class="badge medium">中</span></td></tr>
+<tr><td>4.2.3.3</td><td>須產生並匯出相關統計資料及報告</td><td>須在業務及工作流程邏輯管控下，整合文件分類（4.2.1）及資料核驗（4.2.2）功能的資料輸入，<strong>綜合並自動填入</strong>審核紀錄草稿（例如 <strong>PDF 及 DOCX 格式</strong>）</td><td>重大：① 承接原 4.2.3.2 的「前序功能數據整合」；② 明確輸出 <strong>PDF 與 DOCX</strong></td><td><span class="badge high">高</span></td></tr>
+<tr><td>4.2.3.4</td><td>—</td><td>須按需要將產生的審核紀錄草稿及<strong>相關元數據</strong>匯出至其他介接系統</td><td><strong>新增</strong>：強調 元數據 輸出</td><td><span class="badge medium">中</span></td></tr>
+<tr><td>4.2.3.5</td><td>—</td><td>須就相關活動產生並匯出相關統計、<strong>審計追蹤、處理記錄</strong>及報告</td><td><strong>新增</strong>：擴展統計與審計要求</td><td><span class="badge medium">中</span></td></tr>
+</tbody></table></div>
+<h3 id="4-2-4-綜合工作流程">4.2.4 綜合工作流程</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>條款</th><th>v1 原文</th><th>v2 原文</th><th>變化說明</th><th>影響</th></tr></thead>
+<tbody>
+<tr><td>4.2.4.1</td><td>須能將上述 4.2.1、4.2.2 及 4.2.3 功能自動整合為精簡工作流程</td><td>須能將上述 4.2.1、4.2.2 及 4.2.3 功能自動整合為精簡工作流程</td><td>無實質變化</td><td><span class="badge low">低</span></td></tr>
+<tr><td>4.2.4.2</td><td>新 AI 方案須透過 API 或專用接口，從其他入境處系統接收個案申請資料（例如結構化及非結構化資料），並將資料、影像及報告等結果交付至入境處系統</td><td>須透過 API、專用接口、<strong>批量檔案傳輸或其他議定整合機制</strong>，從介接的入境處系統接收個案申請資料，包括結構化資料、文件、影像及證明材料</td><td>重大擴展：新增 <strong>批量檔案傳輸</strong> 等整合機制；明確 證明材料</td><td><span class="badge high">高</span></td></tr>
+<tr><td>4.2.4.3</td><td>—</td><td>須將相應處理結果（包括分類結果、抽取資料、核驗結果、已標示影像、審核紀錄草稿、報告及<strong>工作流程狀態更新</strong>）交回介接系統</td><td><strong>新增</strong>：明確輸出內容清單與 工作流程狀態更新</td><td><span class="badge medium">中</span></td></tr>
+<tr><td>4.2.4.4</td><td>—</td><td>須產生並匯出相關統計、<strong>審計追蹤、處理記錄</strong>及報告</td><td><strong>新增</strong>：擴展統計與審計要求</td><td><span class="badge medium">中</span></td></tr>
+</tbody></table></div>
+<h3 id="4-2-5-ai-要求">4.2.5 AI 要求</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>條款</th><th>v1 原文</th><th>v2 原文</th><th>變化說明</th><th>影響</th></tr></thead>
+<tbody>
+<tr><td>4.2.5.1</td><td>須採用先進 OCR 及 AI 技術（包括生成式 AI，例如大型語言模型（LLM））</td><td>須採用先進 OCR 及 AI 技術（包括生成式 AI，例如大型語言模型（LLM））</td><td>無實質變化</td><td><span class="badge low">低</span></td></tr>
+<tr><td>4.2.5.2</td><td>須為所有 AI 流程實施量化評分機制，以驗證準確性</td><td>須為所有<strong>AI 驅動流程</strong>實施量化評分機制，以驗證準確性</td><td>措辭微調</td><td><span class="badge low">低</span></td></tr>
+<tr><td>4.2.5.3</td><td>須提供持續模型調校及訓練服務，以確保持續準確率（例如 90%）</td><td>須提供持續模型調校、訓練及<strong>效能優化服務</strong>，以確保持續準確率（例如 90%）</td><td>新增 <strong>效能優化</strong></td><td><span class="badge medium">中</span></td></tr>
+<tr><td>4.2.5.4</td><td>須支援多種調校及訓練方法，包括但不限於監督式、非監督式及 RLHF</td><td>須支援多種調校及訓練方法，包括但不限於監督式、非監督式及 RLHF</td><td>無實質變化</td><td><span class="badge low">低</span></td></tr>
+<tr><td>4.2.5.5</td><td>須能透過標準化 API 或接口，向入境處內部系統匯出 AI 生成結果、資料、影像及報告</td><td>須透過標準化 API 或系統接口，向已整合的入境處內部系統匯出 AI 生成輸出（資料、影像、文件及報告）</td><td>措辭調整，含義基本一致</td><td><span class="badge low">低</span></td></tr>
+<tr><td>4.2.5.6</td><td>須提供標準化接口或 API 收集用戶對 AI 結果的回饋，以提升準確性及滿意度</td><td>須提供標準化 API 或接口收集用戶對 AI 生成結果的回饋，以支援持續提升準確性、<strong>易用性及用戶滿意度</strong></td><td>新增 <strong>易用性及用戶滿意度</strong></td><td><span class="badge medium">中</span></td></tr>
+<tr><td>4.2.5.7</td><td>須允許技術人員在整個系統生態內執行進階模型調校、再訓練、版本管理及部署</td><td>須允許技術人員在整個系統生態內執行進階模型調校、再訓練、版本管理及部署</td><td>無實質變化</td><td><span class="badge low">低</span></td></tr>
+</tbody></table></div>
+<h3 id="4-2-6-與入境處系統介接">4.2.6 與入境處系統介接</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>條款</th><th>v1 原文</th><th>v2 原文</th><th>變化說明</th><th>影響</th></tr></thead>
+<tbody>
+<tr><td>4.2.6.1</td><td>須透過接口或 API 與現有入境處工作流程系統整合，以支援上述功能</td><td>須透過接口或 API 與現有入境處工作流程系統<strong>整合</strong>，以支援上述功能</td><td>語法修正</td><td><span class="badge low">低</span></td></tr>
+<tr><td>4.2.6.2</td><td>須能透過另一個入境處內部系統的接口或 API 接收申請資料，包括文件及影像等結構化及非結構化資料</td><td>須能透過 API 或系統接口，從入境處內部系統接收申請資料，包括表格、文件、影像及其他相關檔案等結構化及非結構化資料</td><td>措辭擴展，明確 forms 與 other relevant files</td><td><span class="badge medium">中</span></td></tr>
+<tr><td>4.2.6.3</td><td>須能透過接口或 API，向另一個入境處內部系統提供上述主要功能（例如第 4.2.1、4.2.2 及 4.2.3 條）的結果</td><td>須能透過 API 或系統接口，向入境處內部系統提供產生結果，包括報告、文件、審核紀錄、抽取資料及主要功能輸出</td><td>擴展：明確輸出類型清單</td><td><span class="badge medium">中</span></td></tr>
+<tr><td>4.2.6.4</td><td>須允許透過由入境處提供且位於另一網絡區域的另一個入境處內部系統的接口或 API 進行資料交換及查詢</td><td>須允許透過由入境處提供且位於另一網絡區域的另一個入境處內部系統的系統接口或 API 進行資料交換及查詢</td><td>措辭微調</td><td><span class="badge low">低</span></td></tr>
+<tr><td>4.2.6.5</td><td>如現有已開發接口或 API 不適用於新 AI 方案，須開發接口或 API</td><td>—</td><td><strong>刪除</strong>：v2 不再要求開發新接口</td><td><span class="badge low">低</span></td></tr>
+</tbody></table></div>
+<h3 id="4-2-變更趨勢總結">4.2 變更趨勢總結</h3>
+<p>v2 對 4.2 節的修改呈現以下 <strong>5 大趨勢</strong>：</p>
+<ol>
+<li><strong>從「輔助能力」到「自動化能力」</strong>：4.2.1.1 由「支援核驗」改為「自動核驗」，對 AI 主動性要求提升。</li>
+<li><strong>預處理與矯正成為獨立要求</strong>：4.2.1.2 明確要求 影像增強 / 方向校正 / 裁剪，對 CV 前處理能力提出具體要求。</li>
+<li><strong>可追溯性全面強化</strong>：幾乎每個子模組都新增 <strong>審計追蹤 / 處理記錄 / statistics / reports</strong> 輸出要求。</li>
+<li><strong>結果輸出更細化</strong>：明確 已校正文件、核驗狀態、置信度指標、工作流程狀態更新、元數據 等輸出項。</li>
+<li><strong>整合方式更多樣</strong>：4.2.4.2 新增 批量檔案傳輸，意味著除了 API 還需支持文件批次接口。</li>
+</ol>
+<h3 id="4-2-變更對-cmhk-方案的即時影響">4.2 變更對 CMHK 方案的即時影響</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>影響點</th><th>說明</th></tr></thead>
+<tbody>
+<tr><td><strong>GW 方案基本覆蓋，但需補充審計日誌設計</strong></td><td>GW 已有 文件分類、資料核驗、審核紀錄草擬 功能，但 v2 對 審計追蹤 / 處理記錄 的粒度要求需在技術方案（TP）中明確響應</td></tr>
+<tr><td><strong>預處理模組需獨立說明</strong></td><td>v2 將 影像增強 / 方向校正 / 裁剪 單獨列出，需在方案中獨立成章節</td></tr>
+<tr><td><strong>接口設計需兼容 批量檔案傳輸</strong></td><td>現有 GW Pull/REST 設計可能不足，需評估 SFTP / 共享文件夾等批次接口</td></tr>
+<tr><td><strong>置信度指標 與 核驗狀態 成為標配</strong></td><td>需在 用戶界面（UI）、API、報表中統一體現，且與人工審核流程掛鉤</td></tr>
+</tbody></table></div>
+<hr>
+<h2 id="五-對-cmhk-的影響分析">五、對 CMHK 的影響分析</h2>
+<h3 id="5-1-需要重新評估的方面">5.1 需要重新評估的方面</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>方面</th><th>v2 帶來的變化</th><th>CMHK 應對</th></tr></thead>
+<tbody>
+<tr><td><strong>硬件選型</strong></td><td>信創成為強制要求，AI 伺服器 功耗上限提高</td><td>需重新評估昇騰 NPU / 海光 DCU / 寒武紀對 Qwen3.5-VL 的支持；放棄非國產 GPU 主方案</td></tr>
+<tr><td><strong>容量估算 計算</strong></td><td>峰值拆分為 265 + 235 案/小時，且分兩階段</td><td>現有 容量估算 計算器 需按 第 1 階段 / 第 2 階段 重新拆分，並為 試點 預留較小規模</td></tr>
+<tr><td><strong>報價策略</strong></td><td>試點 性質，範圍收窄但環境增加</td><td>報價需區分 第 1 階段 試點 與 第 2 階段 擴展，並預留 iSIT／iUAT／應急處理 環境成本</td></tr>
+<tr><td><strong>供應商方案</strong></td><td>信創門檻提高</td><td>需確認 GW/HH/ZS 各自信創適配能力；GW 的 Qwen 路線較有利，但硬件層需補信創方案</td></tr>
+<tr><td><strong>數據合規</strong></td><td>AI 結果與推理日誌保留 1 年</td><td>存儲 容量估算 與備份策略需調整；需設計 reasoning log 結構化輸出</td></tr>
+<tr><td><strong>維護團隊</strong></td><td>要求香港境內足夠人手</td><td>確保維護團隊本地化承諾可寫入合同</td></tr>
+</tbody></table></div>
+<h3 id="5-2-對現有工作的影響">5.2 對現有工作的影響</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>已完成工作</th><th>v2 影響</th><th>是否需要重做</th></tr></thead>
+<tbody>
+<tr><td>容量估算 計算器 v17</td><td>業務量拆分、信創硬件替換、新增環境</td><td><span class="badge medium">中</span> 需要更新</td></tr>
+<tr><td>供應商技術方案（TP） v0.7 評審</td><td>需補充信創適配與 試點 階段規劃</td><td><span class="badge medium">中</span> 需要補充</td></tr>
+<tr><td>CMHK 整合草案</td><td>需按 v2 調整範圍與里程碑</td><td><span class="badge medium">中</span> 需要更新</td></tr>
+<tr><td>V1/V2 概算報價</td><td>報價基礎變化較大</td><td><span class="badge high">高</span> 需要重新報價</td></tr>
+<tr><td>供應商對比表</td><td>需新增信創與模型版本維度</td><td><span class="badge medium">中</span> 需要更新</td></tr>
+</tbody></table></div>
+<hr>
+<h2 id="六-建議行動-行動項目">六、建議行動（行動項目）</h2>
+<h3 id="5-1-即時行動-本週">5.1 即時行動（本週）</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>#</th><th>行動項</th><th>負責</th><th>優先級</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>向三家供應商發送 v2 RFI 澄清函，重點詢問：① 信創適配能力；② Qwen3.5-VL 在國產 NPU/GPU 上的推理支持；③ 試點 分階段實施方案</td><td>方案經理</td><td><span class="badge high">高</span></td></tr>
+<tr><td>2</td><td>與硬件團隊緊急評估國產 NPU（昇騰 / 海光 / 寒武紀）對 Qwen3.5-VL 的適配性與性能</td><td>方案經理 + 硬件架構</td><td><span class="badge high">高</span></td></tr>
+<tr><td>3</td><td>更新 容量估算 計算器：按 第 1 階段/第 2 階段 拆分業務量，增加信創硬件選項，新增 iSIT／iUAT／應急處理 環境</td><td>方案經理 + 售前</td><td><span class="badge high">高</span></td></tr>
+</tbody></table></div>
+<h3 id="5-2-短期行動-6-月底前">5.2 短期行動（6 月底前）</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>#</th><th>行動項</th><th>負責</th><th>優先級</th></tr></thead>
+<tbody>
+<tr><td>4</td><td>重新編制 CMHK 整合草案 v0.8，對齊 v2 試點 範圍與信創要求</td><td>方案經理</td><td><span class="badge medium">中</span></td></tr>
+<tr><td>5</td><td>更新供應商對比矩陣，新增「信創適配 / 模型版本 / Token 規格 / 香港本地維護」維度</td><td>方案經理</td><td><span class="badge medium">中</span></td></tr>
+<tr><td>6</td><td>重新核算 V3 概算報價，區分 第 1 階段 試點 與 第 2 階段 擴展成本</td><td>方案經理 + 商務</td><td><span class="badge medium">中</span></td></tr>
+<tr><td>7</td><td>與 ImmD 業務窗口（YAU Ka-wai）確認 試點 範圍優先級與 外籍家庭傭工（FDH） 是否仍為最終目標</td><td>方案經理</td><td><span class="badge medium">中</span></td></tr>
+</tbody></table></div>
+<h3 id="5-3-中期行動-7-月-6-日提交前">5.3 中期行動（7 月 6 日提交前）</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>#</th><th>行動項</th><th>負責</th><th>優先級</th></tr></thead>
+<tbody>
+<tr><td>8</td><td>完成 附件 I 表格填寫，重點體現信創合規、試點 分階段、香港本地支持</td><td>方案經理 + 供應商</td><td><span class="badge high">高</span></td></tr>
+<tr><td>9</td><td>準備 v2 RFI 響應文件，強調 CMHK 在信創領域的提前佈局與 GW Qwen 路線的匹配度</td><td>方案經理</td><td><span class="badge high">高</span></td></tr>
+<tr><td>10</td><td>法務審閱維護條款（香港境內人手、AI Impact Assessment、數據保留 1 年）</td><td>方案經理 + 法務</td><td><span class="badge medium">中</span></td></tr>
+</tbody></table></div>
+<hr>
+<h2 id="七-對競爭格局的判斷">七、對競爭格局的判斷</h2>
+<p>v2 的信創要求將構成顯著的<strong>進入門檻</strong>：</p>
+<ul>
+<li><strong>對港灣科技 GW</strong>：軟件層 Qwen3.5-VL 路線符合 v2 模型要求，但硬件層需補充信創適配證明；若能在 7 月 6 日前提供昇騰/海光上的 概念驗證（PoC） 數據，將大幅領先。</li>
+<li><strong>對合合信息 HH</strong>：商業產品 DocFlow 若未做信創適配，門檻較高；且端到端 60% 準確率相較 v2 對準確率的隱含要求偏低。</li>
+<li><strong>對智算 ZS</strong>：作為 DICT/硬件背景供應商，在信創硬件上可能有優勢，但軟件層能力待評估；需重點評估其是否能與 GW 軟件整合。</li>
+</ul>
+<p>CMHK 的機會在於：已提前佈局 Qwen 系列 VLM 與國產化 GPU 調研，v2 反而強化了我們的差異化優勢。</p>
+<hr>
+<h2 id="八-風險提示">八、風險提示</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>風險</th><th>等級</th><th>說明</th></tr></thead>
+<tbody>
+<tr><td>信創適配時間不足</td><td><span class="badge high">高</span></td><td>距 7 月 6 日僅約 3 週，若供應商無法及時提供國產 NPU 上的 Qwen3.5-VL 性能數據，將影響響應質量</td></tr>
+<tr><td>硬件成本大幅上升</td><td><span class="badge medium">中</span></td><td>國產 AI 芯片單卡性能與生態成熟度可能低於國際 GPU，可能導致卡數與整機功耗上升</td></tr>
+<tr><td>第 1 階段/第 2 階段 範圍模糊</td><td><span class="badge medium">中</span></td><td>客戶未明確說明 第 2 階段 是否自動啟動，報價與資源規劃需預留彈性</td></tr>
+<tr><td>維護團隊本地化成本</td><td><span class="badge medium">中</span></td><td>4.4.15 要求香港境內維護人手，可能推高年度維護報價</td></tr>
+</tbody></table></div>
+<hr>
+<p>*本對比分析基於 v1 與 v2 的 PDF 原文逐段比對完成。如需進一步細化某章節，可隨時補充。*</p>
+    </main>
+  </div>
+</body>
+</html>

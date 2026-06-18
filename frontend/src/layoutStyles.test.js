@@ -88,7 +88,9 @@ test('result page exposes recognition JSON and LLM verification views', () => {
 test('verification conclusion generation starts after recognition completes', () => {
   assert.match(app, /startVerificationConclusion\(result\)/)
   assert.match(app, /startVerificationConclusion\(reviewResult\.value\)/)
-  assert.match(app, /核验结论暂未取得模型响应，已生成规则兜底结论/)
+  assert.doesNotMatch(app, /模型响应暂不可用/)
+  assert.doesNotMatch(app, /模型输出未通过/)
+  assert.doesNotMatch(app, /核验结论暂未取得模型响应/)
   assert.doesNotMatch(app, /HTTP\/1\.1 header parser received no bytes/)
 })
 

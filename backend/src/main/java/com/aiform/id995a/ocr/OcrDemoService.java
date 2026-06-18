@@ -169,12 +169,14 @@ public class OcrDemoService {
     } else {
       listener.postProcessingStep("selection_geometry_restore", "Restoring fixed template checkbox fields.", 94);
       SelectionFieldCropRefinementResult restoredSelections = selectionFieldCropRefinementService.restoreTemplateSelections(
+          normalizedFilename,
           structuredData,
           safePages,
+          modelProfile,
           resolvedTemplate
       );
       structuredData = restoredSelections.data();
-      statusMessages.add("ID 988A application type checkboxes are restored from fixed table geometry when the template is recognized; updated fields: " + restoredSelections.updated() + ".");
+      statusMessages.add("ID 988A application type checkboxes are restored by the application-type LLM region recognizer, with fixed geometry as fallback; updated fields: " + restoredSelections.updated() + ".");
       statusMessages.add("FDH review fast path skipped second-pass field crop transcription to keep multi-file material review responsive.");
     }
 

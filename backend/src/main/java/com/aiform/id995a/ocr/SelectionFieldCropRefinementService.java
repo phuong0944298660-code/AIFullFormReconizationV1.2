@@ -1,5 +1,7 @@
 package com.aiform.id995a.ocr;
 
+import com.aiform.id995a.llm.ApplicationTypeSelectionRecognitionGateway;
+import com.aiform.id995a.llm.ApplicationTypeSelectionRecognitionResult;
 import com.aiform.id995a.llm.FieldCropTranscriptionGateway;
 import com.aiform.id995a.llm.FieldCropTranscriptionRequest;
 import com.aiform.id995a.llm.FieldCropTranscriptionResult;
@@ -20,6 +22,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import javax.imageio.ImageIO;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -27,6 +30,7 @@ public class SelectionFieldCropRefinementService {
 
   private static final double MIN_BLANK_CONFIDENCE = 70;
   private static final double MIN_REPLACEMENT_CONFIDENCE = 85;
+  private static final double MIN_APPLICATION_TYPE_LLM_CONFIDENCE = 60;
   private static final double APPLICATION_TYPE_CONFIDENCE = 95;
   private static final String ID_988A_TEMPLATE_ID = "id988a_2024_06";
   private static final String APPLICATION_TYPE_ROOT = "application_type";
@@ -57,14 +61,25 @@ public class SelectionFieldCropRefinementService {
   );
 
   private final FieldCropTranscriptionGateway transcriptionGateway;
+  private final ApplicationTypeSelectionRecognitionGateway applicationTypeRecognitionGateway;
   private final ObjectMapper objectMapper;
 
+  @Autowired
   public SelectionFieldCropRefinementService(
       FieldCropTranscriptionGateway transcriptionGateway,
+      ApplicationTypeSelectionRecognitionGateway applicationTypeRecognitionGateway,
       ObjectMapper objectMapper
   ) {
     this.transcriptionGateway = transcriptionGateway;
+    this.applicationTypeRecognitionGateway = applicationTypeRecognitionGateway;
     this.objectMapper = objectMapper;
+  }
+
+  SelectionFieldCropRefinementService(
+      FieldCropTranscriptionGateway transcriptionGateway,
+      ObjectMapper objectMapper
+  ) {
+    this(transcriptionGateway, null, objectMapper);
   }
 
   public SelectionFieldCropRefinementResult refine(
@@ -85,6 +100,22 @@ public class SelectionFieldCropRefinementService {
         ? structuredData.deepCopy()
         : objectMapper.createObjectNode();
     int updated = shouldApplyId988aRules(template) ? restoreApplicationTypeSelections(mutableData, pages) : 0;
+    return new SelectionFieldCropRefinementResult(mutableData, 0, updated);
+  }
+
+  public SelectionFieldCropRefinementResult restoreTemplateSelections(
+      String filename,
+      JsonNode structuredData,
+      List<RenderedOcrPage> pages,
+      LlmModelProfile modelProfile,
+      DocumentTemplate template
+  ) {
+    ObjectNode mutableData = structuredData != null && structuredData.isObject()
+        ? structuredData.deepCopy()
+        : objectMapper.createObjectNode();
+    int updated = shouldApplyId988aRules(template)
+        ? restoreApplicationTypeSelectionsWithLlm(filename, mutableData, pages, modelProfile, template)
+        : 0;
     return new SelectionFieldCropRefinementResult(mutableData, 0, updated);
   }
 
@@ -136,7 +167,9 @@ public class SelectionFieldCropRefinementService {
       addMissingHkIdentityCardNoCandidate(page, pageData, mutableData, requests, candidatesByKey);
     }
 
-    int updated = shouldApplyId988aRules(template) ? restoreApplicationTypeSelections(mutableData, pages) : 0;
+    int updated = shouldApplyId988aRules(template)
+        ? restoreApplicationTypeSelectionsWithLlm(filename, mutableData, pages, modelProfile, template)
+        : 0;
     if (requests.isEmpty()) {
       return new SelectionFieldCropRefinementResult(mutableData, 0, updated);
     }
@@ -178,10 +211,53 @@ public class SelectionFieldCropRefinementService {
     if (firstPage == null) {
       return 0;
     }
+    return applyApplicationTypeSelections(
+        mutableData,
+        firstPage,
+        selectedApplicationTypeCheckboxes(firstPage),
+        "detected"
+    );
+  }
+
+  private int restoreApplicationTypeSelectionsWithLlm(
+      String filename,
+      ObjectNode mutableData,
+      List<RenderedOcrPage> pages,
+      LlmModelProfile modelProfile,
+      DocumentTemplate template
+  ) {
+    RenderedOcrPage firstPage = firstPage(pages);
+    if (firstPage == null) {
+      return 0;
+    }
+    if (applicationTypeRecognitionGateway != null) {
+      try {
+        List<ApplicationTypeSelectionRecognitionResult> results =
+            applicationTypeRecognitionGateway.recognizeApplicationTypeSelections(filename, firstPage, template, modelProfile);
+        if (results != null && !results.isEmpty()) {
+          return applyApplicationTypeSelections(
+              mutableData,
+              firstPage,
+              recognizedApplicationTypeSelections(firstPage, results),
+              "llm_detected"
+          );
+        }
+      } catch (IOException | RuntimeException ignored) {
+        // Keep the FDH review flow usable if the secondary LLM check is unavailable.
+      }
+    }
+    return restoreApplicationTypeSelections(mutableData, pages);
+  }
+
+  private int applyApplicationTypeSelections(
+      ObjectNode mutableData,
+      RenderedOcrPage firstPage,
+      List<ApplicationTypeSelection> selected,
+      String selectionStatus
+  ) {
     String pageKey = "page_" + firstPage.page();
     ObjectNode pageData = objectChild(mutableData, pageKey);
     boolean hadFirstPassApplicationType = hasFilledValue(pageData, List.of(APPLICATION_TYPE_ROOT));
-    List<ApplicationTypeSelection> selected = selectedApplicationTypeCheckboxes(firstPage);
     if (selected.isEmpty()) {
       int updated = clearGenericApplicationTypeFields(pageData);
       if (hadFirstPassApplicationType) {
@@ -205,20 +281,134 @@ public class SelectionFieldCropRefinementService {
       }
       String value = joinedSelectedValues(selections);
       String label = selections.get(0).option().label();
+      double confidence = selections.stream()
+          .mapToDouble(ApplicationTypeSelection::confidence)
+          .filter(valueConfidence -> valueConfidence > 0)
+          .min()
+          .orElse(APPLICATION_TYPE_CONFIDENCE);
       List<Integer> bbox = unionBbox(selections.stream()
           .map(ApplicationTypeSelection::bbox)
           .toList());
       applicationType.put(fieldKey, value);
-      setConfidence(mutableData, pageKey, List.of(APPLICATION_TYPE_ROOT, fieldKey), APPLICATION_TYPE_CONFIDENCE);
+      setConfidence(mutableData, pageKey, List.of(APPLICATION_TYPE_ROOT, fieldKey), confidence);
       ObjectNode evidence = evidenceNode(mutableData, pageKey, List.of(APPLICATION_TYPE_ROOT, fieldKey));
       evidence.put("label", label);
-      evidence.put("selection_crop_status", "detected");
-      evidence.put("selection_crop_confidence", Math.round(APPLICATION_TYPE_CONFIDENCE));
+      evidence.put("selection_crop_status", selectionStatus);
+      evidence.put("selection_crop_confidence", Math.round(confidence));
       evidence.put("selection_crop_text", value);
+      String evidenceText = selections.stream()
+          .map(ApplicationTypeSelection::evidence)
+          .filter(text -> text != null && !text.isBlank())
+          .findFirst()
+          .orElse("");
+      if (!evidenceText.isBlank()) {
+        evidence.put("selection_visual_evidence", evidenceText);
+      }
       putNormalizedBbox(evidence, "value_bbox", bbox, firstPage.imageWidth(), firstPage.imageHeight());
       updated += 1;
     }
     return updated;
+  }
+
+  private List<ApplicationTypeSelection> recognizedApplicationTypeSelections(
+      RenderedOcrPage firstPage,
+      List<ApplicationTypeSelectionRecognitionResult> results
+  ) {
+    List<ApplicationTypeSelection> selected = new ArrayList<>();
+    for (ApplicationTypeSelectionRecognitionResult result : results) {
+      if (result == null || !result.selected() || result.confidence() < MIN_APPLICATION_TYPE_LLM_CONFIDENCE) {
+        continue;
+      }
+      ApplicationTypeOption option = optionForRecognitionResult(result);
+      if (option == null) {
+        continue;
+      }
+      selected.add(new ApplicationTypeSelection(
+          option,
+          applicationTypeOptionBbox(firstPage, option),
+          result.confidence(),
+          result.evidence()
+      ));
+    }
+    return List.copyOf(selected);
+  }
+
+  private ApplicationTypeOption optionForRecognitionResult(ApplicationTypeSelectionRecognitionResult result) {
+    String key = normalizeApplicationTypeRecognitionText(result.optionKey());
+    String value = normalizeApplicationTypeRecognitionText(result.value());
+    if (key.contains("contract_renewal_entry_visa_and_extension")
+        || key.contains("entry_visa_and_extension")
+        || (key.contains("contract_renewal") && value.contains("extension"))) {
+      return applicationTypeOption(ApplicationTypeSlot.CONTRACT_RENEWAL_ENTRY_VISA_AND_EXTENSION);
+    }
+    if (key.contains(REMAINING_CONTRACT_KEY)
+        || key.contains("remaining")
+        || key.contains("extended_period")
+        || (!key.contains("contract_renewal") && value.equals("extension_of_stay"))) {
+      return applicationTypeOption(ApplicationTypeSlot.REMAINING_CONTRACT_EXTENSION);
+    }
+    if (key.contains(ENTRY_TO_HK_KEY) || key.contains("entry_to_hong_kong") || key.contains("domestic_helper_from_abroad")) {
+      return applicationTypeOption(ApplicationTypeSlot.ENTRY_TO_HK_ENTRY_VISA);
+    }
+    if (key.contains(CONTRACT_RENEWAL_KEY) || key.contains("contract_renewal") || key.contains("change_of_employer")) {
+      return applicationTypeOption(ApplicationTypeSlot.CONTRACT_RENEWAL_ENTRY_VISA);
+    }
+    return null;
+  }
+
+  private ApplicationTypeOption applicationTypeOption(ApplicationTypeSlot slot) {
+    return APPLICATION_TYPE_OPTIONS.stream()
+        .filter(option -> option.slot() == slot)
+        .findFirst()
+        .orElse(null);
+  }
+
+  private List<Integer> applicationTypeOptionBbox(RenderedOcrPage firstPage, ApplicationTypeOption option) {
+    if (firstPage == null || option == null) {
+      return List.of();
+    }
+    if (firstPage.pngBytes() != null && firstPage.pngBytes().length > 0) {
+      try {
+        BufferedImage image = ImageIO.read(new ByteArrayInputStream(firstPage.pngBytes()));
+        if (image != null) {
+          ApplicationTypeTable table = detectApplicationTypeTable(image);
+          if (table != null) {
+            CheckboxBox box = applicationTypeBoxesBySlot(image, table).get(option.slot());
+            if (box != null) {
+              return expandedCheckboxBbox(box, image.getWidth(), image.getHeight());
+            }
+          }
+        }
+      } catch (IOException | RuntimeException ignored) {
+      }
+    }
+    return fallbackApplicationTypeOptionBbox(firstPage, option.slot());
+  }
+
+  private List<Integer> fallbackApplicationTypeOptionBbox(RenderedOcrPage firstPage, ApplicationTypeSlot slot) {
+    int width = firstPage.imageWidth();
+    int height = firstPage.imageHeight();
+    if (width <= 0 || height <= 0) {
+      return List.of();
+    }
+    double centerY = switch (slot) {
+      case ENTRY_TO_HK_ENTRY_VISA -> 0.305;
+      case CONTRACT_RENEWAL_ENTRY_VISA -> 0.378;
+      case CONTRACT_RENEWAL_ENTRY_VISA_AND_EXTENSION -> 0.440;
+      case REMAINING_CONTRACT_EXTENSION -> 0.505;
+    };
+    int centerX = (int) Math.round(width * 0.755);
+    int center = (int) Math.round(height * centerY);
+    int half = Math.max(18, Math.round(Math.min(width, height) * 0.018f));
+    return clampBbox(List.of(centerX - half, center - half, centerX + half * 2, center + half), width, height);
+  }
+
+  private String normalizeApplicationTypeRecognitionText(String value) {
+    return value == null ? "" : value
+        .toLowerCase(Locale.ROOT)
+        .replaceAll("[^a-z0-9]+", "_")
+        .replaceAll("_+", "_")
+        .replaceAll("^_|_$", "");
   }
 
   private int clearGenericApplicationTypeFields(ObjectNode pageData) {
@@ -267,6 +457,7 @@ public class SelectionFieldCropRefinementService {
 
   private ApplicationTypeTable detectApplicationTypeTable(BufferedImage image) {
     List<HorizontalLine> horizontalLines = detectWideHorizontalLines(image);
+    ApplicationTypeTable fallbackTable = null;
     for (int index = 0; index <= horizontalLines.size() - 5; index += 1) {
       List<HorizontalLine> tableLines = horizontalLines.subList(index, index + 5);
       int top = tableLines.get(0).y();
@@ -286,11 +477,20 @@ public class SelectionFieldCropRefinementService {
         continue;
       }
       ApplicationTypeTable table = new ApplicationTypeTable(left, top, right, bottom, separator, List.copyOf(tableLines));
-      if (applicationTypeBoxesBySlot(image, table).size() >= APPLICATION_TYPE_OPTIONS.size()) {
+      if (applicationTypeBoxesBySlot(image, table, false).size() >= APPLICATION_TYPE_OPTIONS.size()) {
         return table;
       }
+      if (fallbackTable == null && hasApplicationTypeSelectionSignal(image, table)) {
+        fallbackTable = table;
+      }
     }
-    return null;
+    return fallbackTable;
+  }
+
+  private boolean hasApplicationTypeSelectionSignal(BufferedImage image, ApplicationTypeTable table) {
+    return applicationTypeBoxesBySlot(image, table).values().stream()
+        .anyMatch(box -> hasIntentionalCheckboxMarkNearCheckboxBox(image, box)
+            || hasIntentionalCheckboxMark(image, expandedCheckboxBbox(box, image.getWidth(), image.getHeight())));
   }
 
   private List<ApplicationTypeSelection> detectApplicationTypeSelections(BufferedImage image, ApplicationTypeTable table) {
@@ -302,18 +502,27 @@ public class SelectionFieldCropRefinementService {
         continue;
       }
       List<Integer> bbox = expandedCheckboxBbox(box, image.getWidth(), image.getHeight());
-      if (hasIntentionalCheckboxMarkNearCheckboxBox(image, box)) {
-        selections.add(new ApplicationTypeSelection(option, bbox));
+      boolean nearMark = hasIntentionalCheckboxMarkNearCheckboxBox(image, box);
+      boolean boxedDiagonalMark = hasDiagonalStrokeAcrossCheckbox(image, box);
+      boolean expandedMark = hasIntentionalCheckboxMark(image, bbox);
+      boolean extendedBlueMark = hasExtendedBlueCheckboxMark(image, box);
+      if (nearMark || boxedDiagonalMark || expandedMark || extendedBlueMark) {
+        selections.add(new ApplicationTypeSelection(option, bbox, APPLICATION_TYPE_CONFIDENCE, ""));
       }
     }
     return List.copyOf(selections);
   }
 
   private Map<ApplicationTypeSlot, CheckboxBox> applicationTypeBoxesBySlot(BufferedImage image, ApplicationTypeTable table) {
+    return applicationTypeBoxesBySlot(image, table, true);
+  }
+
+  private Map<ApplicationTypeSlot, CheckboxBox> applicationTypeBoxesBySlot(
+      BufferedImage image,
+      ApplicationTypeTable table,
+      boolean includeEstimatedBoxes
+  ) {
     List<CheckboxBox> boxes = completeApplicationTypeCheckboxBoxes(image, table, detectCheckboxBoxes(image, table));
-    if (boxes.size() < APPLICATION_TYPE_OPTIONS.size()) {
-      return Map.of();
-    }
     Map<ApplicationTypeSlot, CheckboxBox> boxesBySlot = new LinkedHashMap<>();
     List<CheckboxSearchBand> bands = applicationTypeSearchBands(table);
     putBoxForBand(boxesBySlot, ApplicationTypeSlot.ENTRY_TO_HK_ENTRY_VISA, boxes, bands.get(0));
@@ -325,12 +534,82 @@ public class SelectionFieldCropRefinementService {
           .sorted(Comparator.comparingInt(CheckboxBox::centerY).thenComparingInt(CheckboxBox::centerX))
           .limit(APPLICATION_TYPE_OPTIONS.size())
           .toList();
-      boxesBySlot.putIfAbsent(ApplicationTypeSlot.ENTRY_TO_HK_ENTRY_VISA, ordered.get(0));
-      boxesBySlot.putIfAbsent(ApplicationTypeSlot.CONTRACT_RENEWAL_ENTRY_VISA, ordered.get(1));
-      boxesBySlot.putIfAbsent(ApplicationTypeSlot.CONTRACT_RENEWAL_ENTRY_VISA_AND_EXTENSION, ordered.get(2));
-      boxesBySlot.putIfAbsent(ApplicationTypeSlot.REMAINING_CONTRACT_EXTENSION, ordered.get(3));
+      if (ordered.size() >= APPLICATION_TYPE_OPTIONS.size()) {
+        boxesBySlot.putIfAbsent(ApplicationTypeSlot.ENTRY_TO_HK_ENTRY_VISA, ordered.get(0));
+        boxesBySlot.putIfAbsent(ApplicationTypeSlot.CONTRACT_RENEWAL_ENTRY_VISA, ordered.get(1));
+        boxesBySlot.putIfAbsent(ApplicationTypeSlot.CONTRACT_RENEWAL_ENTRY_VISA_AND_EXTENSION, ordered.get(2));
+        boxesBySlot.putIfAbsent(ApplicationTypeSlot.REMAINING_CONTRACT_EXTENSION, ordered.get(3));
+      }
+    }
+    if (includeEstimatedBoxes) {
+      Map<ApplicationTypeSlot, CheckboxBox> estimatedBoxes = estimatedApplicationTypeBoxes(image, table);
+      for (ApplicationTypeSlot slot : ApplicationTypeSlot.values()) {
+        CheckboxBox estimated = estimatedBoxes.get(slot);
+        if (estimated != null) {
+          boxesBySlot.putIfAbsent(slot, estimated);
+        }
+      }
     }
     return boxesBySlot;
+  }
+
+  private Map<ApplicationTypeSlot, CheckboxBox> estimatedApplicationTypeBoxes(
+      BufferedImage image,
+      ApplicationTypeTable table
+  ) {
+    int tableWidth = table.right() - table.left();
+    int optionLeft = table.separator() + Math.max(2, Math.round(tableWidth * 0.01f));
+    int optionRight = table.right() - Math.max(2, Math.round(tableWidth * 0.01f));
+    int optionWidth = Math.max(1, optionRight - optionLeft);
+    int tableHeight = Math.max(1, table.bottom() - table.top());
+    int side = Math.max(14, Math.min(
+        Math.round(optionWidth * 0.18f),
+        Math.round(tableHeight * 0.10f)
+    ));
+    int centerX = optionLeft + Math.round(optionWidth * 0.23f);
+    int headerBottom = table.lines().get(1).y();
+    int entryBottom = table.lines().get(2).y();
+    int contractBottom = table.lines().get(3).y();
+    int remainingBottom = table.lines().get(4).y();
+    List<CheckboxSearchBand> bands = applicationTypeSearchBands(table);
+    Map<ApplicationTypeSlot, CheckboxBox> estimated = new LinkedHashMap<>();
+    estimated.put(
+        ApplicationTypeSlot.ENTRY_TO_HK_ENTRY_VISA,
+        recoverApplicationTypeCheckboxBox(image, table, bands.get(0), centerX, weightedY(headerBottom, entryBottom, 0.28), side)
+    );
+    estimated.put(
+        ApplicationTypeSlot.CONTRACT_RENEWAL_ENTRY_VISA,
+        recoverApplicationTypeCheckboxBox(image, table, bands.get(1), centerX, weightedY(entryBottom, contractBottom, 0.28), side)
+    );
+    estimated.put(
+        ApplicationTypeSlot.CONTRACT_RENEWAL_ENTRY_VISA_AND_EXTENSION,
+        recoverApplicationTypeCheckboxBox(image, table, bands.get(2), centerX, weightedY(entryBottom, contractBottom, 0.74), side)
+    );
+    estimated.put(
+        ApplicationTypeSlot.REMAINING_CONTRACT_EXTENSION,
+        recoverApplicationTypeCheckboxBox(image, table, bands.get(3), centerX, weightedY(contractBottom, remainingBottom, 0.40), side)
+    );
+    return estimated;
+  }
+
+  private CheckboxBox recoverApplicationTypeCheckboxBox(
+      BufferedImage image,
+      ApplicationTypeTable table,
+      CheckboxSearchBand band,
+      int centerX,
+      int centerY,
+      int expectedSide
+  ) {
+    CheckboxBox scanned = scanCheckboxOutlineInBand(image, table, band, expectedSide);
+    if (scanned != null) {
+      return scanned;
+    }
+    int half = Math.max(7, expectedSide / 2);
+    return new CheckboxBox(centerX - half, centerY - half, centerX + half, centerY + half);
+  }
+
+  private int weightedY(int top, int bottom, double ratio) {
+    return top + (int) Math.round((bottom - top) * ratio);
   }
 
   private void putBoxForBand(
@@ -411,6 +690,42 @@ public class SelectionFieldCropRefinementService {
           }
           double fill = printedInkFill(image, x, y, x + side, y + side);
           if (fill < 0.08 || fill > 0.55) {
+            continue;
+          }
+          if (best == null || outlineScore > best.score()) {
+            best = new ScoredCheckboxBox(new CheckboxBox(x, y, x + side, y + side), outlineScore);
+          }
+        }
+      }
+    }
+    return best == null ? null : best.box();
+  }
+
+  private CheckboxBox scanCheckboxOutlineInBand(
+      BufferedImage image,
+      ApplicationTypeTable table,
+      CheckboxSearchBand band,
+      int expectedSide
+  ) {
+    int tableWidth = table.right() - table.left();
+    int optionLeft = table.separator() + Math.max(2, Math.round(tableWidth * 0.01f));
+    int optionRight = table.right() - Math.max(2, Math.round(tableWidth * 0.01f));
+    int optionWidth = Math.max(1, optionRight - optionLeft);
+    int tableHeight = table.bottom() - table.top();
+    int minSide = Math.max(14, Math.min(expectedSide, Math.round(tableHeight * 0.035f)));
+    int maxSide = Math.max(minSide + 1, Math.round(tableHeight * 0.18f));
+    int searchLeft = optionLeft;
+    int searchRight = Math.min(optionRight, optionLeft + Math.round(optionWidth * 0.42f));
+    ScoredCheckboxBox best = null;
+    for (int side = minSide; side <= maxSide; side += 2) {
+      for (int y = band.top(); y <= band.bottom() - side; y += 2) {
+        for (int x = searchLeft; x <= searchRight - side; x += 2) {
+          double outlineScore = checkboxOutlineScore(image, x, y, x + side, y + side);
+          if (outlineScore < 0.50) {
+            continue;
+          }
+          double fill = printedInkFill(image, x, y, x + side, y + side);
+          if (fill < 0.06 || fill > 0.62) {
             continue;
           }
           if (best == null || outlineScore > best.score()) {
@@ -896,6 +1211,80 @@ public class SelectionFieldCropRefinementService {
     return slashShape || backslashShape;
   }
 
+  private boolean hasDiagonalStrokeAcrossCheckbox(BufferedImage image, CheckboxBox box) {
+    int side = Math.max(box.width(), box.height());
+    int left = Math.max(0, box.left() - Math.max(1, Math.round(side * 0.08f)));
+    int top = Math.max(0, box.top() - Math.max(1, Math.round(side * 0.08f)));
+    int right = Math.min(image.getWidth(), box.right() + Math.max(1, Math.round(side * 0.08f)));
+    int bottom = Math.min(image.getHeight(), box.bottom() + Math.max(1, Math.round(side * 0.08f)));
+    int width = Math.max(1, right - left);
+    int height = Math.max(1, bottom - top);
+    boolean[] slashColumns = new boolean[width];
+    boolean[] slashRows = new boolean[height];
+    boolean[] backslashColumns = new boolean[width];
+    boolean[] backslashRows = new boolean[height];
+    int slashInk = 0;
+    int backslashInk = 0;
+    int borderBand = Math.max(2, Math.round(side * 0.18f));
+    int nonBorderInk = 0;
+    int minInkX = right;
+    int minInkY = bottom;
+    int maxInkX = left;
+    int maxInkY = top;
+    for (int y = top; y < bottom; y += 1) {
+      for (int x = left; x < right; x += 1) {
+        if (!isCheckboxMarkInk(image.getRGB(x, y))) {
+          continue;
+        }
+        if (!isOnPrintedCheckboxBorder(x, y, box, borderBand)) {
+          nonBorderInk += 1;
+          minInkX = Math.min(minInkX, x);
+          minInkY = Math.min(minInkY, y);
+          maxInkX = Math.max(maxInkX, x);
+          maxInkY = Math.max(maxInkY, y);
+        }
+        double nx = width <= 1 ? 0 : (x - left) / (double) (width - 1);
+        double ny = height <= 1 ? 0 : (y - top) / (double) (height - 1);
+        if (Math.abs(ny - (1.0 - nx)) <= 0.12) {
+          slashInk += 1;
+          slashColumns[x - left] = true;
+          slashRows[y - top] = true;
+        }
+        if (Math.abs(ny - nx) <= 0.12) {
+          backslashInk += 1;
+          backslashColumns[x - left] = true;
+          backslashRows[y - top] = true;
+        }
+      }
+    }
+    if (nonBorderInk >= Math.max(8, Math.round(side * 0.35f))) {
+      int markWidth = maxInkX - minInkX + 1;
+      int markHeight = maxInkY - minInkY + 1;
+      double localDensity = nonBorderInk / (double) Math.max(1, markWidth * markHeight);
+      if (localDensity > 0.42) {
+        return false;
+      }
+    }
+    int minInk = Math.max(5, Math.round(side * 0.30f));
+    int minColumns = Math.max(4, Math.round(width * 0.42f));
+    int minRows = Math.max(4, Math.round(height * 0.42f));
+    return diagonalStrokePasses(slashInk, slashColumns, slashRows, minInk, minColumns, minRows)
+        || diagonalStrokePasses(backslashInk, backslashColumns, backslashRows, minInk, minColumns, minRows);
+  }
+
+  private boolean diagonalStrokePasses(
+      int ink,
+      boolean[] columns,
+      boolean[] rows,
+      int minInk,
+      int minColumns,
+      int minRows
+  ) {
+    return ink >= minInk
+        && markedColumns(columns) >= minColumns
+        && markedColumns(rows) >= minRows;
+  }
+
   private boolean isOnPrintedCheckboxBorder(int x, int y, CheckboxBox box, int borderBand) {
     boolean insideBox = x >= box.left() && x < box.right() && y >= box.top() && y < box.bottom();
     if (!insideBox) {
@@ -904,6 +1293,171 @@ public class SelectionFieldCropRefinementService {
     boolean nearVerticalBorder = x < box.left() + borderBand || x >= box.right() - borderBand;
     boolean nearHorizontalBorder = y < box.top() + borderBand || y >= box.bottom() - borderBand;
     return nearVerticalBorder || nearHorizontalBorder;
+  }
+
+  private boolean hasExtendedBlueCheckboxMark(BufferedImage image, CheckboxBox box) {
+    int side = Math.max(box.width(), box.height());
+    int left = Math.max(0, box.left() - Math.round(side * 0.35f));
+    int top = Math.max(0, box.top() - Math.round(side * 1.90f));
+    int right = Math.min(image.getWidth(), box.right() + Math.round(side * 1.45f));
+    int bottom = Math.min(image.getHeight(), box.bottom() + Math.round(side * 0.40f));
+    int borderBand = Math.max(2, Math.round(side * 0.18f));
+    int count = 0;
+    int relaxedBlueCount = 0;
+    int relaxedDiagonalInk = 0;
+    int relaxedMinX = right;
+    int relaxedMinY = bottom;
+    int relaxedMaxX = left;
+    int relaxedMaxY = top;
+    int diagonalInk = 0;
+    int lowerLeftInk = 0;
+    int upperRightInk = 0;
+    int minX = right;
+    int minY = bottom;
+    int maxX = left;
+    int maxY = top;
+    for (int y = top; y < bottom; y += 1) {
+      for (int x = left; x < right; x += 1) {
+        int rgb = image.getRGB(x, y);
+        if (isOnPrintedCheckboxBorder(x, y, box, borderBand)) {
+          continue;
+        }
+        if (isRelaxedBlueInk(rgb)) {
+          relaxedBlueCount += 1;
+          relaxedMinX = Math.min(relaxedMinX, x);
+          relaxedMinY = Math.min(relaxedMinY, y);
+          relaxedMaxX = Math.max(relaxedMaxX, x);
+          relaxedMaxY = Math.max(relaxedMaxY, y);
+        }
+        if (!isBlueInk(rgb)) {
+          continue;
+        }
+        count += 1;
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+        double nx = (x - box.left()) / (double) Math.max(1, side);
+        double ny = (y - box.top()) / (double) Math.max(1, side);
+        if (nx <= 0.62 && ny >= 0.28) {
+          lowerLeftInk += 1;
+        }
+        if (nx >= 0.48 && ny <= 0.45) {
+          upperRightInk += 1;
+        }
+        if (Math.abs(ny - (1.0 - nx)) <= 0.30) {
+          diagonalInk += 1;
+        }
+      }
+    }
+    relaxedDiagonalInk = diagonalInkInBoxSpace(relaxedMinX, relaxedMinY, relaxedMaxX, relaxedMaxY, box, side, relaxedBlueCount);
+    if (count < Math.max(10, Math.round(side * 0.40f))) {
+      return hasFaintBlueCheckboxMark(
+          relaxedBlueCount,
+          relaxedDiagonalInk,
+          relaxedMinX,
+          relaxedMinY,
+          relaxedMaxX,
+          relaxedMaxY,
+          box,
+          side
+      );
+    }
+    int markWidth = maxX - minX + 1;
+    int markHeight = maxY - minY + 1;
+    if (markWidth < Math.round(side * 0.55f) || markHeight < Math.round(side * 0.65f)) {
+      return false;
+    }
+    boolean extendsBeyondBox = maxX > box.right() + Math.round(side * 0.10f)
+        || minY < box.top() - Math.round(side * 0.10f);
+    if (!extendsBeyondBox) {
+      return false;
+    }
+    double localDensity = count / (double) Math.max(1, markWidth * markHeight);
+    if (localDensity > 0.34) {
+      return false;
+    }
+    double diagonalRatio = diagonalInk / (double) count;
+    int endpointThreshold = Math.max(3, Math.round(side * 0.12f));
+    return diagonalRatio >= 0.30
+        && lowerLeftInk >= endpointThreshold
+        && upperRightInk >= endpointThreshold;
+  }
+
+  private boolean hasFaintBlueCheckboxMark(
+      int count,
+      int diagonalInk,
+      int minX,
+      int minY,
+      int maxX,
+      int maxY,
+      CheckboxBox box,
+      int side
+  ) {
+    if (count < Math.max(8, Math.round(side * 0.20f))) {
+      return false;
+    }
+    int markWidth = maxX - minX + 1;
+    int markHeight = maxY - minY + 1;
+    if (markWidth < Math.round(side * 0.30f) || markHeight < Math.round(side * 0.30f)) {
+      return false;
+    }
+    boolean nearBox = maxX >= box.left()
+        && minX <= box.right() + Math.round(side * 0.55f)
+        && maxY >= box.top() - Math.round(side * 0.45f)
+        && minY <= box.bottom();
+    if (!nearBox) {
+      return false;
+    }
+    boolean extendsBeyondBox = maxX > box.right() + Math.round(side * 0.05f)
+        || minY < box.top() - Math.round(side * 0.05f);
+    if (!extendsBeyondBox) {
+      return false;
+    }
+    double density = count / (double) Math.max(1, markWidth * markHeight);
+    if (density > 0.45) {
+      return false;
+    }
+    return diagonalInk >= Math.max(3, Math.round(count * 0.25f));
+  }
+
+  private int diagonalInkInBoxSpace(
+      int minX,
+      int minY,
+      int maxX,
+      int maxY,
+      CheckboxBox box,
+      int side,
+      int count
+  ) {
+    if (count <= 0 || maxX < minX || maxY < minY) {
+      return 0;
+    }
+    int diagonal = 0;
+    int width = Math.max(1, maxX - minX + 1);
+    int height = Math.max(1, maxY - minY + 1);
+    for (int y = minY; y <= maxY; y += 1) {
+      for (int x = minX; x <= maxX; x += 1) {
+        double nx = (x - box.left()) / (double) Math.max(1, side);
+        double ny = (y - box.top()) / (double) Math.max(1, side);
+        double compactX = (x - minX) / (double) width;
+        double compactY = (y - minY) / (double) height;
+        if (Math.abs(ny - (1.0 - nx)) <= 0.35 || Math.abs(compactY - (1.0 - compactX)) <= 0.35) {
+          diagonal += 1;
+        }
+      }
+    }
+    return Math.min(diagonal, count);
+  }
+
+  private boolean isRelaxedBlueInk(int rgb) {
+    int red = (rgb >> 16) & 0xff;
+    int green = (rgb >> 8) & 0xff;
+    int blue = rgb & 0xff;
+    return blue >= 80
+        && blue > red + 8
+        && blue >= green
+        && (blue - red) + Math.max(0, blue - green) >= 18;
   }
 
   private boolean hasIntentionalCheckboxMark(BufferedImage image, List<Integer> bbox) {
@@ -1736,7 +2290,12 @@ public class SelectionFieldCropRefinementService {
       String value
   ) {}
 
-  private record ApplicationTypeSelection(ApplicationTypeOption option, List<Integer> bbox) {}
+  private record ApplicationTypeSelection(
+      ApplicationTypeOption option,
+      List<Integer> bbox,
+      double confidence,
+      String evidence
+  ) {}
 
   private record ApplicationTypeTable(
       int left,

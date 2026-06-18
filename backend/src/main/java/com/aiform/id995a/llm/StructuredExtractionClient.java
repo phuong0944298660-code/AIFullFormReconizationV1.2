@@ -27,7 +27,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
-public class StructuredExtractionClient implements StructuredExtractionGateway, FieldCropTranscriptionGateway {
+public class StructuredExtractionClient implements
+    StructuredExtractionGateway,
+    FieldCropTranscriptionGateway,
+    OfficialPageNumberRecognitionGateway,
+    ApplicationTypeSelectionRecognitionGateway {
 
   private static final String DEFAULT_BASE_URL = "https://apie.zhisuaninfo.com/v1";
 
@@ -296,6 +300,232 @@ public class StructuredExtractionClient implements StructuredExtractionGateway, 
       Thread.currentThread().interrupt();
       throw new IOException("LLM crop transcription request interrupted.", exception);
     }
+  }
+
+  @Override
+  public List<OfficialPageNumberRecognitionResult> recognizeOfficialPageNumbers(
+      String filename,
+      com.aiform.id995a.ocr.DocumentTemplate template,
+      List<RenderedOcrPage> pages,
+      LlmModelProfile modelProfile
+  ) throws IOException {
+    if (pages == null || pages.isEmpty()) {
+      return List.of();
+    }
+    LlmModelProfile profile = modelProfile == null ? defaultProfile() : modelProfile;
+    if (blank(profile.apiKey())) {
+      throw new IOException("Missing LLM API key. Set LLM_API_KEY.");
+    }
+    try {
+      ExtractionResponse response = sendExtractionRequest(
+          buildOfficialPageNumberPayload(filename, template, pages, profile),
+          profile
+      );
+      return parseOfficialPageNumberResults(response.data());
+    } catch (InterruptedException exception) {
+      Thread.currentThread().interrupt();
+      throw new IOException("LLM page number recognition request interrupted.", exception);
+    }
+  }
+
+  @Override
+  public List<ApplicationTypeSelectionRecognitionResult> recognizeApplicationTypeSelections(
+      String filename,
+      RenderedOcrPage page,
+      com.aiform.id995a.ocr.DocumentTemplate template,
+      LlmModelProfile modelProfile
+  ) throws IOException {
+    if (page == null) {
+      return List.of();
+    }
+    LlmModelProfile profile = modelProfile == null ? defaultProfile() : modelProfile;
+    if (blank(profile.apiKey())) {
+      throw new IOException("Missing LLM API key. Set LLM_API_KEY.");
+    }
+    try {
+      ExtractionResponse response = sendExtractionRequest(
+          buildApplicationTypeSelectionPayload(filename, page, template, profile),
+          profile
+      );
+      return parseApplicationTypeSelectionResults(response.data());
+    } catch (InterruptedException exception) {
+      Thread.currentThread().interrupt();
+      throw new IOException("LLM application type recognition request interrupted.", exception);
+    }
+  }
+
+  JsonNode buildApplicationTypeSelectionPayload(
+      String filename,
+      RenderedOcrPage page,
+      com.aiform.id995a.ocr.DocumentTemplate template,
+      LlmModelProfile profile
+  ) {
+    ObjectNode root = objectMapper.createObjectNode();
+    root.put("model", blank(profile.model()) ? "Qwen3.6-35B-A3B" : profile.model());
+    root.put("temperature", 0);
+    root.put("max_tokens", 1000);
+    root.put("stream", false);
+    root.put("enable_thinking", profile.enableThinking());
+    ObjectNode chatTemplateOptions = root.putObject("chat_template_kwargs");
+    chatTemplateOptions.put("enable_thinking", profile.enableThinking());
+    ObjectNode responseFormat = root.putObject("response_format");
+    responseFormat.put("type", "json_object");
+
+    ArrayNode messages = root.putArray("messages");
+    ObjectNode systemMessage = messages.addObject();
+    systemMessage.put("role", "system");
+    systemMessage.put("content", "You are an exact checkbox recognition engine for Hong Kong Immigration FDH forms. Return valid JSON only.");
+
+    ObjectNode userMessage = messages.addObject();
+    userMessage.put("role", "user");
+    ArrayNode content = userMessage.putArray("content");
+    ObjectNode text = content.addObject();
+    text.put("type", "text");
+    text.put("text", buildApplicationTypeSelectionPrompt(filename, page, template));
+
+    ObjectNode image = content.addObject();
+    image.put("type", "image_url");
+    ObjectNode imageUrl = image.putObject("image_url");
+    imageUrl.put("url", page.sourceImageDataUrl());
+    imageUrl.put("detail", "high");
+    return root;
+  }
+
+  private String buildApplicationTypeSelectionPrompt(
+      String filename,
+      RenderedOcrPage page,
+      com.aiform.id995a.ocr.DocumentTemplate template
+  ) {
+    StringBuilder builder = new StringBuilder();
+    builder.append("Inspect only section 1, Application Type, on the attached ID 988A page image.\n");
+    builder.append("Locate the whole Application Type table yourself. Do not rely on upload order, OCR text, fixed coordinates, or previous extracted JSON.\n");
+    builder.append("For each of the four printed checkboxes in section 1, decide whether the checkbox is intentionally selected. Count a clear tick, check, cross, or deliberate mark inside/across the box as selected. Treat smudges, erasures, accidental ink, or unrelated strokes as not selected.\n");
+    builder.append("Return every option, including unselected options. Do not infer the selected option from the homepage or from other fields.\n");
+    builder.append("Return JSON only in this schema: {\"options\":[{\"key\":\"entry_to_hong_kong_to_take_up_employment_as_a_domestic_helper_from_abroad\",\"value\":\"entry visa\",\"selected\":true,\"confidence\":0-100,\"evidence\":\"short visual evidence\"}]}.\n");
+    builder.append("Allowed options, in printed order:\n");
+    builder.append("1. key=entry_to_hong_kong_to_take_up_employment_as_a_domestic_helper_from_abroad, value=entry visa, label=Entry to Hong Kong to take up employment as a domestic helper from abroad / 入境签证\n");
+    builder.append("2. key=contract_renewal_entry_visa, value=entry visa, label=Contract renewal with the same employer or change of employer / 入境签证\n");
+    builder.append("3. key=contract_renewal_entry_visa_and_extension, value=entry visa AND Extension of Stay, label=Contract renewal with the same employer or change of employer / 入境签证及延期逗留\n");
+    builder.append("4. key=complete_the_remaining_extended_period_of_the_current_contract, value=Extension of Stay, label=Complete the remaining/extended period of the current contract / 延期逗留\n");
+    builder.append("source_file: ").append(filename == null || filename.isBlank() ? "uploaded-document" : filename).append('\n');
+    builder.append("expected_template_id: ").append(template == null ? "" : template.templateId()).append('\n');
+    builder.append("uploaded_page: ").append(page.page())
+        .append(", image_size=").append(page.imageWidth()).append('x').append(page.imageHeight()).append('\n');
+    return builder.toString();
+  }
+
+  private List<ApplicationTypeSelectionRecognitionResult> parseApplicationTypeSelectionResults(JsonNode data) {
+    JsonNode results = data == null ? null : data.path("options");
+    if (results == null || !results.isArray()) {
+      results = data == null ? null : data.path("selections");
+    }
+    if (results == null || !results.isArray()) {
+      results = data == null ? null : data.path("results");
+    }
+    if (results == null || !results.isArray()) {
+      return List.of();
+    }
+    List<ApplicationTypeSelectionRecognitionResult> values = new ArrayList<>();
+    for (JsonNode item : results) {
+      values.add(new ApplicationTypeSelectionRecognitionResult(
+          firstExistingText(item, "key", "option_key", "optionKey", "field_key", "fieldKey"),
+          firstExistingText(item, "value", "selected_value", "selectedValue"),
+          booleanValue(firstExisting(item, "selected", "checked", "is_selected", "isSelected")),
+          normalizeConfidence(item.path("confidence").asDouble(0)),
+          firstExistingText(item, "evidence", "reason", "visual_evidence")
+      ));
+    }
+    return List.copyOf(values);
+  }
+
+  JsonNode buildOfficialPageNumberPayload(
+      String filename,
+      com.aiform.id995a.ocr.DocumentTemplate template,
+      List<RenderedOcrPage> pages,
+      LlmModelProfile profile
+  ) {
+    ObjectNode root = objectMapper.createObjectNode();
+    root.put("model", blank(profile.model()) ? "Qwen3.6-35B-A3B" : profile.model());
+    root.put("temperature", 0);
+    root.put("max_tokens", 1200);
+    root.put("stream", false);
+    root.put("enable_thinking", profile.enableThinking());
+    ObjectNode chatTemplateOptions = root.putObject("chat_template_kwargs");
+    chatTemplateOptions.put("enable_thinking", profile.enableThinking());
+    ObjectNode responseFormat = root.putObject("response_format");
+    responseFormat.put("type", "json_object");
+
+    ArrayNode messages = root.putArray("messages");
+    ObjectNode systemMessage = messages.addObject();
+    systemMessage.put("role", "system");
+    systemMessage.put("content", "You are an exact official form footer page-number recognition engine. Return valid JSON only.");
+
+    ObjectNode userMessage = messages.addObject();
+    userMessage.put("role", "user");
+    ArrayNode content = userMessage.putArray("content");
+    ObjectNode text = content.addObject();
+    text.put("type", "text");
+    text.put("text", buildOfficialPageNumberPrompt(filename, template, pages));
+
+    for (RenderedOcrPage page : pages) {
+      ObjectNode image = content.addObject();
+      image.put("type", "image_url");
+      ObjectNode imageUrl = image.putObject("image_url");
+      imageUrl.put("url", page.sourceImageDataUrl());
+      imageUrl.put("detail", "high");
+    }
+    return root;
+  }
+
+  private String buildOfficialPageNumberPrompt(
+      String filename,
+      com.aiform.id995a.ocr.DocumentTemplate template,
+      List<RenderedOcrPage> pages
+  ) {
+    String templateId = template == null ? "" : template.templateId();
+    String footerId = template == null ? "" : template.footerId();
+    StringBuilder builder = new StringBuilder();
+    builder.append("Identify the official printed footer page number for each attached page image.\n");
+    builder.append("Use visual reasoning over the whole page image. Locate the official form footer yourself; do not rely on upload order, provided page index, template coordinates, OCR text, or a fixed crop.\n");
+    builder.append("For Hong Kong Immigration FDH forms, the footer normally contains a form id such as ID 988A, ID 988B, or ID 407, a version such as 06/2024 or 11/2016, and a printed page number near the footer area. The page number may appear at the bottom center, near the form footer, or near footer marks.\n");
+    builder.append("Return only the printed official footer page number, not the uploaded page index, not a handwritten date, not a section number, not a barcode number, and not a page count inferred from sequence.\n");
+    builder.append("If the page number is not visible or ambiguous, set page_no to null and confidence below 60.\n");
+    builder.append("Return JSON only in this schema: {\"pages\":[{\"uploaded_page\":1,\"form_id\":\"ID 988B\",\"version\":\"06/2024\",\"page_no\":3,\"confidence\":0-100,\"evidence\":\"short visual evidence\"}]}.\n");
+    builder.append("The images are provided in this exact order; uploaded_page must be copied from the listed uploaded_page value.\n");
+    builder.append("source_file: ").append(filename == null || filename.isBlank() ? "uploaded-document" : filename).append('\n');
+    builder.append("expected_template_id: ").append(templateId).append('\n');
+    builder.append("expected_footer_id: ").append(footerId).append('\n');
+    builder.append("pages:\n");
+    for (RenderedOcrPage page : pages) {
+      builder.append("- uploaded_page=").append(page.page())
+          .append(", image_size=").append(page.imageWidth()).append('x').append(page.imageHeight())
+          .append('\n');
+    }
+    return builder.toString();
+  }
+
+  private List<OfficialPageNumberRecognitionResult> parseOfficialPageNumberResults(JsonNode data) {
+    JsonNode results = data == null ? null : data.path("pages");
+    if (results == null || !results.isArray()) {
+      results = data == null ? null : data.path("results");
+    }
+    if (results == null || !results.isArray()) {
+      return List.of();
+    }
+    List<OfficialPageNumberRecognitionResult> values = new ArrayList<>();
+    for (JsonNode item : results) {
+      int uploadedPage = firstExistingInt(item, 0, "uploaded_page", "uploadedPage", "page", "input_page");
+      int pageNo = firstExistingInt(item, 0, "page_no", "pageNo", "official_page", "officialPage", "official_page_number", "page_number");
+      values.add(new OfficialPageNumberRecognitionResult(
+          uploadedPage,
+          firstExistingText(item, "form_id", "formId", "document_id", "documentId"),
+          firstExistingText(item, "version", "revision", "form_version", "formVersion"),
+          pageNo,
+          normalizeConfidence(item.path("confidence").asDouble(0)),
+          firstExistingText(item, "evidence", "reason", "visual_evidence")
+      ));
+    }
+    return List.copyOf(values);
   }
 
   private JsonNode buildRequestPayload(
@@ -660,6 +890,54 @@ public class StructuredExtractionClient implements StructuredExtractionGateway, 
       }
     }
     return "";
+  }
+
+  private JsonNode firstExisting(JsonNode node, String... keys) {
+    if (node == null || node.isMissingNode() || node.isNull()) {
+      return com.fasterxml.jackson.databind.node.MissingNode.getInstance();
+    }
+    for (String key : keys) {
+      JsonNode value = node.path(key);
+      if (!value.isMissingNode() && !value.isNull()) {
+        return value;
+      }
+    }
+    return com.fasterxml.jackson.databind.node.MissingNode.getInstance();
+  }
+
+  private boolean booleanValue(JsonNode node) {
+    if (node == null || node.isMissingNode() || node.isNull()) {
+      return false;
+    }
+    if (node.isBoolean()) {
+      return node.asBoolean(false);
+    }
+    String text = node.asText("").trim().toLowerCase(Locale.ROOT);
+    return text.equals("true")
+        || text.equals("yes")
+        || text.equals("selected")
+        || text.equals("checked")
+        || text.equals("tick")
+        || text.equals("ticked");
+  }
+
+  private int firstExistingInt(JsonNode node, int fallback, String... keys) {
+    if (node == null || node.isMissingNode() || node.isNull()) {
+      return fallback;
+    }
+    for (String key : keys) {
+      JsonNode value = node.path(key);
+      if (value.isInt() || value.isLong()) {
+        return value.asInt(fallback);
+      }
+      if (value.isTextual()) {
+        String text = value.asText("").trim();
+        if (text.matches("[0-9]+")) {
+          return Integer.parseInt(text);
+        }
+      }
+    }
+    return fallback;
   }
 
   private double normalizeConfidence(double value) {
