@@ -619,6 +619,7 @@ public class StructuredExtractionClient implements
     builder.append("For long email crops, inspect characters immediately before and after @, hyphens, and dots; do not drop narrow visible letters such as l or i before a hyphen or dot.\n");
     builder.append("For employment contract numbers and other serial/reference numbers, distinguish uppercase F from T by visible strokes. A glyph with a vertical left stem plus top and middle horizontal strokes is F, not T. Inspect the full IDN year segment carefully and do not drop year digits such as 2026. Do not assume a prefix from document type or nearby printed text.\n");
     builder.append("Checkbox/option rows: return the selected option text only when there is a clear intentional selection mark such as a tick, check, cross, or filled box. If the checkbox area contains only a scribble, smudge, crossed-out mark, correction mark, erased ink, or ambiguous accidental ink, return text as an empty string, status as blank, and put the rejected mark in excluded_marks.\n");
+    builder.append("For HK identity card no. crops, inspect the entire row area in the crop. If Yes is selected and an ID number is visible after Yes, return both the selected Yes and the exact visible ID number, for example \"Yes Y432189(6)\"; do not return only Yes. If Yes is selected but no ID number is visible, return Yes. If No is selected, return No.\n");
     builder.append("Preserve address number prefixes such as No, NO, no, N0 exactly as visible before digits. A visible NO88 must remain NO88; do not convert it to 168, 188, 88號, or any plausible street number.\n");
     builder.append("For address crops, read every visible applicant-filled address line inside the same field box from top to bottom; do not stop after the first line. Preserve lower lines with estate/building/floor/room text exactly when visible.\n");
     builder.append("For No/NO/no/N0 followed by digits in an address, copy every visible digit after No, including narrow trailing digits such as 3.\n");
@@ -685,17 +686,36 @@ public class StructuredExtractionClient implements
 
   private HttpResponse<String> sendWithTransientTransportRetry(HttpRequest request)
       throws IOException, InterruptedException {
-    int maxAttempts = 2;
+    int maxAttempts = 3;
     for (int attempt = 1; attempt <= maxAttempts; attempt += 1) {
       try {
-        return httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        if (!isTransientHttpFailure(response) || attempt >= maxAttempts) {
+          return response;
+        }
       } catch (IOException exception) {
         if (attempt >= maxAttempts || !isTransientTransportFailure(exception)) {
           throw exception;
         }
       }
+      Thread.sleep(250L * attempt);
     }
     throw new IOException("LLM request failed.");
+  }
+
+  private boolean isTransientHttpFailure(HttpResponse<String> response) {
+    int statusCode = response.statusCode();
+    if (statusCode != 502 && statusCode != 503 && statusCode != 504) {
+      return false;
+    }
+    String body = response.body() == null ? "" : response.body().toLowerCase(Locale.ROOT);
+    return body.contains("upstream_request_failed")
+        || body.contains("upstream request failed")
+        || body.contains("system_cpu_overloaded")
+        || body.contains("temporarily unavailable")
+        || body.contains("bad gateway")
+        || body.contains("service unavailable")
+        || body.isBlank();
   }
 
   private boolean isTransientTransportFailure(IOException exception) {
@@ -750,7 +770,8 @@ public class StructuredExtractionClient implements
     builder.append("- Include source_file and total_pages at the top level.\n");
     builder.append("- Group page content under page_1, page_2, etc.\n");
     builder.append("- Keep page field values as plain applicant-filled values or null. Also include a top-level _confidence object mirroring page/field paths with integer confidence scores from 0 to 100.\n");
-    builder.append("- Also include a top-level _field_evidence object mirroring page/field paths. For each leaf field, include label and value_bbox as normalized {x,y,width,height} coordinates for the filled area on that page image.\n");
+    builder.append("- Also include a top-level _field_evidence object mirroring page/field paths. MANDATORY: for EVERY non-null field value under page_N, you MUST provide a matching _field_evidence.page_N.<exact_field_path> entry with label and value_bbox as normalized {x,y,width,height} coordinates of that filled area on the page image. A non-null field without a value_bbox cannot produce a field screenshot and is treated as an incomplete extraction; do not omit it.\n");
+    builder.append("- Before returning, self-check: for every non-null field value you output under each page_N, verify a matching _field_evidence.page_N.<exact_field_path>.value_bbox exists; if any is missing, add it before finalizing.\n");
     builder.append("- _field_evidence.page_N must be keyed by exact page_N field paths. Never put label/value_bbox directly under _field_evidence.page_N as one whole-page evidence object.\n");
     builder.append("- Example: {\"page_2\":{\"present_address\":\"Flat 7\"},\"_field_evidence\":{\"page_2\":{\"present_address\":{\"label\":\"Present address\",\"value_bbox\":{\"x\":0.20,\"y\":0.10,\"width\":0.55,\"height\":0.09}}}}}.\n");
     builder.append("- For filled handwritten, typed, or signature text, include char_confidences only for ambiguous, low-confidence, smudged, crossed-out, erased, or correction characters: [{char,index,confidence,status,reason,bbox}], where bbox is normalized inside the field value_bbox. Do not list every character when the value is clear; field value_bbox is enough.\n");
@@ -768,7 +789,7 @@ public class StructuredExtractionClient implements
     builder.append("- If the page has no applicant-filled handwriting, typed values, selected checkboxes, signatures, photos, or other applicant input, return {\"page_N\":{\"no_applicant_input\":true}} for that page. In this case _field_evidence is not required for that page.\n");
     builder.append("- Ignore template instructions, empty borders, empty lines, barcodes, page numbers, and smudges/corrections that are not intended field values.\n");
     builder.append("- For checkbox option groups on the same row or in the same question, such as 有/没有, Yes/No, Male/Female, Married/Single, do not create one boolean field per option. Create one field named by the row/question label and set its value to the selected option text, for example {\"pillow\":\"没有\"}, {\"water_supply\":\"有\"}, {\"sex\":\"Female\"}. Use null only when no option in that group is selected.\n");
-    builder.append("- For HK identity card no. Yes/No rows, return the selected option text under hk_identity_card_no when no ID number is written, for example \"No\" when the No checkbox is selected.\n");
+    builder.append("- For HK identity card no. Yes/No rows, inspect the whole row visually. If Yes is selected and a handwritten HK identity card number is visible on the same row, return both the selected Yes and the exact visible ID number under hk_identity_card_no, for example \"Yes Y432189(6)\". Do not stop at \"Yes\". If Yes is selected but no ID number is written, return \"Yes\". If No is selected, return \"No\".\n");
     builder.append("- Use true/false only for a standalone checkbox whose field label itself is the option statement, and name that field with checked/is_selected when the value is a checkbox state.\n");
     builder.append("- For handwritten quantity/count fill-ins embedded in printed labels, such as \"3名成人\", \"1名小孩\", \"0家庭成员需要经常照料\", set the field value to the applicant-written number (3, 1, 0). Do not output 1/0 as a presence flag unless the field itself is a standalone checkbox state.\n");
     builder.append("- For signatures, transcribe the visible handwritten signature text as the field value when readable. Do not return present for signatures. If a signature mark exists but the text cannot be read, use \"illegible_signature\"; otherwise use null.\n");

@@ -57,6 +57,8 @@ class StructuredExtractionClientTest {
     assertThat(payload.toString()).contains("Do not return present for signatures");
     assertThat(payload.toString()).contains("top-level _confidence object");
     assertThat(payload.toString()).contains("top-level _field_evidence object");
+    assertThat(payload.toString()).contains("MANDATORY: for EVERY non-null field value");
+    assertThat(payload.toString()).contains("self-check");
     assertThat(payload.toString()).contains("char_confidences");
     assertThat(payload.toString()).contains("no_applicant_input");
     assertThat(payload.toString()).contains("such as 有/没有");
@@ -79,6 +81,9 @@ class StructuredExtractionClientTest {
     assertThat(payload.toString()).contains("Particulars of household members");
     assertThat(payload.toString()).contains("return every visible cell in that row");
     assertThat(payload.toString()).contains("HK identity card no. Yes/No rows");
+    assertThat(payload.toString()).contains("If Yes is selected and a handwritten HK identity card number is visible on the same row");
+    assertThat(payload.toString()).contains("Do not stop at \\\"Yes\\\"");
+    assertThat(payload.toString()).contains("Yes Y432189(6)");
     assertThat(payload.toString()).contains("禁止纠正、补全、规范化、按常识推断手写值");
   }
 
@@ -194,6 +199,10 @@ class StructuredExtractionClientTest {
     assertThat(requestText).contains("before, between, over, or after normal characters");
     assertThat(requestText).contains("Checkbox/option rows");
     assertThat(requestText).contains("clear intentional selection mark");
+    assertThat(requestText).contains("For HK identity card no. crops");
+    assertThat(requestText).contains("If Yes is selected and an ID number is visible after Yes");
+    assertThat(requestText).contains("do not return only Yes");
+    assertThat(requestText).contains("Yes Y432189(6)");
     assertThat(requestText).contains("Preserve address number prefixes such as No, NO, no, N0 exactly");
     assertThat(requestText).contains("For address crops, read every visible applicant-filled address line");
     assertThat(requestText).contains("do not stop after the first line");
@@ -267,6 +276,27 @@ class StructuredExtractionClientTest {
   void retriesOnceWhenLlmConnectionClosesBeforeResponseHeaders() throws Exception {
     StubHttpClient httpClient = new StubHttpClient(List.of(
         new java.io.IOException("HTTP/1.1 header parser received no bytes"),
+        jsonResponse("{\"page_1\":{\"surname_en\":\"CHAN\"},\"_field_evidence\":{\"page_1\":{\"surname_en\":{\"label\":\"Surname in English\",\"value_bbox\":[10,20,150,40]}}}}")
+    ));
+    StructuredExtractionClient client = new StructuredExtractionClient(
+        new LlmProperties(true, "https://apie.zhisuaninfo.com/v1", "test-key", "Qwen3.6-35B-A3B", 4096, 60, 4),
+        httpClient,
+        objectMapper
+    );
+
+    StructuredExtractionResult result = client.extract(
+        "sample.pdf",
+        List.of(new RenderedOcrPage(1, new byte[] {1, 2, 3}, "data:image/png;base64,abc123", 1000, 1400))
+    );
+
+    assertThat(httpClient.sendCount()).isEqualTo(2);
+    assertThat(result.data().at("/page_1/surname_en").asText()).isEqualTo("CHAN");
+  }
+
+  @Test
+  void retriesOnceWhenLlmGatewayReturnsTransientUpstreamFailure() throws Exception {
+    StubHttpClient httpClient = new StubHttpClient(List.of(
+        httpResponse(502, "{\"error\":{\"message\":\"upstream request failed before billable usage was recorded; reserved funds were released\",\"type\":\"upstream_request_failed\"}}"),
         jsonResponse("{\"page_1\":{\"surname_en\":\"CHAN\"},\"_field_evidence\":{\"page_1\":{\"surname_en\":{\"label\":\"Surname in English\",\"value_bbox\":[10,20,150,40]}}}}")
     ));
     StructuredExtractionClient client = new StructuredExtractionClient(
@@ -594,6 +624,12 @@ class StructuredExtractionClientTest {
     return objectMapper.writeValueAsString(root);
   }
 
+  private StubHttpOutcome httpResponse(int statusCode, String body) {
+    return new StubHttpOutcome(statusCode, body);
+  }
+
+  private record StubHttpOutcome(int statusCode, String body) {}
+
   private static final class StubHttpClient extends HttpClient {
     private final List<?> outcomes;
     private final AtomicInteger sendCount = new AtomicInteger();
@@ -680,8 +716,11 @@ class StructuredExtractionClientTest {
       if (outcome instanceof java.io.IOException exception) {
         throw exception;
       }
+      if (outcome instanceof StubHttpOutcome response) {
+        return (HttpResponse<T>) new StubHttpResponse(request, response.statusCode(), response.body());
+      }
       String body = (String) outcome;
-      return (HttpResponse<T>) new StubHttpResponse(request, body);
+      return (HttpResponse<T>) new StubHttpResponse(request, 200, body);
     }
 
     private String readBody(HttpRequest request) {
@@ -739,10 +778,10 @@ class StructuredExtractionClientTest {
     }
   }
 
-  private record StubHttpResponse(HttpRequest request, String body) implements HttpResponse<String> {
+  private record StubHttpResponse(HttpRequest request, int statusCode, String body) implements HttpResponse<String> {
     @Override
     public int statusCode() {
-      return 200;
+      return statusCode;
     }
 
     @Override
