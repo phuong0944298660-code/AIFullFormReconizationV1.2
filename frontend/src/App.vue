@@ -80,26 +80,29 @@ const filteredFields = computed(() => {
   return rows
 })
 
-const EMPLOYMENT_PART_RE = /^extracted\.employer_(\d+)_(name|address|period_from|period_to)$/
+// 匹配所有工作经验字段（employer_N_*，任意后缀），统一进段、不再单独罗列；
+// 段内按 key 含 name/address/from/to 分类。不同 N 不同 key，不会归一。
+const EMPLOYMENT_FIELD_RE = /^extracted\.employer_(\d+)/
 
 const nonEmploymentFields = computed(() =>
-  filteredFields.value.filter((field) => !EMPLOYMENT_PART_RE.test(field.key))
+  filteredFields.value.filter((field) => !EMPLOYMENT_FIELD_RE.test(field.key))
 )
 
 const employmentPeriods = computed(() => {
   const map = new Map()
   for (const field of filteredFields.value) {
-    const match = field.key.match(EMPLOYMENT_PART_RE)
+    const match = field.key.match(EMPLOYMENT_FIELD_RE)
     if (!match) continue
     const n = Number(match[1])
     if (!map.has(n)) {
       map.set(n, { n, nameField: null, addressField: null, periodFromField: null, periodToField: null })
     }
     const period = map.get(n)
-    if (match[2] === 'name') period.nameField = field
-    else if (match[2] === 'address') period.addressField = field
-    else if (match[2] === 'period_from') period.periodFromField = field
-    else if (match[2] === 'period_to') period.periodToField = field
+    const key = field.key.toLowerCase()
+    if (key.includes('name')) period.nameField = field
+    else if (key.includes('address')) period.addressField = field
+    else if (key.includes('from')) period.periodFromField = field
+    else if (key.includes('to')) period.periodToField = field
   }
   return [...map.values()].sort((a, b) => a.n - b.n)
 })
