@@ -960,7 +960,8 @@ function verificationLineStatus(line) {
             </div>
 
             <div class="field-card-list">
-              <article v-for="field in nonEmploymentFields" :key="field.key" class="standard-field-card" :class="field.status">
+              <template v-for="field in nonEmploymentFields" :key="field.key">
+                <article class="standard-field-card" :class="field.status">
                 <header class="field-card-header">
                   <div>
                     <span>{{ field.category }}</span>
@@ -1034,7 +1035,7 @@ function verificationLineStatus(line) {
                 </div>
               </article>
 
-              <section v-if="employmentPeriods.length" class="employment-period-group">
+              <section v-if="field.key === 'extracted.address_of_current_employer' && employmentPeriods.length" class="employment-period-group">
                 <h3 class="employment-period-title">家庭佣工的工作经验</h3>
                 <article v-for="period in employmentPeriods" :key="period.n" class="employment-period-card">
                   <div class="employment-period-header">雇主{{ period.n }}</div>
@@ -1054,6 +1055,7 @@ function verificationLineStatus(line) {
                   </dl>
                 </article>
               </section>
+              </template>
             </div>
           </section>
         </section>

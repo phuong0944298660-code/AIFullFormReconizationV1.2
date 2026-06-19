@@ -840,7 +840,11 @@ public class FdhReviewAssembler {
       return true;
     }
     // 姓名/雇主名：标准化字段为拼接值，三元组无法命中原始 surname/given/name，按语义跳过。
-    return matchesAnyGroup(value.searchText(), NAME_TOKEN_GROUPS);
+    // 但工作经验的 employer_N_name（过往雇主名）不是申请人姓名，需保留展示。
+    if (matchesAnyGroup(value.searchText(), NAME_TOKEN_GROUPS)) {
+      return !normalizeTokens(value.searchText()).matches(".*employer\\s+\\d+.*");
+    }
+    return false;
   }
 
   private String supplementalFieldKey(ExtractedValue value) {
