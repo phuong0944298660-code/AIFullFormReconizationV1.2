@@ -80,6 +80,35 @@ const filteredFields = computed(() => {
   return rows
 })
 
+const EMPLOYMENT_PART_RE = /^extracted\.employer_(\d+)_(name|address|period_from|period_to)$/
+
+const nonEmploymentFields = computed(() =>
+  filteredFields.value.filter((field) => !EMPLOYMENT_PART_RE.test(field.key))
+)
+
+const employmentPeriods = computed(() => {
+  const map = new Map()
+  for (const field of filteredFields.value) {
+    const match = field.key.match(EMPLOYMENT_PART_RE)
+    if (!match) continue
+    const n = Number(match[1])
+    if (!map.has(n)) {
+      map.set(n, { n, nameField: null, addressField: null, periodFromField: null, periodToField: null })
+    }
+    const period = map.get(n)
+    if (match[2] === 'name') period.nameField = field
+    else if (match[2] === 'address') period.addressField = field
+    else if (match[2] === 'period_from') period.periodFromField = field
+    else if (match[2] === 'period_to') period.periodToField = field
+  }
+  return [...map.values()].sort((a, b) => a.n - b.n)
+})
+
+function employmentValue(field) {
+  if (!field) return '未识别'
+  return field.suggestedValue || field.normalizedValue || '未识别'
+}
+
 const blockingFindings = computed(() => {
   if (!reviewResult.value) return []
   const materialFindings = reviewResult.value.materials
@@ -931,7 +960,7 @@ function verificationLineStatus(line) {
             </div>
 
             <div class="field-card-list">
-              <article v-for="field in filteredFields" :key="field.key" class="standard-field-card" :class="field.status">
+              <article v-for="field in nonEmploymentFields" :key="field.key" class="standard-field-card" :class="field.status">
                 <header class="field-card-header">
                   <div>
                     <span>{{ field.category }}</span>
@@ -1004,6 +1033,27 @@ function verificationLineStatus(line) {
                   </div>
                 </div>
               </article>
+
+              <section v-if="employmentPeriods.length" class="employment-period-group">
+                <h3 class="employment-period-title">家庭佣工的工作经验</h3>
+                <article v-for="period in employmentPeriods" :key="period.n" class="employment-period-card">
+                  <div class="employment-period-header">雇主{{ period.n }}</div>
+                  <dl class="employment-period-body">
+                    <div v-if="period.nameField" class="employment-period-row">
+                      <dt>雇主{{ period.n }}名称</dt>
+                      <dd>{{ employmentValue(period.nameField) }}</dd>
+                    </div>
+                    <div v-if="period.addressField" class="employment-period-row">
+                      <dt>地址</dt>
+                      <dd>{{ employmentValue(period.addressField) }}</dd>
+                    </div>
+                    <div v-if="period.periodFromField || period.periodToField" class="employment-period-row">
+                      <dt>任职日期</dt>
+                      <dd>由 {{ employmentValue(period.periodFromField) }} 至 {{ employmentValue(period.periodToField) }}</dd>
+                    </div>
+                  </dl>
+                </article>
+              </section>
             </div>
           </section>
         </section>

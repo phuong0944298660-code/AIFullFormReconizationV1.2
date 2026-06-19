@@ -1442,6 +1442,47 @@ svg {
   color: #064e57;
 }
 
+.employment-period-group {
+  margin-top: 1rem;
+}
+.employment-period-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+  color: #1f2937;
+}
+.employment-period-card {
+  border: 1px solid #d0d7de;
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+  background: #f9fafb;
+}
+.employment-period-header {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: #1f2937;
+}
+.employment-period-body {
+  margin: 0;
+}
+.employment-period-row {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.2rem 0;
+  align-items: baseline;
+}
+.employment-period-row dt {
+  color: #6b7280;
+  min-width: 6rem;
+  font-weight: 500;
+}
+.employment-period-row dd {
+  margin: 0;
+  font-weight: 600;
+  color: #111827;
+}
+
 .standard-field-card {
   border: 1px solid var(--line);
   border-radius: 8px;
