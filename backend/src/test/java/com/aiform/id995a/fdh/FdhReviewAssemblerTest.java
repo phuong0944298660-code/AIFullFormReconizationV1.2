@@ -258,6 +258,42 @@ class FdhReviewAssemblerTest {
   }
 
   @Test
+  void flattenJsonDuplicateIsDroppedWhenStructuredFieldAlreadyCoversIt() throws Exception {
+    // structuredFields 路：带真实截图、原始 label（Place of birth，大写 P）。
+    StructuredFieldDetail placeOfBirth = new StructuredFieldDetail(
+        1, "place_of_birth", "Place of birth", text("Kampong Cham"), "Kampong Cham", 95,
+        List.of(10, 20, 100, 40), "data:image/jpeg;base64,SNAPSHOT", "", 0, "not_run", List.of()
+    );
+    OcrPage page = new OcrPage(
+        1, "data:image/png;base64,AAA=", 100, 100, "", List.of(), List.of(), List.of(), List.of(placeOfBirth)
+    );
+    // structuredData JSON 里同字段同值：flattenJson 路本会再造一条无截图、小写 label 的副本。
+    OcrDemoResponse response = new OcrDemoResponse(
+        "ID988A.pdf", "test", 1, List.of(page), List.of(),
+        new EngineStatus("test", false, List.of()),
+        objectMapper.readTree("{\"page_1\":{\"place_of_birth\":\"Kampong Cham\"}}"),
+        ""
+    );
+    FdhReviewDocument document = new FdhReviewDocument(
+        "ID988A.pdf", "application/pdf", 1,
+        new DocumentTemplate("id988a_2024_06", "ID 988A (06/2024)", 5, 98, "test", "id988a_2024_06"),
+        response,
+        "id988a"
+    );
+
+    FdhReviewResult result = assembler.assemble("entry_visa", List.of(document));
+
+    FdhReviewResult.StandardField placeOfBirthField = result.fields().stream()
+        .filter(field -> field.key().equals("extracted.place_of_birth"))
+        .findFirst()
+        .orElseThrow();
+    // flattenJson 副本被去掉：只剩 structuredFields 路一条证据——带截图、原始 label。
+    assertThat(placeOfBirthField.sources()).hasSize(1);
+    assertThat(placeOfBirthField.sources().get(0).snapshotDataUrl()).isEqualTo("data:image/jpeg;base64,SNAPSHOT");
+    assertThat(placeOfBirthField.sources().get(0).fieldName()).isEqualTo("Place of birth");
+  }
+
+  @Test
   void contractNumberMismatchAcrossCoreFormsFails() throws Exception {
     FdhReviewResult result = assembler.assemble(
         "entry_visa",

@@ -1093,6 +1093,9 @@ public class FdhReviewAssembler {
     List<ExtractedValue> values = new ArrayList<>();
     OcrDemoResponse response = document.ocrResult();
     if (response != null) {
+      // structuredFields 路（带 LLM bbox + 真实截图、原始 label）已覆盖的字段：记录归一化键，
+      // 让 flattenJson 跳过这些字段的「无截图副本」，避免同一字段展示两条证据。
+      Set<String> coveredByStructuredFields = new LinkedHashSet<>();
       for (OcrPage page : response.pages()) {
         for (StructuredFieldDetail detail : page.structuredFields()) {
           if (detail.displayValue() != null && !detail.displayValue().isBlank()) {
@@ -1104,34 +1107,44 @@ public class FdhReviewAssembler {
                 detail.confidence(),
                 detail.snapshotDataUrl()
             ));
+            coveredByStructuredFields.add(fieldDedupKey(detail.label(), detail.displayValue()));
           }
         }
       }
-      flattenJson(response.structuredData(), "", values);
+      flattenJson(response.structuredData(), "", values, coveredByStructuredFields);
     }
     return values;
   }
 
-  private void flattenJson(JsonNode node, String path, List<ExtractedValue> values) {
+  private String fieldDedupKey(String label, String value) {
+    return normalizeFieldName(label) + "|" + normalizeTokens(value);
+  }
+
+  private void flattenJson(JsonNode node, String path, List<ExtractedValue> values, Set<String> coveredByStructuredFields) {
     if (node == null || node.isMissingNode() || node.isNull()) {
       return;
     }
     if (node.isObject()) {
-      node.fields().forEachRemaining(entry -> flattenJson(entry.getValue(), append(path, entry.getKey()), values));
+      node.fields().forEachRemaining(entry -> flattenJson(entry.getValue(), append(path, entry.getKey()), values, coveredByStructuredFields));
       return;
     }
     if (node.isArray()) {
       int index = 0;
       for (JsonNode child : node) {
-        flattenJson(child, append(path, String.valueOf(index)), values);
+        flattenJson(child, append(path, String.valueOf(index)), values, coveredByStructuredFields);
         index += 1;
       }
       return;
     }
     String value = node.asText("");
-    if (!value.isBlank()) {
-      values.add(new ExtractedValue(path, fieldNameFromPath(path), sectionFromPath(path), value, 78, ""));
+    if (value.isBlank()) {
+      return;
     }
+    // structuredFields 路已覆盖该字段（带截图、原始 label），跳过此处的无截图副本，保持页面简洁。
+    if (coveredByStructuredFields.contains(fieldDedupKey(fieldNameFromPath(path), value))) {
+      return;
+    }
+    values.add(new ExtractedValue(path, fieldNameFromPath(path), sectionFromPath(path), value, 78, ""));
   }
 
   private String append(String path, String key) {
