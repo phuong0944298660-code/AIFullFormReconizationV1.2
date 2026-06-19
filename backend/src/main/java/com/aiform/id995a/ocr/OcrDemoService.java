@@ -1,8 +1,11 @@
 package com.aiform.id995a.ocr;
 
 import com.aiform.id995a.llm.ExtractionProgressListener;
+import com.aiform.id995a.llm.FieldRegionLocationGateway;
 import com.aiform.id995a.llm.LlmModelProfile;
 import com.aiform.id995a.llm.LlmModelRegistry;
+import com.aiform.id995a.llm.MissingFieldRegion;
+import com.aiform.id995a.llm.NormalizedBbox;
 import com.aiform.id995a.llm.StructuredExtractionGateway;
 import com.aiform.id995a.llm.StructuredExtractionResult;
 import com.aiform.id995a.review.EngineStatus;
@@ -29,6 +32,7 @@ public class OcrDemoService {
   private final TemplateDetectionService templateDetectionService;
   private final TemplateClassificationLogService templateClassificationLogService;
   private final LlmModelRegistry llmModelRegistry;
+  private final FieldRegionLocationGateway fieldRegionLocationGateway;
 
   public OcrDemoService(
       BaiduOcrPageRenderer pageRenderer,
@@ -41,7 +45,8 @@ public class OcrDemoService {
       SmudgedFieldValueFilterService smudgedFieldValueFilterService,
       TemplateDetectionService templateDetectionService,
       TemplateClassificationLogService templateClassificationLogService,
-      LlmModelRegistry llmModelRegistry
+      LlmModelRegistry llmModelRegistry,
+      FieldRegionLocationGateway fieldRegionLocationGateway
   ) {
     this.pageRenderer = pageRenderer;
     this.structuredExtractionGateway = structuredExtractionGateway;
@@ -54,6 +59,7 @@ public class OcrDemoService {
     this.templateDetectionService = templateDetectionService;
     this.templateClassificationLogService = templateClassificationLogService;
     this.llmModelRegistry = llmModelRegistry;
+    this.fieldRegionLocationGateway = fieldRegionLocationGateway;
   }
 
   public OcrDemoResponse recognize(String filename, String contentType, byte[] fileBytes) throws IOException {
@@ -185,6 +191,19 @@ public class OcrDemoService {
     templateClassificationLogService.record(normalizedFilename, resolvedTemplate);
     Map<Integer, List<StructuredFieldDetail>> fieldDetailsByPage =
         structuredFieldEvidenceService.buildFieldDetails(finalStructuredData, safePages);
+    if (!refineFieldCrops) {
+      FieldBboxRefill refill = refillMissingFieldBboxes(
+          normalizedFilename, finalStructuredData, fieldDetailsByPage, safePages, modelProfile, listener
+      );
+      if (refill.refilled() > 0) {
+        finalStructuredData = refill.structuredData();
+        Map<Integer, List<StructuredFieldDetail>> rebuilt =
+            structuredFieldEvidenceService.buildFieldDetails(finalStructuredData, safePages);
+        fieldDetailsByPage.clear();
+        fieldDetailsByPage.putAll(rebuilt);
+        statusMessages.add("Located " + refill.refilled() + " missing field region(s) with the multimodal LLM to recover field snapshots.");
+      }
+    }
     List<OcrPage> responsePages = safePages.stream()
         .map(page -> new OcrPage(
             page.page(),
@@ -228,6 +247,80 @@ public class OcrDemoService {
     metadata.put("structure_hash", template.structureHash());
     return root;
   }
+
+  /**
+   * FDH 快速路径：对「有值但缺 value_bbox（无法裁剪截图）」的字段，调多模态 LLM 视觉定位补 bbox，
+   * 写回 _field_evidence 后由调用方重新 buildFieldDetails 裁出真实 snapshot。不使用固定坐标。
+   */
+  private FieldBboxRefill refillMissingFieldBboxes(
+      String filename,
+      JsonNode structuredData,
+      Map<Integer, List<StructuredFieldDetail>> detailsByPage,
+      List<RenderedOcrPage> pages,
+      LlmModelProfile profile,
+      ExtractionProgressListener listener
+  ) {
+    List<MissingFieldRegion> missing = new ArrayList<>();
+    for (Map.Entry<Integer, List<StructuredFieldDetail>> entry : detailsByPage.entrySet()) {
+      for (StructuredFieldDetail detail : entry.getValue()) {
+        if (detail.displayValue() == null || detail.displayValue().isBlank()) {
+          continue;
+        }
+        if (detail.bbox() != null && !detail.bbox().isEmpty()) {
+          continue;
+        }
+        missing.add(new MissingFieldRegion(detail.page(), detail.path(), detail.label(), detail.displayValue()));
+      }
+    }
+    if (missing.isEmpty()) {
+      return new FieldBboxRefill(structuredData, 0);
+    }
+    listener.postProcessingStep("field_bbox_location", "Locating missing field regions with LLM.", 95);
+    Map<String, NormalizedBbox> located;
+    try {
+      located = fieldRegionLocationGateway.locateMissingFieldBboxes(filename, pages, missing, profile);
+    } catch (IOException exception) {
+      return new FieldBboxRefill(structuredData, 0);
+    }
+    if (located == null || located.isEmpty()) {
+      return new FieldBboxRefill(structuredData, 0);
+    }
+    ObjectNode mutable = structuredData != null && structuredData.isObject()
+        ? structuredData.deepCopy()
+        : JsonNodeFactory.instance.objectNode();
+    ObjectNode evidenceRoot = ensureChild(mutable, "_field_evidence");
+    int refilled = 0;
+    for (MissingFieldRegion field : missing) {
+      NormalizedBbox bbox = located.get(field.page() + "|" + field.path());
+      if (bbox == null) {
+        continue;
+      }
+      ObjectNode pageEvidence = ensureChild(evidenceRoot, "page_" + field.page());
+      ObjectNode fieldEvidence = ensureChild(pageEvidence, field.path());
+      if (!fieldEvidence.has("label") && field.label() != null && !field.label().isBlank()) {
+        fieldEvidence.put("label", field.label());
+      }
+      ObjectNode valueBbox = fieldEvidence.putObject("value_bbox");
+      valueBbox.put("x", bbox.x());
+      valueBbox.put("y", bbox.y());
+      valueBbox.put("width", bbox.width());
+      valueBbox.put("height", bbox.height());
+      refilled += 1;
+    }
+    return new FieldBboxRefill(mutable, refilled);
+  }
+
+  private ObjectNode ensureChild(ObjectNode parent, String key) {
+    JsonNode existing = parent.get(key);
+    if (existing instanceof ObjectNode objectNode) {
+      return objectNode;
+    }
+    ObjectNode child = JsonNodeFactory.instance.objectNode();
+    parent.set(key, child);
+    return child;
+  }
+
+  private record FieldBboxRefill(JsonNode structuredData, int refilled) {}
 
   String normalizeFilename(String filename) {
     return filename == null || filename.isBlank() ? "uploaded-document" : filename;

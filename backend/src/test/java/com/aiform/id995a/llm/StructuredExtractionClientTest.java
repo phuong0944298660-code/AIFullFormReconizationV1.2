@@ -89,6 +89,33 @@ class StructuredExtractionClientTest {
   }
 
   @Test
+  void locatesMissingFieldBboxesViaVisualReasoning() throws Exception {
+    StubHttpClient httpClient = new StubHttpClient(jsonResponse("""
+        {"fields":[{"path":"name_of_current_employer","value_bbox":{"x":0.32,"y":0.39,"width":0.55,"height":0.03}}]}
+        """));
+    StructuredExtractionClient client = new StructuredExtractionClient(
+        new LlmProperties(true, "https://apie.zhisuaninfo.com/v1", "test-key", "Qwen3.6-35B-A3B", 4096, 60, 4),
+        httpClient,
+        objectMapper
+    );
+
+    Map<String, NormalizedBbox> located = client.locateMissingFieldBboxes(
+        "sample.pdf",
+        List.of(new RenderedOcrPage(1, new byte[] {1, 2, 3}, "data:image/png;base64,abc123", 1000, 1400)),
+        List.of(new MissingFieldRegion(1, "name_of_current_employer", "Name of current employer", "Mrs. Karen WALKER")),
+        null
+    );
+
+    assertThat(located).hasSize(1);
+    NormalizedBbox bbox = located.get("1|name_of_current_employer");
+    assertThat(bbox).isNotNull();
+    assertThat(bbox.x()).isEqualTo(0.32);
+    assertThat(bbox.y()).isEqualTo(0.39);
+    assertThat(bbox.width()).isEqualTo(0.55);
+    assertThat(bbox.height()).isEqualTo(0.03);
+  }
+
+  @Test
   void parsesJsonOnlyModelResponseIntoStructuredData() throws Exception {
     StructuredExtractionClient client = new StructuredExtractionClient(
         new LlmProperties(true, "https://apie.zhisuaninfo.com/v1", "test-key", "Qwen3.6-35B-A3B", 4096, 60, 4),

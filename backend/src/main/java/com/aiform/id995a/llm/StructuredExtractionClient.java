@@ -17,8 +17,10 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -31,7 +33,8 @@ public class StructuredExtractionClient implements
     StructuredExtractionGateway,
     FieldCropTranscriptionGateway,
     OfficialPageNumberRecognitionGateway,
-    ApplicationTypeSelectionRecognitionGateway {
+    ApplicationTypeSelectionRecognitionGateway,
+    FieldRegionLocationGateway {
 
   private static final String DEFAULT_BASE_URL = "https://apie.zhisuaninfo.com/v1";
 
@@ -300,6 +303,146 @@ public class StructuredExtractionClient implements
       Thread.currentThread().interrupt();
       throw new IOException("LLM crop transcription request interrupted.", exception);
     }
+  }
+
+  @Override
+  public Map<String, NormalizedBbox> locateMissingFieldBboxes(
+      String filename,
+      List<RenderedOcrPage> pages,
+      List<MissingFieldRegion> missingFields,
+      LlmModelProfile modelProfile
+  ) throws IOException {
+    Map<String, NormalizedBbox> located = new LinkedHashMap<>();
+    if (missingFields == null || missingFields.isEmpty()) {
+      return located;
+    }
+    LlmModelProfile profile = modelProfile == null ? defaultProfile() : modelProfile;
+    if (blank(profile.apiKey())) {
+      throw new IOException("Missing LLM API key. Set LLM_API_KEY.");
+    }
+    Map<Integer, RenderedOcrPage> pageByNo = new LinkedHashMap<>();
+    for (RenderedOcrPage page : pages == null ? List.<RenderedOcrPage>of() : pages) {
+      pageByNo.put(page.page(), page);
+    }
+    Map<Integer, List<MissingFieldRegion>> byPage = new LinkedHashMap<>();
+    for (MissingFieldRegion field : missingFields) {
+      byPage.computeIfAbsent(field.page(), ignored -> new ArrayList<>()).add(field);
+    }
+    for (Map.Entry<Integer, List<MissingFieldRegion>> entry : byPage.entrySet()) {
+      RenderedOcrPage page = pageByNo.get(entry.getKey());
+      if (page == null) {
+        continue;
+      }
+      try {
+        ExtractionResponse response = sendExtractionRequest(
+            buildFieldRegionLocationPayload(filename, page, entry.getValue(), profile),
+            profile
+        );
+        located.putAll(parseFieldRegionLocations(response.data(), entry.getKey(), entry.getValue()));
+      } catch (InterruptedException exception) {
+        Thread.currentThread().interrupt();
+        throw new IOException("LLM field region location request interrupted.", exception);
+      }
+    }
+    return located;
+  }
+
+  private JsonNode buildFieldRegionLocationPayload(
+      String filename,
+      RenderedOcrPage page,
+      List<MissingFieldRegion> fields,
+      LlmModelProfile profile
+  ) {
+    ObjectNode root = objectMapper.createObjectNode();
+    root.put("model", blank(profile.model()) ? "Qwen3.6-35B-A3B" : profile.model());
+    root.put("temperature", 0);
+    root.put("max_tokens", Math.max(1024, Math.min(properties.maxTokens(), 4096)));
+    root.put("stream", false);
+    root.put("enable_thinking", profile.enableThinking());
+    ObjectNode chatTemplateOptions = root.putObject("chat_template_kwargs");
+    chatTemplateOptions.put("enable_thinking", profile.enableThinking());
+    ObjectNode responseFormat = root.putObject("response_format");
+    responseFormat.put("type", "json_object");
+
+    ArrayNode messages = root.putArray("messages");
+    ObjectNode systemMessage = messages.addObject();
+    systemMessage.put("role", "system");
+    systemMessage.put("content", "You are a precise field-location engine. Locate recognized values on the page image and return their bounding boxes. Return valid JSON only.");
+
+    ObjectNode userMessage = messages.addObject();
+    userMessage.put("role", "user");
+    ArrayNode content = userMessage.putArray("content");
+    ObjectNode text = content.addObject();
+    text.put("type", "text");
+    text.put("text", buildFieldRegionLocationPrompt(filename, page, fields));
+
+    ObjectNode image = content.addObject();
+    image.put("type", "image_url");
+    ObjectNode imageUrl = image.putObject("image_url");
+    imageUrl.put("url", page.sourceImageDataUrl());
+    imageUrl.put("detail", "high");
+
+    return root;
+  }
+
+  private String buildFieldRegionLocationPrompt(String filename, RenderedOcrPage page, List<MissingFieldRegion> fields) {
+    StringBuilder builder = new StringBuilder();
+    builder.append("This is page_").append(page.page()).append(" of a form. For each field listed below, the value has already been recognized. Locate WHERE that value is written on this page image by visual reasoning, and return the normalized bounding box of the filled value area.\n");
+    builder.append("Do NOT use fixed coordinates, template layouts, ROI, or OCR output. Find the value text by visually scanning the page.\n");
+    builder.append("Coordinates are normalized to [0,1] relative to the page image: {x, y, width, height}, where (x, y) is the top-left corner and (width, height) is the size of the filled value area.\n");
+    builder.append("Return JSON only in this schema: {\"fields\":[{\"path\":\"<exact_path>\",\"value_bbox\":{\"x\":0.32,\"y\":0.39,\"width\":0.55,\"height\":0.03}}]}.\n");
+    builder.append("Only include a field if you can visually locate its value on the page. If a value cannot be found, omit that field.\n");
+    builder.append("source_file: ").append(filename == null || filename.isBlank() ? "uploaded-document" : filename).append('\n');
+    builder.append("Fields to locate (page_").append(page.page()).append("):\n");
+    for (int index = 0; index < fields.size(); index += 1) {
+      MissingFieldRegion field = fields.get(index);
+      builder.append(index + 1)
+          .append(". path=").append(field.path())
+          .append(", label=").append(field.label())
+          .append(", value=").append(field.value())
+          .append('\n');
+    }
+    return builder.toString();
+  }
+
+  private Map<String, NormalizedBbox> parseFieldRegionLocations(JsonNode data, int page, List<MissingFieldRegion> fields) {
+    Map<String, NormalizedBbox> located = new LinkedHashMap<>();
+    if (data == null) {
+      return located;
+    }
+    JsonNode fieldsNode = data.path("fields");
+    if (!fieldsNode.isArray()) {
+      return located;
+    }
+    for (JsonNode item : fieldsNode) {
+      String path = item.path("path").asText("");
+      if (path.isBlank()) {
+        continue;
+      }
+      boolean valid = false;
+      for (MissingFieldRegion field : fields) {
+        if (field.path().equals(path)) {
+          valid = true;
+          break;
+        }
+      }
+      if (!valid) {
+        continue;
+      }
+      JsonNode bbox = item.path("value_bbox");
+      if (bbox.isMissingNode() || bbox.isNull()) {
+        continue;
+      }
+      double x = bbox.path("x").asDouble(-1);
+      double y = bbox.path("y").asDouble(-1);
+      double width = bbox.path("width").asDouble(-1);
+      double height = bbox.path("height").asDouble(-1);
+      if (x < 0 || y < 0 || width <= 0 || height <= 0) {
+        continue;
+      }
+      located.put(page + "|" + path, new NormalizedBbox(x, y, width, height));
+    }
+    return located;
   }
 
   @Override
