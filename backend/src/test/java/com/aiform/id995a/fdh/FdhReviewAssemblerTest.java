@@ -294,6 +294,44 @@ class FdhReviewAssemblerTest {
   }
 
   @Test
+  void hkIdentityCardNoYesWithNumberPasses() throws Exception {
+    FdhReviewResult result = assembler.assemble(
+        "entry_visa",
+        List.of(id988aWithHkIdentity("Y432189(6)"), id988b(), id407("SITI NURHALIZA", "HK$5,100", "HK$1,236"))
+    );
+
+    FdhReviewResult.StandardField hkId = field(result, "applicant.hk_identity_card_no");
+    assertThat(hkId.status()).isEqualTo("pass");
+    assertThat(hkId.normalizedValue()).contains("Y432189");
+    assertThat(hkId.blocking()).isTrue();
+  }
+
+  @Test
+  void hkIdentityCardNoNoOutputsMeiYouAndPasses() throws Exception {
+    FdhReviewResult result = assembler.assemble(
+        "entry_visa",
+        List.of(id988aWithHkIdentity("没有"), id988b(), id407("SITI NURHALIZA", "HK$5,100", "HK$1,236"))
+    );
+
+    FdhReviewResult.StandardField hkId = field(result, "applicant.hk_identity_card_no");
+    assertThat(hkId.status()).isEqualTo("pass");
+    assertThat(hkId.normalizedValue()).isEqualTo("没有");
+  }
+
+  @Test
+  void hkIdentityCardNoYesWithoutNumberFails() throws Exception {
+    FdhReviewResult result = assembler.assemble(
+        "entry_visa",
+        List.of(id988aWithHkIdentity("未填写"), id988b(), id407("SITI NURHALIZA", "HK$5,100", "HK$1,236"))
+    );
+
+    FdhReviewResult.StandardField hkId = field(result, "applicant.hk_identity_card_no");
+    assertThat(hkId.status()).isEqualTo("fail");
+    assertThat(hkId.blocking()).isTrue();
+    assertThat(result.decision()).isEqualTo("FAIL");
+  }
+
+  @Test
   void contractNumberMismatchAcrossCoreFormsFails() throws Exception {
     FdhReviewResult result = assembler.assemble(
         "entry_visa",
@@ -434,6 +472,35 @@ class FdhReviewAssemblerTest {
 
   private FdhReviewDocument id988a() throws Exception {
     return id988aWithHelperName("NURHALIZA", "SITI");
+  }
+
+  private FdhReviewDocument id988aWithHkIdentity(String hkIdentity) throws Exception {
+    return document(
+        "ID988A.pdf",
+        "id988a",
+        5,
+        "id988a_2024_06",
+        "ID 988A (06/2024)",
+        """
+            {
+              "page_1": {
+                "application_type": "Entry visa - Domestic helper from abroad",
+                "part_2_personal_particulars": {
+                  "surname_en": "NURHALIZA",
+                  "given_names_en": "SITI",
+                  "travel_document_no": "C8923745",
+                  "date_of_birth": "27/11/1992",
+                  "nationality": "Indonesian",
+                  "signature_of_applicant": "signature detected",
+                  "hk_identity_card_no": "%s"
+                }
+              },
+              "page_4": {
+                "employment_contract_no": "%s"
+              }
+            }
+            """.formatted(hkIdentity, CONTRACT_NO)
+    );
   }
 
   private FdhReviewDocument id988aWithExtraFields() throws Exception {

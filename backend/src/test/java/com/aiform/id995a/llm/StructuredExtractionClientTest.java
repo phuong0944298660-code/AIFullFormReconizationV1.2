@@ -81,9 +81,10 @@ class StructuredExtractionClientTest {
     assertThat(payload.toString()).contains("Particulars of household members");
     assertThat(payload.toString()).contains("return every visible cell in that row");
     assertThat(payload.toString()).contains("HK identity card no. Yes/No rows");
-    assertThat(payload.toString()).contains("If Yes is selected and a handwritten HK identity card number is visible on the same row");
-    assertThat(payload.toString()).contains("Do not stop at \\\"Yes\\\"");
-    assertThat(payload.toString()).contains("Yes Y432189(6)");
+    assertThat(payload.toString()).contains("return ONLY the exact visible ID number");
+    assertThat(payload.toString()).contains("未填写");
+    assertThat(payload.toString()).contains("没有");
+    assertThat(payload.toString()).contains("Y432189(6)");
     assertThat(payload.toString()).contains("禁止纠正、补全、规范化、按常识推断手写值");
   }
 
@@ -200,9 +201,9 @@ class StructuredExtractionClientTest {
     assertThat(requestText).contains("Checkbox/option rows");
     assertThat(requestText).contains("clear intentional selection mark");
     assertThat(requestText).contains("For HK identity card no. crops");
-    assertThat(requestText).contains("If Yes is selected and an ID number is visible after Yes");
-    assertThat(requestText).contains("do not return only Yes");
-    assertThat(requestText).contains("Yes Y432189(6)");
+    assertThat(requestText).contains("return ONLY the exact visible ID number");
+    assertThat(requestText).contains("未填写");
+    assertThat(requestText).contains("没有");
     assertThat(requestText).contains("Preserve address number prefixes such as No, NO, no, N0 exactly");
     assertThat(requestText).contains("For address crops, read every visible applicant-filled address line");
     assertThat(requestText).contains("do not stop after the first line");

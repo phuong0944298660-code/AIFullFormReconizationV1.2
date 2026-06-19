@@ -378,6 +378,7 @@ public class FdhReviewAssembler {
         minimumFoodAllowanceHkd,
         "如雇主不免费提供膳食，膳食津贴不得低于当前政府公布的最低金额。"
     ));
+    fields.add(hkIdentityCardNoField(id988a, id988b, id407));
     fields.add(documentFooterField(documents));
     Set<String> consumedKeys = collectConsumedFieldKeys(fields);
     fields.addAll(extractedMaterialFields(documents, consumedKeys));
@@ -511,6 +512,54 @@ public class FdhReviewAssembler {
         sources,
         rule
     );
+  }
+
+  private FdhReviewResult.StandardField hkIdentityCardNoField(
+      List<FdhReviewDocument> id988a,
+      List<FdhReviewDocument> id988b,
+      List<FdhReviewDocument> id407
+  ) {
+    List<List<String>> tokenGroups = List.of(
+        group("hk", "identity", "card", "no"),
+        group("hong", "kong", "identity", "card", "no"),
+        group("hk", "id", "card", "no")
+    );
+    List<FdhReviewResult.FieldSource> sources = sources(List.of(
+        evidence(id988a, "ID 988A", "HK identity card no.", tokenGroups),
+        evidence(id988b, "ID 988B", "HK identity card no.", tokenGroups),
+        evidence(id407, "ID 407", "HK identity card no.", tokenGroups)
+    ));
+    FieldAssessment assessment = assessHkIdentityCardNo(sources);
+    return new FdhReviewResult.StandardField(
+        "applicant.hk_identity_card_no",
+        "傭工字段",
+        "香港身份证号",
+        true,
+        sources.isEmpty() ? "未识别" : normalizeDisplayValue(sources),
+        assessment.status(),
+        assessment.issue(),
+        !sources.isEmpty(),
+        sources,
+        "HK identity card no. Yes/No 行：选 Yes 须填写身份证号（仅输出号码，如 Y432189(6)）；选 No 输出\"没有\"；选 Yes 未填判 FAIL。"
+    );
+  }
+
+  private FieldAssessment assessHkIdentityCardNo(List<FdhReviewResult.FieldSource> sources) {
+    if (sources.isEmpty()) {
+      return new FieldAssessment("review", "未能从材料识别香港身份证号字段，需要人工复核。");
+    }
+    if (sources.stream().anyMatch(source -> source.value().trim().equals("未填写"))) {
+      return new FieldAssessment("fail", "选 Yes 但未填写香港身份证号。");
+    }
+    List<String> normalized = sources.stream()
+        .map(source -> normalizeTokens(source.value()))
+        .filter(value -> !value.isBlank())
+        .distinct()
+        .toList();
+    if (normalized.size() > 1) {
+      return new FieldAssessment("review", "跨材料香港身份证号不一致，需要人工复核。");
+    }
+    return new FieldAssessment("pass", "");
   }
 
   private FdhReviewResult.StandardField contractNumberField(
