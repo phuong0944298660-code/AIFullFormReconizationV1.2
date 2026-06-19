@@ -67,12 +67,19 @@ const EMPTY_VALUE_PATTERNS = [
 ]
 
 export function buildVerificationTemplate(result, options = {}) {
-  const fieldByKey = new Map((result?.fields || []).map((field) => [field.key, field]))
-  const fieldRows = TEMPLATE_FIELD_ORDER
+  const resultFields = result?.fields || []
+  const fieldByKey = new Map(resultFields.map((field) => [field.key, field]))
+  const orderedKeys = new Set(TEMPLATE_FIELD_ORDER)
+  const orderedFieldRows = TEMPLATE_FIELD_ORDER
     .map((key) => fieldByKey.get(key))
     .filter(Boolean)
     .filter(shouldShowField)
     .map(toTemplateFieldRow)
+  const extraFieldRows = resultFields
+    .filter((field) => !orderedKeys.has(field.key))
+    .filter(shouldShowField)
+    .map(toTemplateFieldRow)
+  const fieldRows = [...orderedFieldRows, ...extraFieldRows]
 
   const materialRows = (result?.materials || [])
     .filter((material) => material.applicable && material.status !== 'muted')
@@ -86,15 +93,35 @@ export function buildVerificationTemplate(result, options = {}) {
     summaryText: buildSummaryText(summary),
     overallBullets: buildOverallBullets(result, options, summary),
     caseRows: buildCaseRows(result, options, summary),
-    sections: FIELD_SECTIONS
-      .map((section) => ({
+    sections: [
+      ...FIELD_SECTIONS.map((section) => ({
         ...section,
         rows: fieldRows.filter((row) => section.keys.includes(row.key))
-      }))
-      .filter((section) => section.rows.length),
+      })),
+      ...extraFieldSections(extraFieldRows)
+    ].filter((section) => section.rows.length),
     fieldRows,
     materialRows
   }
+}
+
+function extraFieldSections(fieldRows) {
+  const sections = new Map()
+  for (const row of fieldRows) {
+    const title = row.category || '其他识别字段'
+    const id = `extra:${title}`
+    if (!sections.has(id)) {
+      sections.set(id, {
+        id,
+        title,
+        keys: [],
+        rows: []
+      })
+    }
+    sections.get(id).keys.push(row.key)
+    sections.get(id).rows.push(row)
+  }
+  return Array.from(sections.values())
 }
 
 function shouldShowField(field) {

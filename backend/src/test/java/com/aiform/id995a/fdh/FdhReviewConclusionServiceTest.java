@@ -107,6 +107,28 @@ class FdhReviewConclusionServiceTest {
   }
 
   @Test
+  void conclusionRequestForcesJsonObjectResponseWithoutThinking() throws Exception {
+    ObjectMapper objectMapper = new ObjectMapper();
+    String modelText = objectMapper.writeValueAsString(Map.of(
+        "text", "整体结论：PASS - 材料与字段均通过。\n材料识别结果：\n- ID 988A：PASS\n字段识别结果：\n- 申请类别：PASS",
+        "fieldAdjudications", List.of()
+    ));
+    StableHttpClient httpClient = new StableHttpClient(jsonResponse(objectMapper, modelText));
+    FdhReviewConclusionService service = new FdhReviewConclusionService(
+        new LlmProperties(true, "https://apie.zhisuaninfo.com/v1", "test-key", "Qwen3.6-35B-A3B", 2048, 20, 2),
+        httpClient,
+        objectMapper
+    );
+
+    service.generate(sampleResult());
+
+    var payload = objectMapper.readTree(httpClient.lastRequestBody());
+    assertThat(payload.path("response_format").path("type").asText()).isEqualTo("json_object");
+    assertThat(payload.path("enable_thinking").asBoolean()).isFalse();
+    assertThat(payload.path("chat_template_kwargs").path("enable_thinking").asBoolean()).isFalse();
+  }
+
+  @Test
   void fallsBackWhenModelChangesRuleDecision() throws Exception {
     ObjectMapper objectMapper = new ObjectMapper();
     String contradictoryText = "整体结论：FAIL - 模型错误改写了规则结论。\n材料识别结果：\n- ID 988A：FAIL\n字段识别结果：\n- 申请类别：FAIL";
@@ -519,9 +541,14 @@ class FdhReviewConclusionServiceTest {
 
   private static final class StableHttpClient extends HttpClient {
     private final String responseBody;
+    private final java.util.concurrent.atomic.AtomicReference<String> lastRequestBody = new java.util.concurrent.atomic.AtomicReference<>();
 
     private StableHttpClient(String responseBody) {
       this.responseBody = responseBody;
+    }
+
+    private String lastRequestBody() {
+      return lastRequestBody.get();
     }
 
     @Override
@@ -576,7 +603,14 @@ class FdhReviewConclusionServiceTest {
     @Override
     @SuppressWarnings("unchecked")
     public <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> responseBodyHandler) {
+      lastRequestBody.set(readBody(request));
       return (HttpResponse<T>) new StubHttpResponse(request, responseBody);
+    }
+
+    private String readBody(HttpRequest request) {
+      BodyCaptureSubscriber subscriber = new BodyCaptureSubscriber();
+      request.bodyPublisher().ifPresent(publisher -> publisher.subscribe(subscriber));
+      return subscriber.body();
     }
 
     @Override
@@ -591,6 +625,32 @@ class FdhReviewConclusionServiceTest {
         HttpResponse.PushPromiseHandler<T> pushPromiseHandler
     ) {
       return sendAsync(request, responseBodyHandler);
+    }
+
+    private static final class BodyCaptureSubscriber implements java.util.concurrent.Flow.Subscriber<java.nio.ByteBuffer> {
+      private final java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream();
+
+      @Override
+      public void onSubscribe(java.util.concurrent.Flow.Subscription subscription) {
+        subscription.request(Long.MAX_VALUE);
+      }
+
+      @Override
+      public void onNext(java.nio.ByteBuffer item) {
+        byte[] bytes = new byte[item.remaining()];
+        item.get(bytes);
+        output.write(bytes, 0, bytes.length);
+      }
+
+      @Override
+      public void onError(Throwable throwable) {}
+
+      @Override
+      public void onComplete() {}
+
+      private String body() {
+        return output.toString(java.nio.charset.StandardCharsets.UTF_8);
+      }
     }
   }
 

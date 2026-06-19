@@ -40,7 +40,7 @@ docs/5.12_full_tests/
 *.webp
 
 # Accidental local Maven cache path created during development
-backend/%MAVEN_HOME%/
+%MAVEN_HOME%/
 
 # Office lock/temp files (e.g. opened Excel/Word lock files)
 ~$*

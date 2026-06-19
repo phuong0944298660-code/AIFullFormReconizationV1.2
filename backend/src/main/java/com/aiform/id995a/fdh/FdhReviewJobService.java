@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -175,14 +176,14 @@ public class FdhReviewJobService {
         state.markCanceled();
       } else {
         log.warn("FDH review job {} failed: {}", state.jobId, cause.getMessage(), cause);
-        state.markFailed(cause.getMessage());
+        state.markFailed(userFacingFailureMessage(cause));
       }
     } catch (RuntimeException exception) {
       if (state.isCanceled()) {
         state.markCanceled();
       } else {
         log.warn("FDH review job {} failed: {}", state.jobId, exception.getMessage(), exception);
-        state.markFailed(exception.getMessage());
+        state.markFailed(userFacingFailureMessage(exception));
       }
     } finally {
       fileExecutor.shutdownNow();
@@ -211,7 +212,7 @@ public class FdhReviewJobService {
     List<RenderedOcrPage> pages = pageRenderer.render(upload.filename(), upload.contentType(), upload.bytes());
     DocumentTemplate template = templateDetectionService.detect(upload.filename(), upload.contentType(), upload.bytes(), pages);
     String materialId = FdhMaterialCatalog.classify(template, upload.filename());
-    List<Integer> officialPageNumbers = officialPageNumberDetector.detect(upload.filename(), template, pages, modelId);
+    List<Integer> officialPageNumbers = detectOfficialPageNumbers(state, upload, template, pages, modelId);
     log.info(
         "FDH review job {} rendered and classified {} as {} (template={}, pages={}, source={}) in {} ms",
         state.jobId,
@@ -371,8 +372,28 @@ public class FdhReviewJobService {
         state.markCanceled();
       } else {
         log.warn("FDH review job {} failed: {}", state.jobId, exception.getMessage(), exception);
-        state.markFailed(exception.getMessage());
+        state.markFailed(userFacingFailureMessage(exception));
       }
+    }
+  }
+
+  private List<Integer> detectOfficialPageNumbers(
+      JobState state,
+      ReviewUpload upload,
+      DocumentTemplate template,
+      List<RenderedOcrPage> pages,
+      String modelId
+  ) throws IOException {
+    try {
+      return officialPageNumberDetector.detect(upload.filename(), template, pages, modelId);
+    } catch (IOException exception) {
+      log.warn(
+          "FDH review job {} skipped official page-number recognition for {}: {}",
+          state.jobId,
+          upload.filename(),
+          exception.getMessage()
+      );
+      return List.of();
     }
   }
 
@@ -382,6 +403,29 @@ public class FdhReviewJobService {
 
   private String filename(String value) {
     return value == null || value.isBlank() ? "uploaded-document" : value;
+  }
+
+  private String userFacingFailureMessage(Throwable failure) {
+    String message = failure == null ? "" : failure.getMessage();
+    String normalized = message == null ? "" : message.toLowerCase(Locale.ROOT);
+    if (normalized.contains("header parser received no bytes")
+        || normalized.contains("connection reset")
+        || normalized.contains("connection closed")
+        || normalized.contains("closed before")
+        || normalized.contains("unexpected end of")
+        || normalized.contains("eof")) {
+      return "模型服务连接中断，请重新发起识别；如连续出现，请稍后再试或降低并发。";
+    }
+    if (normalized.contains("system_cpu_overloaded")) {
+      return "模型服务当前负载过高，请稍后重试。";
+    }
+    if (normalized.contains("upstream_request_failed") || normalized.contains("upstream request failed")) {
+      return "模型服务上游请求失败，请稍后重试。";
+    }
+    if (normalized.contains("timed out") || normalized.contains("timeout")) {
+      return "模型服务响应超时，请稍后重试。";
+    }
+    return message == null || message.isBlank() ? "FDH review job failed." : message;
   }
 
   private record ReviewUpload(String filename, String contentType, byte[] bytes) {

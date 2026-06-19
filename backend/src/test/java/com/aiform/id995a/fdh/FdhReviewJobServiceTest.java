@@ -19,6 +19,7 @@ import com.aiform.id995a.ocr.RenderedOcrPage;
 import com.aiform.id995a.ocr.TemplateDetectionService;
 import com.aiform.id995a.review.EngineStatus;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
@@ -313,6 +314,79 @@ class FdhReviewJobServiceTest {
     assertThat(id988b.issue()).contains("\u7f3a\u7b2c 2 \u9875").doesNotContain("\u7f3a\u7b2c 4 \u9875");
   }
 
+  @Test
+  void continuesWhenOfficialPageNumberRecognitionConnectionCloses() throws Exception {
+    BaiduOcrPageRenderer renderer = mock(BaiduOcrPageRenderer.class);
+    TemplateDetectionService templateDetectionService = mock(TemplateDetectionService.class);
+    OcrDemoService ocrDemoService = mock(OcrDemoService.class);
+    FdhOfficialPageNumberDetector officialPageNumberDetector = mock(FdhOfficialPageNumberDetector.class);
+    FdhReviewJobService service = new FdhReviewJobService(
+        renderer,
+        templateDetectionService,
+        ocrDemoService,
+        new FdhReviewAssembler(5100, 1236, Clock.systemUTC()),
+        officialPageNumberDetector,
+        1
+    );
+    Map<String, List<Integer>> extractedPagesByFilename = new ConcurrentHashMap<>();
+
+    when(renderer.render(anyString(), anyString(), any())).thenReturn(renderedPages(5));
+    when(templateDetectionService.detect(anyString(), anyString(), any(), anyList()))
+        .thenReturn(template("id988a_2024_06", "ID 988A (06/2024)", 5));
+    when(officialPageNumberDetector.detect(anyString(), any(DocumentTemplate.class), anyList(), any()))
+        .thenThrow(new IOException("HTTP/1.1 header parser received no bytes"));
+    when(ocrDemoService.recognizeRenderedForFdhReview(
+        anyString(),
+        anyList(),
+        any(ExtractionProgressListener.class),
+        any(),
+        any(DocumentTemplate.class)
+    )).thenAnswer(invocation -> {
+      String filename = invocation.getArgument(0);
+      List<RenderedOcrPage> pages = invocation.getArgument(1);
+      extractedPagesByFilename.put(filename, pages.stream().map(RenderedOcrPage::page).toList());
+      return response(filename, invocation.getArgument(4), pages.size());
+    });
+
+    FdhReviewJobStatusResponse started = service.start("entry_visa", List.of(file("ID988A.pdf")), null);
+    FdhReviewJobStatusResponse completed = waitForCompletion(service, started.jobId());
+
+    assertThat(completed.status()).isEqualTo("completed");
+    assertThat(extractedPagesByFilename.get("ID988A.pdf")).containsExactly(1, 2, 3, 4);
+  }
+
+  @Test
+  void reportsUserFacingMessageWhenRequiredExtractionLlmConnectionCloses() throws Exception {
+    BaiduOcrPageRenderer renderer = mock(BaiduOcrPageRenderer.class);
+    TemplateDetectionService templateDetectionService = mock(TemplateDetectionService.class);
+    OcrDemoService ocrDemoService = mock(OcrDemoService.class);
+    FdhReviewJobService service = new FdhReviewJobService(
+        renderer,
+        templateDetectionService,
+        ocrDemoService,
+        new FdhReviewAssembler(5100, 1236, Clock.systemUTC())
+    );
+
+    when(renderer.render(anyString(), anyString(), any())).thenReturn(renderedPages(5));
+    when(templateDetectionService.detect(anyString(), anyString(), any(), anyList()))
+        .thenReturn(template("id988a_2024_06", "ID 988A (06/2024)", 5));
+    when(ocrDemoService.recognizeRenderedForFdhReview(
+        anyString(),
+        anyList(),
+        any(ExtractionProgressListener.class),
+        any(),
+        any(DocumentTemplate.class)
+    )).thenThrow(new IOException("HTTP/1.1 header parser received no bytes"));
+
+    FdhReviewJobStatusResponse started = service.start("entry_visa", List.of(file("ID988A.pdf")), null);
+    FdhReviewJobStatusResponse failed = waitForCompletion(service, started.jobId());
+
+    assertThat(failed.status()).isEqualTo("failed");
+    assertThat(failed.error()).contains("模型服务连接中断");
+    assertThat(failed.error()).doesNotContain("HTTP/1.1 header parser received no bytes");
+    assertThat(failed.message()).isEqualTo(failed.error());
+  }
+
   private FdhReviewJobStatusResponse waitForCompletion(FdhReviewJobService service, String jobId) throws Exception {
     FdhReviewJobStatusResponse status = service.status(jobId);
     for (int attempt = 0; attempt < 30; attempt += 1) {
@@ -355,8 +429,8 @@ class FdhReviewJobServiceTest {
             "page_1": {
               "application_type": "Entry visa - Domestic helper from abroad",
               "part_2_personal_particulars": {
-                "surname_en": "SITI",
-                "given_names_en": "NURHALIZA",
+                "surname_en": "NURHALIZA",
+                "given_names_en": "SITI",
                 "travel_document_no": "C8923745",
                 "date_of_birth": "27/11/1992",
                 "nationality": "Indonesian",

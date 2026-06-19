@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FDH 核心材料字段识别清单草案</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --line: #d9dee7;
+      --text: #202733;
+      --muted: #627086;
+      --accent: #0f766e;
+      --warn: #9a3412;
+      --review: #7c3aed;
+      --block: #b91c1c;
+      --soft: #edf7f5;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 14px/1.55 "Microsoft YaHei", "PingFang HK", "PingFang SC", Arial, sans-serif;
+    }
+
+    main {
+      width: min(1480px, calc(100vw - 48px));
+      margin: 0 auto;
+      padding: 28px 0 48px;
+    }
+
+    h1,
+    h2,
+    h3 {
+      margin: 0;
+      line-height: 1.25;
+    }
+
+    h1 {
+      font-size: 26px;
+    }
+
+    h2 {
+      margin-top: 28px;
+      font-size: 20px;
+    }
+
+    h3 {
+      margin-top: 18px;
+      font-size: 16px;
+    }
+
+    p {
+      margin: 8px 0 0;
+      color: var(--muted);
+    }
+
+    .intro,
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 18px;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    }
+
+    section {
+      margin-top: 18px;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 4px 10px;
+      background: #fff;
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .pill.required {
+      color: var(--block);
+      border-color: #fecaca;
+      background: #fff1f2;
+    }
+
+    .pill.cross {
+      color: var(--review);
+      border-color: #ddd6fe;
+      background: #f5f3ff;
+    }
+
+    .pill.evidence {
+      color: var(--accent);
+      border-color: #b7e4dd;
+      background: var(--soft);
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      margin-top: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    table {
+      width: 100%;
+      min-width: 1180px;
+      border-collapse: collapse;
+      background: #fff;
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid var(--line);
+      border-right: 1px solid var(--line);
+      padding: 8px 10px;
+      vertical-align: top;
+      text-align: left;
+    }
+
+    th:last-child,
+    td:last-child {
+      border-right: 0;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #f1f5f9;
+      color: #334155;
+      font-weight: 700;
+    }
+
+    code {
+      color: #1e3a8a;
+      font-family: Consolas, "SFMono-Regular", monospace;
+      font-size: 12px;
+      word-break: break-all;
+    }
+
+    .yes {
+      color: var(--review);
+      font-weight: 700;
+    }
+
+    .no {
+      color: var(--muted);
+    }
+
+    .block {
+      color: var(--block);
+      font-weight: 700;
+    }
+
+    .review {
+      color: var(--review);
+      font-weight: 700;
+    }
+
+    .note {
+      border-left: 4px solid var(--accent);
+      background: var(--soft);
+      padding: 10px 12px;
+      margin-top: 12px;
+      color: #134e4a;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="intro">
+      <h1>FDH 核心材料字段识别清单草案</h1>
+      <p>范围：ID 988A、ID 988B、ID 407。目标是在识别结果页和核验结果页展示每个字段的字段名、识别值、局部截图、归一结果、置信度、来源材料、页码/章节，并标出需要跨材料一致性核验的字段。</p>
+      <div class="legend">
+        <span class="pill required">必填/关键字段</span>
+        <span class="pill cross">跨材料一致性核验</span>
+        <span class="pill evidence">需要展示字段+值截图</span>
+      </div>
+      <div class="note">说明：清单中的 key 是建议口径。实际识别时，除下列字段外，只要模型返回了其他非空字段，也应按 <code>extracted.*</code> 字段进入识别结果页和核验结果页。</div>
+    </div>
+
+    <section>
+      <h2>ID 988A 字段清单</h2>
+      <p>傭工申请表。截图中的红框字段属于本表第 2 部分 Personal Particulars，均需要展示局部字段+值截图。</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>页面/章节</th>
+              <th>字段</th>
+              <th>建议 key</th>
+              <th>识别值类型</th>
+              <th>识别页/核验页展示</th>
+              <th>跨材料核验</th>
+              <th>核验口径</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Part 1 Application Type</td><td>申请类别 / Application Type</td><td><code>case.application_type</code></td><td>勾选项</td><td>选中项、局部截图、置信度、归一申请类别</td><td class="yes">是</td><td>与首页用户选择的申请类型一致；多选或选错进入待复核/阻断。</td></tr>
+            <tr><td>Part 2 Personal Particulars</td><td>Surname in English</td><td><code>helper.name.surname_en</code></td><td>手写文本</td><td>字段+值截图、原值、置信度；并参与英文全名归一</td><td class="yes">是</td><td>与 ID 407 Name of Helper、旅行证件姓名合并为 <code>helper.name.full_en</code>。</td></tr>
+            <tr><td>Part 2 Personal Particulars</td><td>Given names in English</td><td><code>helper.name.given_names_en</code></td><td>手写文本</td><td>字段+值截图、原值、置信度；并参与英文全名归一</td><td class="yes">是</td><td>与 surname 组合为建议英文全名，顺序按 Given names + Surname。</td></tr>
+            <tr><td>Part 2 Personal Particulars</td><td>Maiden surname, if applicable</td><td><code>helper.name.maiden_surname</code></td><td>文本/空值</td><td>有值时展示截图；空值不展示为问题</td><td class="no">否</td><td>仅资料展示，除非其他材料出现冲突姓名。</td></tr>
+            <tr><td>Part 2 Personal Particulars</td><td>Name in Chinese, if applicable</td><td><code>helper.name.chinese</code></td><td>文本/空值</td><td>有值时展示截图、置信度</td><td class="review">条件</td><td>如 ID 407 或其他证件也有中文名，可做一致性核验。</td></tr>
+            <tr><td>Part 2 Personal Particulars</td><td>Alias, if any</td><td><code>helper.name.alias</code></td><td>文本/空值</td><td>有值时展示截图、置信度</td><td class="no">否</td><td>资料展示。</td></tr>
+            <tr><td>Part 2 Personal Particulars</td><td>Sex</td><td><code>helper.sex</code></td><td>勾选项</td><td>选中项、字段区域截图、置信度</td><td class="review">条件</td><td>如其他证件识别到性别，可核验一致性。</td></tr>
+            <tr><td>Part 2 Personal Particulars</td><td>Date of birth</td><td><code>helper.date_of_birth</code></td><td>日期</td><td>原始日期、归一日期、截图、置信度</td><td class="yes">是</td><td>优先与旅行证件日期一致；如 ID 407 出现 DOB 也一并比对。</td></tr>
+            <tr><td>Part 2 Personal Particulars</td><td>Place of birth</td><td><code>helper.place_of_birth</code></td><td>文本</td><td>原值、截图、置信度</td><td class="review">条件</td><td>如旅行证件或其他材料出现出生地，可做弱一致性核验。</td></tr>
+            <tr><td>Part 2 Personal Particulars</td><td>Marital status</td><td><code>helper.marital_status</code></td><td>勾选项</td><td>选中项、截图、置信度</td><td class="no">否</td><td>资料展示。</td></tr>
+            <tr><td>Part 2 Personal Particulars</td><td>HK identity card no. / Has HKID</td><td><code>helper.hkid.number</code></td><td>勾选项+文本</td><td>是否有 HKID、号码、截图、置信度</td><td class="review">条件</td><td>如上传傭工 HKID，则核验号码一致；否则只展示。</td></tr>
+            <tr><td>Part 2 Personal Particulars</td><td>Nationality</td><td><code>helper.nationality</code></td><td>文本</td><td>原值、归一国籍、截图、置信度</td><td class="yes">是</td><td>与旅行证件国籍一致；Indonesia/Indonesian 可归一。</td></tr>
+            <tr><td>Part 2 Personal Particulars</td><td>Occupation</td><td><code>helper.occupation</code></td><td>文本</td><td>原值、截图、置信度</td><td class="no">否</td><td>资料展示。</td></tr>
+            <tr><td>Part 2 Personal Particulars</td><td>Travel document type</td><td><code>helper.travel_doc.type</code></td><td>文本</td><td>原值、归一类型、截图、置信度</td><td class="review">条件</td><td>与旅行证件类型弱核验。</td></tr>
+            <tr><td>Part 2 Personal Particulars</td><td>Travel document no.</td><td><code>helper.travel_doc.number</code></td><td>文本</td><td>原值、归一号码、截图、置信度</td><td class="yes">是</td><td>与旅行证件副本号码一致；如 ID 407 填有证件号也比对。</td></tr>
+            <tr><td>Part 2 Personal Particulars</td><td>Place of issue</td><td><code>helper.travel_doc.place_of_issue</code></td><td>文本</td><td>原值、截图、置信度</td><td class="review">条件</td><td>与旅行证件签发地弱核验。</td></tr>
+            <tr><td>Part 2 Personal Particulars</td><td>Date of issue</td><td><code>helper.travel_doc.date_of_issue</code></td><td>日期</td><td>原始日期、归一日期、截图、置信度</td><td class="review">条件</td><td>与旅行证件签发日期一致。</td></tr>
+            <tr><td>Part 2 Personal Particulars</td><td>Date of expiry</td><td><code>helper.travel_doc.date_of_expiry</code></td><td>日期</td><td>原始日期、归一日期、截图、置信度</td><td class="review">条件</td><td>与旅行证件有效期一致，并可提示是否过期。</td></tr>
+            <tr><td>Part 2 Continued</td><td>Photograph affixed</td><td><code>helper.photo.present</code></td><td>图像区域/是否存在</td><td>照片区域截图、是否检测到</td><td class="no">否</td><td>资料完整性展示。</td></tr>
+            <tr><td>Part 2 Continued</td><td>Present address</td><td><code>helper.address.present</code></td><td>多行文本</td><td>字段+值大区域截图、原值、置信度</td><td class="review">条件</td><td>如其他材料出现香港地址，可弱核验。</td></tr>
+            <tr><td>Part 2 Continued</td><td>Domicile address</td><td><code>helper.address.domicile</code></td><td>多行文本</td><td>字段+值大区域截图、原值、置信度</td><td class="no">否</td><td>资料展示。</td></tr>
+            <tr><td>Part 2 Continued</td><td>Contact telephone no.</td><td><code>helper.contact.phone</code></td><td>文本</td><td>原值、截图、置信度</td><td class="no">否</td><td>资料展示。</td></tr>
+            <tr><td>Part 2 Continued</td><td>Fax no.</td><td><code>helper.contact.fax</code></td><td>文本/空值</td><td>有值时展示截图、置信度</td><td class="no">否</td><td>资料展示。</td></tr>
+            <tr><td>Part 2 Continued</td><td>E-mail address</td><td><code>helper.contact.email</code></td><td>文本</td><td>原值、截图、置信度</td><td class="no">否</td><td>格式校验；不做跨材料阻断。</td></tr>
+            <tr><td>Part 2 Continued</td><td>Name of current employer, if applicable</td><td><code>helper.current_employer.name</code></td><td>文本</td><td>原值、截图、置信度</td><td class="review">条件</td><td>转换雇主场景可与 release letter 弱核验。</td></tr>
+            <tr><td>Part 2 Continued</td><td>Address of current employer, if applicable</td><td><code>helper.current_employer.address</code></td><td>多行文本</td><td>原值、截图、置信度</td><td class="no">否</td><td>资料展示。</td></tr>
+            <tr><td>Working Experience</td><td>Working experience rows</td><td><code>helper.work_experience[].*</code></td><td>表格行</td><td>每行每列字段+值截图、行号、置信度</td><td class="no">否</td><td>资料展示；不纳入核心阻断。</td></tr>
+            <tr><td>Undertaking / Declaration</td><td>Employment contract no.</td><td><code>contract.dh_contract_no</code></td><td>文本</td><td>原值、归一合约号、截图、置信度</td><td class="yes">是</td><td>与 ID 988B、ID 407 合约编号一致；可做 FH-CON- 前缀纠偏但保持待复核。</td></tr>
+            <tr><td>Declaration</td><td>Date</td><td><code>helper.declaration.date</code></td><td>日期</td><td>原始日期、归一日期、截图、置信度</td><td class="no">否</td><td>资料展示；可提示晚于/早于签署逻辑异常。</td></tr>
+            <tr><td>Declaration</td><td>Signature of applicant</td><td><code>helper.signature.present</code></td><td>签名/手写文本</td><td>签名区域截图、是否存在、可读文本、置信度</td><td class="review">完整性</td><td>ID 988A 必须有申请人签名；如 ID 407 helper signature 存在，可展示双来源签署完整性。</td></tr>
+            <tr><td>Footer</td><td>Template footer / page no.</td><td><code>document.footer_id</code></td><td>页尾文本</td><td>页尾截图、模板 ID、页码、置信度</td><td class="yes">是</td><td>先用页尾识别材料类型和版本；ID 988A 应为 5 页，第 5 页不做字段识别。</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>ID 988B 字段清单</h2>
+      <p>雇主申请表。字段用于核验雇主身份、住址、雇佣安排、合约编号和雇主签署。</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>页面/章节</th>
+              <th>字段</th>
+              <th>建议 key</th>
+              <th>识别值类型</th>
+              <th>识别页/核验页展示</th>
+              <th>跨材料核验</th>
+              <th>核验口径</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Employer particulars</td><td>Name of employer / Surname + Given names</td><td><code>employer.name.full_en</code></td><td>文本</td><td>字段+值截图、原值、归一雇主姓名、置信度</td><td class="yes">是</td><td>与 ID 407 Name of employer 一致；中英文姓名按 ID 407 字段类型选择可比项。</td></tr>
+            <tr><td>Employer particulars</td><td>Name in Chinese</td><td><code>employer.name.chinese</code></td><td>文本/空值</td><td>有值时展示截图、置信度</td><td class="review">条件</td><td>如 ID 407 填中文雇主姓名，则以中文名比较。</td></tr>
+            <tr><td>Employer particulars</td><td>HK identity card no. / Passport no.</td><td><code>employer.id_doc.number</code></td><td>文本</td><td>原值、归一证件号、截图、置信度</td><td class="yes">是</td><td>与 ID 407 雇主证件号、雇主身份证明材料一致。</td></tr>
+            <tr><td>Employer particulars</td><td>Date of birth</td><td><code>employer.date_of_birth</code></td><td>日期</td><td>原始日期、归一日期、截图、置信度</td><td class="review">条件</td><td>如雇主身份证明材料识别到 DOB，则核验一致。</td></tr>
+            <tr><td>Employer particulars</td><td>Nationality / place of issue</td><td><code>employer.nationality</code></td><td>文本</td><td>原值、截图、置信度</td><td class="no">否</td><td>资料展示。</td></tr>
+            <tr><td>Employer particulars</td><td>Residential address / correspondence address</td><td><code>employer.address.residential</code></td><td>多行文本</td><td>字段+值截图、原值、归一地址、置信度</td><td class="yes">是</td><td>与 ID 407 employer address/place of employment、住址证明弱一致。</td></tr>
+            <tr><td>Employer particulars</td><td>Contact telephone no.</td><td><code>employer.contact.phone</code></td><td>文本</td><td>原值、截图、置信度</td><td class="no">否</td><td>资料展示。</td></tr>
+            <tr><td>Employer particulars</td><td>Fax no.</td><td><code>employer.contact.fax</code></td><td>文本/空值</td><td>有值时展示截图、置信度</td><td class="no">否</td><td>资料展示。</td></tr>
+            <tr><td>Employer particulars</td><td>E-mail address</td><td><code>employer.contact.email</code></td><td>文本</td><td>原值、截图、置信度</td><td class="no">否</td><td>格式校验；不做跨材料阻断。</td></tr>
+            <tr><td>Employer particulars</td><td>Occupation</td><td><code>employer.occupation</code></td><td>文本</td><td>原值、截图、置信度</td><td class="no">否</td><td>资料展示。</td></tr>
+            <tr><td>Employer particulars</td><td>Monthly income / financial info, if present</td><td><code>employer.financial.monthly_income</code></td><td>金额</td><td>原值、归一金额、截图、置信度</td><td class="review">条件</td><td>可与经济状况证明弱核验；材料 4-12 当前不阻断最终结论。</td></tr>
+            <tr><td>Household particulars</td><td>Household members rows</td><td><code>employer.household_members[].*</code></td><td>表格行</td><td>每个有填写的单元格截图、行号、置信度</td><td class="no">否</td><td>资料展示；如用于照顾对象，可辅助人工复核。</td></tr>
+            <tr><td>Accommodation / employment arrangement</td><td>Place of employment / residential premises</td><td><code>employment.place.address</code></td><td>多行文本</td><td>原值、归一地址、截图、置信度</td><td class="yes">是</td><td>与 ID 407 place of employment / employer address 一致。</td></tr>
+            <tr><td>Helper / Contract info</td><td>Name of helper, if present</td><td><code>helper.name.full_en</code></td><td>文本</td><td>原值、归一全名、截图、置信度</td><td class="yes">是</td><td>与 ID 988A、ID 407 helper name 一致。</td></tr>
+            <tr><td>Helper / Contract info</td><td>Travel document no., if present</td><td><code>helper.travel_doc.number</code></td><td>文本</td><td>原值、归一号码、截图、置信度</td><td class="yes">是</td><td>与 ID 988A、旅行证件、ID 407 中的 helper document no. 一致。</td></tr>
+            <tr><td>Undertaking</td><td>Employment contract no.</td><td><code>contract.dh_contract_no</code></td><td>文本</td><td>原值、归一合约号、截图、置信度</td><td class="yes">是</td><td>与 ID 988A、ID 407 合约编号一致。</td></tr>
+            <tr><td>Declaration</td><td>Declaration date</td><td><code>employer.declaration.date</code></td><td>日期</td><td>原始日期、归一日期、截图、置信度</td><td class="no">否</td><td>资料展示；可提示日期异常。</td></tr>
+            <tr><td>Declaration</td><td>Signature of employer</td><td><code>employer.signature.present</code></td><td>签名/手写文本</td><td>签名区域截图、是否存在、可读文本、置信度</td><td class="review">完整性</td><td>ID 988B 必须有雇主签名；与 ID 407 employer signature 一并展示签署完整性。</td></tr>
+            <tr><td>Footer</td><td>Template footer / page no.</td><td><code>document.footer_id</code></td><td>页尾文本</td><td>页尾截图、模板 ID、页码、置信度</td><td class="yes">是</td><td>ID 988B 应为 4 页，第 4 页不做字段识别。</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>ID 407 字段清单</h2>
+      <p>标准雇佣合约本体。用于核验合约编号、双方姓名/证件、工资和膳食津贴，以及双方签署。</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>页面/章节</th>
+              <th>字段</th>
+              <th>建议 key</th>
+              <th>识别值类型</th>
+              <th>识别页/核验页展示</th>
+              <th>跨材料核验</th>
+              <th>核验口径</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Contract cover / header</td><td>Contract No.</td><td><code>contract.dh_contract_no</code></td><td>文本</td><td>原值、归一合约号、字段截图、置信度</td><td class="yes">是</td><td>ID 407 为合约本体，优先级高；与 ID 988A/ID 988B 引用编号一致。</td></tr>
+            <tr><td>Contract parties</td><td>Name of employer</td><td><code>employer.name.full_en</code></td><td>文本</td><td>原值、归一姓名、字段截图、置信度</td><td class="yes">是</td><td>与 ID 988B 雇主姓名一致。</td></tr>
+            <tr><td>Contract parties</td><td>Employer HKID / passport no.</td><td><code>employer.id_doc.number</code></td><td>文本</td><td>原值、归一证件号、字段截图、置信度</td><td class="yes">是</td><td>与 ID 988B 和雇主身份证明一致。</td></tr>
+            <tr><td>Contract parties</td><td>Employer address</td><td><code>employer.address.residential</code></td><td>多行文本</td><td>原值、归一地址、字段截图、置信度</td><td class="yes">是</td><td>与 ID 988B residential/place of employment、住址证明弱一致。</td></tr>
+            <tr><td>Contract parties</td><td>Name of Helper</td><td><code>helper.name.full_en</code></td><td>文本</td><td>原值、归一全名、字段截图、置信度</td><td class="yes">是</td><td>与 ID 988A 英文姓名、旅行证件姓名一致。</td></tr>
+            <tr><td>Contract parties</td><td>Helper HKID / passport / travel document no.</td><td><code>helper.travel_doc.number</code></td><td>文本</td><td>原值、归一号码、字段截图、置信度</td><td class="yes">是</td><td>与 ID 988A travel document no.、旅行证件副本一致。</td></tr>
+            <tr><td>Contract parties</td><td>Helper address / place of origin, if present</td><td><code>helper.address.origin</code></td><td>多行文本</td><td>原值、字段截图、置信度</td><td class="no">否</td><td>资料展示。</td></tr>
+            <tr><td>Employment terms</td><td>Commencement / arrival / contract start date</td><td><code>contract.start_date</code></td><td>日期</td><td>原始日期、归一日期、截图、置信度</td><td class="review">条件</td><td>与其他材料日期逻辑弱核验。</td></tr>
+            <tr><td>Employment terms</td><td>Contract period</td><td><code>contract.period</code></td><td>文本/数字</td><td>原值、归一期间、截图、置信度</td><td class="no">否</td><td>资料展示；可提示非标准两年。</td></tr>
+            <tr><td>Employment terms</td><td>Place of employment</td><td><code>employment.place.address</code></td><td>多行文本</td><td>原值、归一地址、截图、置信度</td><td class="yes">是</td><td>与 ID 988B employment/place address 一致。</td></tr>
+            <tr><td>Wages and food</td><td>Monthly wages</td><td><code>contract.monthly_wage_hkd</code></td><td>金额</td><td>原值、归一 HKD 金额、截图、置信度</td><td class="block">规则</td><td>与政府最低工资阈值比较；低于阈值阻断。</td></tr>
+            <tr><td>Wages and food</td><td>Food provided / food allowance</td><td><code>contract.food.allowance_hkd</code></td><td>勾选项+金额</td><td>是否供膳、津贴金额、截图、置信度</td><td class="block">规则</td><td>如不供膳，津贴不得低于阈值；低于阈值阻断。</td></tr>
+            <tr><td>Accommodation schedule</td><td>Free accommodation / accommodation type</td><td><code>contract.accommodation.type</code></td><td>勾选项/文本</td><td>选中项、截图、置信度</td><td class="no">否</td><td>资料展示；异常可人工复核。</td></tr>
+            <tr><td>Accommodation schedule</td><td>Sleeping arrangement / room sharing</td><td><code>contract.accommodation.sleeping_arrangement</code></td><td>文本/勾选项</td><td>原值、截图、置信度</td><td class="no">否</td><td>资料展示。</td></tr>
+            <tr><td>Accommodation schedule</td><td>Facilities provided</td><td><code>contract.accommodation.facilities</code></td><td>勾选项/文本</td><td>选中项、截图、置信度</td><td class="no">否</td><td>资料展示。</td></tr>
+            <tr><td>Duties schedule</td><td>Domestic duties selected</td><td><code>contract.duties[]</code></td><td>勾选项列表</td><td>选中项、截图、置信度</td><td class="no">否</td><td>资料展示。</td></tr>
+            <tr><td>Declaration / signing</td><td>Employer signature</td><td><code>employer.signature.present</code></td><td>签名/手写文本</td><td>签名区域截图、是否存在、可读文本、置信度</td><td class="review">完整性</td><td>与 ID 988B employer signature 一并展示签署完整性。</td></tr>
+            <tr><td>Declaration / signing</td><td>Helper signature</td><td><code>helper.contract_signature.present</code></td><td>签名/手写文本</td><td>签名区域截图、是否存在、可读文本、置信度</td><td class="review">完整性</td><td>与 ID 988A applicant signature 一并展示签署完整性。</td></tr>
+            <tr><td>Declaration / signing</td><td>Signing dates</td><td><code>contract.signing_date</code></td><td>日期</td><td>原始日期、归一日期、截图、置信度</td><td class="no">否</td><td>资料展示；可提示日期逻辑异常。</td></tr>
+            <tr><td>Footer</td><td>Template footer / page no.</td><td><code>document.footer_id</code></td><td>页尾文本</td><td>页尾截图、模板 ID、页码、置信度</td><td class="yes">是</td><td>ID 407 应为 4 页；页数和模板异常进入材料层复核。</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>跨材料一致性核验汇总</h2>
+      <p>这些字段应在识别结果页合并展示多个来源，在核验结果页显示建议归一值、来源列表、冲突值、局部截图和置信度。</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>标准字段</th>
+              <th>来源材料</th>
+              <th>建议采用值规则</th>
+              <th>结果状态规则</th>
+              <th>是否阻断</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><code>case.application_type</code><br>申请类别</td><td>ID 988A Application Type；首页用户选择</td><td>以首页选择为期望值，ID 988A 必须匹配。</td><td>不一致为 fail；多选为 review 或 fail。</td><td class="block">是</td></tr>
+            <tr><td><code>document.footer_id</code><br>模板页尾/页数</td><td>ID 988A、ID 988B、ID 407</td><td>以页尾 ID 和版本识别材料类型；页面数按官方模板。</td><td>低置信、缺页、错模板进入材料层 fail/review。</td><td class="block">材料 1-3 阻断</td></tr>
+            <tr><td><code>helper.name.full_en</code><br>傭工英文全名</td><td>ID 988A surname/given names；ID 407 Name of Helper；旅行证件姓名</td><td>组合 ID 988A given + surname；高置信证件/合约值可辅助建议。</td><td>明显不一致为 fail；轻微 OCR 差异为 review；纠偏后仍 review。</td><td class="block">是</td></tr>
+            <tr><td><code>helper.travel_doc.number</code><br>傭工旅行证件号码</td><td>ID 988A Travel document no.；ID 407 helper document no.；旅行证件副本</td><td>优先证件副本高置信值；格式差异可归一。</td><td>明显不一致为 fail；低置信/疑似 OCR 差异为 review。</td><td class="block">是</td></tr>
+            <tr><td><code>helper.date_of_birth</code><br>傭工出生日期</td><td>ID 988A；旅行证件副本；如 ID 407 有 DOB 则纳入</td><td>归一为 ISO 日期后比较。</td><td>不一致为 review/fail，取决于置信度和差异严重性。</td><td class="block">是</td></tr>
+            <tr><td><code>helper.nationality</code><br>傭工国籍</td><td>ID 988A；旅行证件副本；如 ID 407 有国籍则纳入</td><td>国家名/国籍词归一，例如 Indonesia -> Indonesian。</td><td>归一后一致为 pass；低置信或不一致为 review。</td><td class="block">是</td></tr>
+            <tr><td><code>employer.name.full_en</code><br>雇主姓名</td><td>ID 988B；ID 407；雇主身份证明</td><td>ID 407 如中文名，则优先与 ID 988B 中文名比较；否则比较英文名。</td><td>明显不一致为 fail；单来源或低置信为 review。</td><td class="block">是</td></tr>
+            <tr><td><code>employer.id_doc.number</code><br>雇主证件号</td><td>ID 988B；ID 407；雇主身份证明</td><td>归一去空格、大小写、常见 OCR 噪声。</td><td>不一致为 review/fail；单来源展示但不显示未识别。</td><td class="review">建议阻断/待复核</td></tr>
+            <tr><td><code>employer.address.residential</code><br>雇主/雇佣地址</td><td>ID 988B；ID 407；住址证明</td><td>地址标准化后做弱一致；允许格式和换行差异。</td><td>明显不同地址为 review；不自动 pass。</td><td class="review">待复核</td></tr>
+            <tr><td><code>employment.place.address</code><br>工作地点</td><td>ID 988B；ID 407</td><td>以 ID 407 合约工作地点为合约本体值，ID 988B 应一致。</td><td>不一致为 review。</td><td class="review">待复核</td></tr>
+            <tr><td><code>contract.dh_contract_no</code><br>标准雇佣合约编号</td><td>ID 988A；ID 988B；ID 407</td><td>ID 407 是合约本体；编号必须 FH-CON- 开头；年份取不超过当前年份且最接近当前年份。</td><td>不一致或纠偏后仍 review；缺任一核心来源可 fail。</td><td class="block">是</td></tr>
+            <tr><td><code>contract.monthly_wage_hkd</code><br>月薪</td><td>ID 407；如 ID 988B/其他材料出现工资则纳入</td><td>金额归一为 HKD 数字。</td><td>低于系统阈值为 fail；识别低置信为 review。</td><td class="block">规则阻断</td></tr>
+            <tr><td><code>contract.food.allowance_hkd</code><br>膳食津贴</td><td>ID 407；如其他材料出现则纳入</td><td>先判断是否供膳；不供膳则归一津贴金额。</td><td>低于系统阈值为 fail；识别低置信为 review。</td><td class="block">规则阻断</td></tr>
+            <tr><td><code>helper.signature.present</code><br>傭工/申请人签署完整性</td><td>ID 988A applicant signature；ID 407 helper signature</td><td>分别展示签名区域，不强行文本一致。</td><td>ID 988A 缺申请人签名为 fail；ID 407 缺签名为 review/fail 视规则。</td><td class="block">建议阻断</td></tr>
+            <tr><td><code>employer.signature.present</code><br>雇主签署完整性</td><td>ID 988B employer signature；ID 407 employer signature</td><td>分别展示签名区域，不强行文本一致。</td><td>缺任一核心签名进入 fail/review。</td><td class="block">建议阻断</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

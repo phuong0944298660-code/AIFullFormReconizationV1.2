@@ -305,6 +305,47 @@ class SelectionFieldCropRefinementServiceTest {
   }
 
   @Test
+  void refinesHkIdentityCardNoYesWithVisibleNumberFromLlmEvidenceCrop() throws Exception {
+    FakeFieldCropTranscriptionGateway gateway = new FakeFieldCropTranscriptionGateway(List.of(
+        new FieldCropTranscriptionResult(1, "hk_identity_card_no", "Yes Y432189(6)", "", 96, "ok")
+    ));
+    SelectionFieldCropRefinementService service = new SelectionFieldCropRefinementService(gateway, objectMapper);
+    JsonNode structuredData = objectMapper.readTree("""
+        {
+          "page_1": {
+            "hk_identity_card_no": "Yes"
+          },
+          "_field_evidence": {
+            "page_1": {
+              "hk_identity_card_no": {
+                "label": "HK identity card no. Yes/No row",
+                "value_bbox": {"x": 0.08, "y": 0.55, "width": 0.72, "height": 0.12}
+              }
+            }
+          }
+        }
+        """);
+
+    SelectionFieldCropRefinementResult result = service.refine(
+        "sample.pdf",
+        structuredData,
+        List.of(renderedPage(1)),
+        modelProfile()
+    );
+
+    assertThat(result.attempted()).isEqualTo(1);
+    assertThat(result.updated()).isEqualTo(1);
+    assertThat(result.data().at("/page_1/hk_identity_card_no").asText()).isEqualTo("Yes Y432189(6)");
+    assertThat(result.data().at("/_field_evidence/page_1/hk_identity_card_no/selection_crop_text").asText())
+        .isEqualTo("Yes Y432189(6)");
+    assertThat(result.data().at("/_field_evidence/page_1/hk_identity_card_no/original_value").asText())
+        .isEqualTo("Yes");
+    assertThat(gateway.requests).hasSize(1);
+    assertThat(gateway.requests.get(0).path()).isEqualTo("hk_identity_card_no");
+    assertThat(gateway.requests.get(0).currentValue()).isEqualTo("Yes");
+  }
+
+  @Test
   void restoresApplicationTypeRowsFromFirstPageCheckboxes() throws Exception {
     FakeFieldCropTranscriptionGateway gateway = new FakeFieldCropTranscriptionGateway(List.of());
     SelectionFieldCropRefinementService service = new SelectionFieldCropRefinementService(gateway, objectMapper);

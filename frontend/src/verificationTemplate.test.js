@@ -8,6 +8,42 @@ import {
   TEMPLATE_STATUS_LABELS
 } from './verificationTemplate.js'
 
+test('verification template includes recognized fields outside the official core order', () => {
+  const result = buildReviewResult('change_employer', 'pass')
+  const extraField = {
+    key: 'extracted.mobile_phone_number',
+    category: 'ID 988A',
+    label: 'mobile phone number',
+    required: false,
+    normalizedValue: '91234567',
+    status: 'pass',
+    issue: '',
+    blocking: false,
+    sources: [
+      {
+        documentName: 'ID 988A',
+        filename: 'ID988A.pdf',
+        section: 'page_1.part_2_personal_particulars',
+        fieldName: 'mobile phone no',
+        value: '91234567',
+        confidence: 78
+      }
+    ],
+    rule: 'Recognized from uploaded material.'
+  }
+
+  const template = buildVerificationTemplate({
+    ...result,
+    fields: [...result.fields, extraField]
+  })
+
+  const row = template.fieldRows.find((item) => item.key === 'extracted.mobile_phone_number')
+  assert.equal(row.status, 'pass')
+  assert.equal(row.displayValue, '91234567')
+  assert.notEqual(row.displayValue, TEMPLATE_STATUS_LABELS.unrecognized)
+  assert.ok(template.sections.some((section) => section.rows.some((item) => item.key === extraField.key)))
+})
+
 test('verification template keeps the official standardized field order', () => {
   const result = buildReviewResult('change_employer', 'pass')
   const template = buildVerificationTemplate(result, { applicationTypeLabel: '转换雇主' })

@@ -1901,6 +1901,9 @@ public class SelectionFieldCropRefinementService {
   private boolean isSelectionCandidate(List<String> path, String label, String value) {
     String joinedPath = String.join(" ", path);
     String text = (joinedPath + " " + label + " " + value).toLowerCase(Locale.ROOT);
+    if (isIncompleteHkIdentityCardNo(path, label, value)) {
+      return true;
+    }
     if (looksLikeOrdinaryValue(path, label, value)) {
       return false;
     }
@@ -1930,6 +1933,19 @@ public class SelectionFieldCropRefinementService {
         || value.toLowerCase(Locale.ROOT).contains("i have")
         || value.contains("本人");
     return selectionKeywords && statementValue;
+  }
+
+  private boolean isIncompleteHkIdentityCardNo(List<String> path, String label, String value) {
+    String fieldText = (String.join(" ", path) + " " + (label == null ? "" : label)).toLowerCase(Locale.ROOT);
+    boolean isHkIdentityCardNo = fieldText.contains("hk_identity_card_no")
+        || fieldText.contains("hong_kong_identity_card_no")
+        || fieldText.contains("hk identity card no")
+        || fieldText.contains("identity card no.");
+    if (!isHkIdentityCardNo) {
+      return false;
+    }
+    String normalizedValue = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+    return normalizedValue.equals("yes") || normalizedValue.equals("no");
   }
 
   private boolean looksLikeOrdinaryValue(List<String> path, String label, String value) {

@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>学生 / IANG 入境识别 Demo 场景与材料梳理</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #17202a;
+      --muted: #5d6d7e;
+      --line: #d7dee8;
+      --soft: #f5f7fa;
+      --head: #eef3f8;
+      --accent: #0f6b8f;
+      --warn: #9a5b00;
+      --bad: #9b2c2c;
+      --ok: #1d6f42;
+    }
+    body {
+      margin: 0;
+      font-family: Arial, "Microsoft YaHei", sans-serif;
+      color: var(--ink);
+      background: #fff;
+      line-height: 1.55;
+    }
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 36px 28px 56px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 30px;
+      line-height: 1.25;
+    }
+    h2 {
+      margin: 34px 0 12px;
+      padding-top: 14px;
+      border-top: 2px solid var(--line);
+      font-size: 22px;
+    }
+    h3 {
+      margin: 22px 0 8px;
+      font-size: 18px;
+    }
+    p {
+      margin: 8px 0;
+    }
+    .meta {
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin: 20px 0 28px;
+    }
+    .metric {
+      border: 1px solid var(--line);
+      background: var(--soft);
+      padding: 14px;
+      border-radius: 6px;
+    }
+    .metric strong {
+      display: block;
+      font-size: 22px;
+      color: var(--accent);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0 20px;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 9px 10px;
+      vertical-align: top;
+    }
+    th {
+      background: var(--head);
+      text-align: left;
+      font-weight: 700;
+    }
+    .tag {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-size: 12px;
+      border: 1px solid var(--line);
+      background: #fff;
+      white-space: nowrap;
+    }
+    .high { color: var(--bad); font-weight: 700; }
+    .mid { color: var(--warn); font-weight: 700; }
+    .low { color: var(--ok); font-weight: 700; }
+    ul {
+      margin: 8px 0 18px 22px;
+      padding: 0;
+    }
+    li {
+      margin: 4px 0;
+    }
+    .note {
+      border-left: 4px solid var(--accent);
+      background: #f2f8fb;
+      padding: 12px 14px;
+      margin: 16px 0;
+    }
+    code {
+      font-family: Consolas, monospace;
+      background: #f2f4f7;
+      padding: 1px 4px;
+      border-radius: 3px;
+    }
+    a {
+      color: var(--accent);
+    }
+    @media (max-width: 860px) {
+      .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      main { padding: 24px 16px 40px; }
+      table { font-size: 13px; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>学生 / IANG 入境识别 Demo 场景与材料梳理</h1>
+  <p class="meta">整理日期：2026-06-18。资料来源：香港入境事务处官网公开页面与下载表格；结合 RFI v2 Phase 1 “Student/IANG” 范围理解。</p>
+
+  <div class="summary">
+    <div class="metric"><strong>7</strong>建议 demo 场景</div>
+    <div class="metric"><strong>8</strong>已下载官方模板/指南</div>
+    <div class="metric"><strong>IANG</strong>优先落地识别包</div>
+    <div class="metric"><strong>规则优先</strong>表格号/页面结构先于 LLM</div>
+  </div>
+
+  <div class="note">
+    <strong>结论：</strong>“学生出入境”建议不要做成一个泛化文档总结 demo，而应拆成“来港就读”和“毕业后留港/回港就业 IANG”两条主线。客户点名的 IANG 材料可作为首批 PoC：港澳通行证、毕业证明/Certifying letter、HKID、付款证明、 landing slip 小白条、内地赴港工作同意书。
+  </div>
+
+  <h2>一、细分场景总览</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>场景</th>
+        <th>官方业务</th>
+        <th>核心判断</th>
+        <th>主要审核材料</th>
+        <th>Demo 优先级</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>学生首次来港就读</td>
+        <td>Entry for Study</td>
+        <td>是否被合资格课程/学校取录；是否有本地保证人；是否有足够资金；未成年监护安排。</td>
+        <td>ID 995A、ID 995B、照片、旅行证件/港澳通行证或身份证、取录信、HKID 如有、资金证明、住宿证明、未成年监护同意书。</td>
+        <td><span class="high">高</span></td>
+      </tr>
+      <tr>
+        <td>学生延期逗留</td>
+        <td>Extension of Stay for Study</td>
+        <td>是否仍在获批课程就读；申请时间是否在到期前窗口；当前逗留身份是否连续。</td>
+        <td>旅行证件、最新 arrival stamp / landing slip / e-Visa、HKID、院校在读/继续修读证明、现有学生签证/进入许可。</td>
+        <td><span class="mid">中</span></td>
+      </tr>
+      <tr>
+        <td>学生实习/校内兼职/暑期工作资格核验</td>
+        <td>Student Conditions of Stay / NOL</td>
+        <td>课程层级、学习时长、实习是否课程相关并由院校安排/认可；NOL 条件是否匹配。</td>
+        <td>No Objection Letter、院校实习证明、课程证明、雇主/岗位资料、学生身份材料。</td>
+        <td><span class="mid">中</span></td>
+      </tr>
+      <tr>
+        <td>终止修读通知</td>
+        <td>Notification of Termination of Studies</td>
+        <td>院校是否在学生终止课程后通知入境处；学生身份与课程信息是否可定位。</td>
+        <td>ID 977、学生姓名、出生日期、HKID、院校名称、终止日期、授权人士签署和院校印章。</td>
+        <td><span class="low">低</span></td>
+      </tr>
+      <tr>
+        <td>IANG 应届毕业生首次申请</td>
+        <td>Non-local recent graduates / GBA campus recent graduates</td>
+        <td>毕业日期距申请是否不超过 6 个月；学历是否本科或以上/合资格 QF Level 5+；应届通常不要求已有聘用。</td>
+        <td>照片、旅行证件/港澳通行证、HKID 如有、成绩单/毕业证/院校证明信、内地赴港工作同意书如适用、付款证明、landing slip/e-Visa 如在港。</td>
+        <td><span class="high">最高</span></td>
+      </tr>
+      <tr>
+        <td>IANG 非应届毕业生首次/回港申请</td>
+        <td>Non-local non-recent graduates / GBA campus non-recent graduates</td>
+        <td>毕业超过 6 个月；必须已有聘用；岗位通常由学位持有人担任，薪酬福利达市场水平。</td>
+        <td>IANG 个人材料、学历证明、雇佣合约/聘书、公司商业登记证、财务证明、新公司商业计划、内地赴港工作同意书如适用。</td>
+        <td><span class="high">高</span></td>
+      </tr>
+      <tr>
+        <td>IANG 延期逗留及顶尖人才延期</td>
+        <td>Extension of Stay under IANG</td>
+        <td>是否已有聘用或在港经营业务；普通延期通常 3-3 年；顶尖人才需 IANG 留港不少于 2 年且上一课税年度薪俸税应评税入息不少于 HKD 2,000,000。</td>
+        <td>旅行证件、HKID、现有 e-Visa/landing slip、雇主证明信、雇佣材料、业务证明、税务评税通知书/税务证明。</td>
+        <td><span class="mid">中</span></td>
+      </tr>
+      <tr>
+        <td>IANG / 学生受养人</td>
+        <td>Dependants</td>
+        <td>关系是否真实；受养人是否无不良记录；保证人/主申请人是否有能力维持生活和住宿。</td>
+        <td>受养人照片、旅行证件、关系证明、出生/结婚证明、主申请人身份及逗留证明、澳门/台湾/海外居留证明如适用。</td>
+        <td><span class="mid">中</span></td>
+      </tr>
+      <tr>
+        <td>职专毕业生留港计划</td>
+        <td>VPAS</td>
+        <td>是否就读合资格 VTC 指定课程；毕业后留港寻找或从事相关技术行业工作。</td>
+        <td>VPAS 指南所列学历、课程、身份、聘用/行业相关证明。可作为 Phase 1 拓展场景。</td>
+        <td><span class="low">候选</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>二、IANG 首批 Demo 材料包</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>材料</th>
+        <th>识别重点</th>
+        <th>核验规则</th>
+        <th>典型异常</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>港澳通行证 / EEP</td>
+        <td>姓名、证件号码、出生日期、签发地、有效期、签注类别。</td>
+        <td>与申请人姓名、HKID、landing slip/e-Visa 交叉一致；证件在申请和入境时有效。</td>
+        <td>证件过期、签注缺失、姓名拼音/中文名不一致、页面拍摄反光。</td>
+      </tr>
+      <tr>
+        <td>毕业证明 / Certifying letter / 成绩单 / 毕业证</td>
+        <td>院校、课程、学位/资历、毕业日期、全日制、本地评审/大湾区校园线索。</td>
+        <td>应届按毕业证日期或院校证明判断 6 个月窗口；学历须本科或以上/符合官方资历定义。</td>
+        <td>仅有 completion letter 但无毕业日期、院校非授权、课程层级不足、姓名与证件不一致。</td>
+      </tr>
+      <tr>
+        <td>HKID</td>
+        <td>英文姓名、中文姓名、HKID 号码、出生日期、签发日期。</td>
+        <td>与申请表、旅行证件、landing slip 交叉一致；如无 HKID 则按官方“if any”处理。</td>
+        <td>HKID 遮挡、号码校验位不清、旧版/新版版式混杂。</td>
+      </tr>
+      <tr>
+        <td>付款证明截图</td>
+        <td>付款渠道、金额、交易时间、申请类别、交易参考号。</td>
+        <td>IANG 属指定计划，通常涉及申请费和签证签发费；付款状态应与申请阶段一致。</td>
+        <td>截图缺交易号、只显示待支付、金额/币种不清、重复上传。</td>
+      </tr>
+      <tr>
+        <td>小白条 / landing slip</td>
+        <td>入境日期、获准逗留至、身份/条件、旅行证件号码。</td>
+        <td>若申请人当前在港，需与最新逗留期限和身份连续性匹配；延期申请不得逾期。</td>
+        <td>拍摄模糊、只上传旧 landing slip、与 e-Visa 不一致。</td>
+      </tr>
+      <tr>
+        <td>《内地的居民赴港工作同意书》</td>
+        <td>申请人姓名、身份证号、工作单位/主管机关、同意赴港工作表述、签章日期。</td>
+        <td>内地居民适用；需核对签章、日期和申请人身份；作为 ID 991 附件材料处理。</td>
+        <td>无单位盖章、日期早于合理范围、姓名或身份证号与证件不一致。</td>
+      </tr>
+      <tr>
+        <td>雇佣合约 / 聘书</td>
+        <td>雇主、岗位、薪酬福利、雇佣期、签署日期。</td>
+        <td>非应届 IANG 或 IANG 延期重点材料；岗位应通常由学位持有人担任，薪酬达市场水平。</td>
+        <td>无薪酬、无雇佣期、公司名与商业登记不一致。</td>
+      </tr>
+      <tr>
+        <td>公司材料</td>
+        <td>商业登记证、财务证明、新公司商业计划。</td>
+        <td>非应届/部分延期申请需要；若公司符合官方豁免条件可不提交部分公司材料。</td>
+        <td>BR 过期、财务文件非最近年度、新公司无商业计划。</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>三、规则优先的识别链路建议</h2>
+  <ol>
+    <li><strong>先识别官方表格/材料类型：</strong>用页眉、页脚表格号、标题、固定字段版式判断，例如 <code>ID 995A</code>、<code>ID 995B</code>、<code>ID 990A</code>、<code>ID 977</code>、<code>ID(C/E) 996</code>、<code>ID(E) 991</code>。</li>
+    <li><strong>再进入场景模板：</strong>IANG 应届、IANG 非应届、学生首次、学生延期、受养人、终止修读通知分别使用不同必交/条件应交清单。</li>
+    <li><strong>最后做跨文件校验：</strong>姓名、证件号、HKID、出生日期、毕业日期、逗留期限、雇主名称、薪酬、付款记录跨文件对齐。</li>
+    <li><strong>低置信度不自动通过：</strong>证件反光、landing slip 模糊、毕业证明缺毕业日期、付款截图缺交易号，均进入待复核。</li>
+  </ol>
+
+  <h2>四、Demo 页面建议</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>页面/Tab</th>
+        <th>展示内容</th>
+        <th>对客户的价值</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>材料上传</td>
+        <td>预置 IANG 应届、IANG 非应届、学生首次三个案例；支持材料 1-N 上传。</td>
+        <td>体现 Phase 1 Student/IANG 与现有 FDH 流程一致。</td>
+      </tr>
+      <tr>
+        <td>文档分类</td>
+        <td>材料类型、官方表格号/证件类型、页数、置信度、局部截图。</td>
+        <td>证明“规则优先 + 版式识别”不是整页 LLM 猜测。</td>
+      </tr>
+      <tr>
+        <td>字段提取</td>
+        <td>按申请人、身份、学历、逗留、雇佣、付款分组字段。</td>
+        <td>方便复用现有标准化字段表组件。</td>
+      </tr>
+      <tr>
+        <td>跨文件核验</td>
+        <td>姓名/HKID/证件号/毕业日期/逗留期限/雇主/薪酬的来源矩阵。</td>
+        <td>贴合 RFI 的 data verification 和 confidence indicators。</td>
+      </tr>
+      <tr>
+        <td>Minutes 草稿</td>
+        <td>按官方材料顺序输出结论：通过、未识别、必填未填写、待复核。</td>
+        <td>延续 FDH demo 的最终审核结论能力。</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>五、已下载官方模板</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>文件</th>
+        <th>用途</th>
+        <th>本地路径</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>ID 995A</td>
+        <td>来港就读申请表，申请人填写。</td>
+        <td><code>docs/student-iang-demo/official-forms/ID995A_entry_for_study_applicant.pdf</code></td>
+      </tr>
+      <tr>
+        <td>ID 995B</td>
+        <td>来港就读申请保证人表格。</td>
+        <td><code>docs/student-iang-demo/official-forms/ID995B_entry_for_study_sponsor.pdf</code></td>
+      </tr>
+      <tr>
+        <td>ID(C) 996</td>
+        <td>来港就读入境指南，中文。</td>
+        <td><code>docs/student-iang-demo/official-forms/IDC996_guidebook_entry_for_study_chi.pdf</code></td>
+      </tr>
+      <tr>
+        <td>ID(E) 996</td>
+        <td>Guidebook for Entry for Study in Hong Kong，英文。</td>
+        <td><code>docs/student-iang-demo/official-forms/IDE996_guidebook_entry_for_study_eng.pdf</code></td>
+      </tr>
+      <tr>
+        <td>ID 977</td>
+        <td>终止修读课程通知书，院校填写。</td>
+        <td><code>docs/student-iang-demo/official-forms/ID977_notification_termination_studies.pdf</code></td>
+      </tr>
+      <tr>
+        <td>ID 990A</td>
+        <td>专业人士来港就业申请表；IANG 申请也通过该 employment professionals 表格体系。</td>
+        <td><code>docs/student-iang-demo/official-forms/ID990A_employment_professionals_applicant_iang.pdf</code></td>
+      </tr>
+      <tr>
+        <td>ID(E) 991</td>
+        <td>Guidebook for Entry for Employment as Professionals in Hong Kong，含 IANG 及内地居民赴港工作同意书附件。</td>
+        <td><code>docs/student-iang-demo/official-forms/IDE991_guidebook_employment_professionals_iang_eng.pdf</code></td>
+      </tr>
+      <tr>
+        <td>ID(E) 1034</td>
+        <td>Guidebook for Vocational Professionals Admission Scheme，职专毕业生留港计划参考。</td>
+        <td><code>docs/student-iang-demo/official-forms/IDE1034_guidebook_vpas_eng.pdf</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>六、官方资料来源</h2>
+  <ul>
+    <li><a href="https://www.immd.gov.hk/eng/services/visas/study.html">Immigration Department - Students</a></li>
+    <li><a href="https://www.immd.gov.hk/eng/services/visas/IANG.html">Immigration Department - Immigration Arrangements for Non-local Graduates (IANG)</a></li>
+    <li><a href="https://www.immd.gov.hk/eng/forms/hk-visas/study.html">Immigration Department - Forms: Study</a></li>
+    <li><a href="https://www.immd.gov.hk/eng/forms/hk-visas/employment-as-professionals.html">Immigration Department - Forms: Employment as Professionals</a></li>
+    <li><a href="https://www.immd.gov.hk/eng/forms/hk-visas/VPAS.html">Immigration Department - Forms: VPAS</a></li>
+  </ul>
+</main>
+</body>
+</html>

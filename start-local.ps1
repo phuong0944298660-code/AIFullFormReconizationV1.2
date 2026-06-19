@@ -189,8 +189,8 @@ try {
 } catch {
   $llmTimeoutSeconds = 0
 }
-if ($llmTimeoutSeconds -le 0 -or $llmTimeoutSeconds -gt 120) {
-  $env:LLM_TIMEOUT_SECONDS = "120"
+if ($llmTimeoutSeconds -le 0) {
+  $env:LLM_TIMEOUT_SECONDS = "1200"
 }
 
 if (-not $KeepExisting) {

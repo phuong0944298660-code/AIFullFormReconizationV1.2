@@ -126,6 +126,7 @@ public class FdhReviewConclusionService {
         "max_tokens", properties.maxTokens(),
         "stream", false,
         "enable_thinking", false,
+        "response_format", Map.of("type", "json_object"),
         "chat_template_kwargs", Map.of("enable_thinking", false),
         "messages", List.of(
             Map.of("role", "system", "content", """

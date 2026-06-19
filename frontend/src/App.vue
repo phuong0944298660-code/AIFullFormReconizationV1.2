@@ -161,7 +161,7 @@ const reviewJsonPayload = computed(() => {
         fieldName: source.fieldName,
         value: source.value,
         confidence: source.confidence,
-        hasSnapshot: Boolean(source.snapshotDataUrl || source.snapshotText)
+        hasSnapshot: Boolean(source.snapshotDataUrl)
       }))
     }))
   }
@@ -439,6 +439,16 @@ function templateStatusIconPath(status) {
     required_missing: 'M12 7v6 M12 17h.01 M10.3 4.5 3.3 17a2 2 0 0 0 1.7 3h14a2 2 0 0 0 1.7-3l-7-12.5a2 2 0 0 0-3.4 0Z',
     review: 'M12 6v6l4 2 M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z'
   }[status] || 'M12 5v7 M12 17h.01'
+}
+
+function templateSourceValue(source) {
+  return source?.value || source?.snapshotText || ''
+}
+
+function templateSourceConfidence(source) {
+  const confidence = Number(source?.confidence)
+  if (!Number.isFinite(confidence)) return '-'
+  return `${Math.max(0, Math.min(100, Math.round(confidence)))}%`
 }
 
 function decisionLabel(decision) {
@@ -936,15 +946,20 @@ function verificationLineStatus(line) {
 
                 <div class="field-card-body">
                   <div class="evidence-column">
-                    <article v-for="source in field.sources" :key="`${field.key}:${source.documentName}:${source.fieldName}`" class="evidence-card">
-                    <div class="snapshot-card" :class="{ empty: !source.value && !source.snapshotDataUrl }">
-                      <img v-if="source.snapshotDataUrl" :src="source.snapshotDataUrl" :alt="`${source.documentName} ${source.fieldName}`">
-                      <span v-else>{{ source.snapshotText }}</span>
-                    </div>
+                    <article
+                      v-for="source in field.sources"
+                      :key="`${field.key}:${source.documentName}:${source.fieldName}`"
+                      class="evidence-card"
+                      :class="{ 'without-crop': !source.snapshotDataUrl }"
+                    >
+                      <div v-if="source.snapshotDataUrl" class="snapshot-card">
+                        <img :src="source.snapshotDataUrl" :alt="`${source.documentName} ${source.fieldName}`">
+                      </div>
                       <div class="evidence-meta">
                         <strong>{{ source.documentName }}</strong>
                         <span>{{ source.section }}</span>
                         <span>{{ source.fieldName }}</span>
+                        <small v-if="!source.snapshotDataUrl" class="evidence-crop-missing">未取得原始裁剪</small>
                         <div class="evidence-value-block">
                           <span class="evidence-value-label">识别值</span>
                           <strong class="evidence-value">
@@ -960,8 +975,7 @@ function verificationLineStatus(line) {
                         <small>置信度 {{ source.confidence }}%</small>
                       </div>
                     </article>
-                    <article v-if="!field.sources.length" class="evidence-card">
-                      <div class="snapshot-card empty"><span>missing</span></div>
+                    <article v-if="!field.sources.length" class="evidence-card without-crop">
                       <div class="evidence-meta">
                         <strong>未取得材料证据</strong>
                         <span>材料未上传或模板无法识别</span>
@@ -1092,6 +1106,9 @@ function verificationLineStatus(line) {
                   </td>
                   <td>
                     <strong class="template-field-value">{{ fieldRow.displayValue }}</strong>
+                    <small v-if="fieldRow.normalizedValue" class="template-normalized-result">
+                      归一结果：{{ fieldRow.normalizedValue }}
+                    </small>
                   </td>
                   <td>
                     <span class="template-status-pill compact" :class="fieldRow.status">
@@ -1109,10 +1126,36 @@ function verificationLineStatus(line) {
                         <span>{{ conflict.sources.join('；') }}</span>
                       </li>
                     </ul>
-                    <small v-else-if="fieldRow.sources.length">
-                      {{ fieldRow.sources.map((source) => `${source.documentName} / ${source.section} / ${source.fieldName}`).join('；') }}
-                    </small>
-                    <small v-else>未取得可用字段证据</small>
+                    <div v-if="fieldRow.sources.length" class="template-evidence-list">
+                      <article
+                        v-for="source in fieldRow.sources"
+                        :key="`${fieldRow.key}:${source.documentName}:${source.section}:${source.fieldName}`"
+                        class="template-evidence-card"
+                        :class="{ 'without-crop': !source.snapshotDataUrl }"
+                      >
+                        <div
+                          v-if="source.snapshotDataUrl"
+                          class="template-evidence-snapshot"
+                        >
+                          <img
+                            :src="source.snapshotDataUrl"
+                            :alt="`${source.documentName} ${source.fieldName}`"
+                          >
+                        </div>
+                        <div class="template-evidence-body">
+                          <strong>{{ source.documentName }}</strong>
+                          <span>{{ source.section }}</span>
+                          <span>{{ source.fieldName }}</span>
+                          <small v-if="!source.snapshotDataUrl" class="template-evidence-crop-missing">未取得原始裁剪</small>
+                          <div class="template-evidence-value">
+                            <span>识别值</span>
+                            <strong>{{ templateSourceValue(source) }}</strong>
+                          </div>
+                          <small>置信度 {{ templateSourceConfidence(source) }}</small>
+                        </div>
+                      </article>
+                    </div>
+                    <small v-else class="template-empty-evidence">未取得可用字段证据</small>
                   </td>
                 </tr>
               </tbody>
