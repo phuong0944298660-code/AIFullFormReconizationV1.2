@@ -16,10 +16,14 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 public class OcrDemoService {
+
+  private static final Logger log = LoggerFactory.getLogger(OcrDemoService.class);
 
   private final BaiduOcrPageRenderer pageRenderer;
   private final StructuredExtractionGateway structuredExtractionGateway;
@@ -275,6 +279,16 @@ public class OcrDemoService {
     if (missing.isEmpty()) {
       return new FieldBboxRefill(structuredData, 0);
     }
+    if (log.isInfoEnabled()) {
+      StringBuilder names = new StringBuilder();
+      for (MissingFieldRegion region : missing) {
+        if (names.length() > 0) {
+          names.append(", ");
+        }
+        names.append("page_").append(region.page()).append(".").append(region.path());
+      }
+      log.info("Field-bbox refill: {} missing-bbox field(s): [{}]", missing.size(), names);
+    }
     listener.postProcessingStep("field_bbox_location", "Locating missing field regions with LLM.", 95);
     Map<String, NormalizedBbox> located;
     try {
@@ -283,8 +297,10 @@ public class OcrDemoService {
       return new FieldBboxRefill(structuredData, 0);
     }
     if (located == null || located.isEmpty()) {
+      log.info("Field-bbox refill: LLM located 0 of {} missing field(s).", missing.size());
       return new FieldBboxRefill(structuredData, 0);
     }
+    log.info("Field-bbox refill: LLM located {} of {} missing field(s).", located.size(), missing.size());
     ObjectNode mutable = structuredData != null && structuredData.isObject()
         ? structuredData.deepCopy()
         : JsonNodeFactory.instance.objectNode();
@@ -307,6 +323,7 @@ public class OcrDemoService {
       valueBbox.put("height", bbox.height());
       refilled += 1;
     }
+    log.info("Field-bbox refill: refilled {} field(s) with bbox.", refilled);
     return new FieldBboxRefill(mutable, refilled);
   }
 

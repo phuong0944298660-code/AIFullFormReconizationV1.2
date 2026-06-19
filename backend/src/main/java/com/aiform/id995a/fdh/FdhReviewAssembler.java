@@ -382,7 +382,17 @@ public class FdhReviewAssembler {
     fields.add(documentFooterField(documents));
     Set<String> consumedKeys = collectConsumedFieldKeys(fields);
     fields.addAll(extractedMaterialFields(documents, consumedKeys));
+    // 按「页」排序（页内保持识别顺序），让字段顺序与材料物理顺序一致（从前页到后页）。
+    fields.sort(Comparator.comparingInt(FdhReviewAssembler::pageIndexOfField));
     return fields;
+  }
+
+  private static int pageIndexOfField(FdhReviewResult.StandardField field) {
+    if (field == null || field.sources() == null || field.sources().isEmpty()) {
+      return Integer.MAX_VALUE;
+    }
+    Matcher matcher = Pattern.compile("page_(\\d+)").matcher(field.sources().get(0).section());
+    return matcher.find() ? Integer.parseInt(matcher.group(1)) : Integer.MAX_VALUE;
   }
 
   private static Set<String> collectConsumedFieldKeys(List<FdhReviewResult.StandardField> fields) {
@@ -1151,7 +1161,7 @@ public class FdhReviewAssembler {
             values.add(new ExtractedValue(
                 detail.path(),
                 detail.label(),
-                sectionFromPath(detail.path()),
+                "page_" + detail.page() + "." + sectionFromPath(detail.path()),
                 detail.displayValue(),
                 detail.confidence(),
                 detail.snapshotDataUrl()

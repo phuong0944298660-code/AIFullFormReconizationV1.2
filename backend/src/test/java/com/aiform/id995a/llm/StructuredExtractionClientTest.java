@@ -80,6 +80,7 @@ class StructuredExtractionClientTest {
     assertThat(payload.toString()).contains("Return the selected option text exactly as visible");
     assertThat(payload.toString()).contains("Particulars of household members");
     assertThat(payload.toString()).contains("return every visible cell in that row");
+    assertThat(payload.toString()).contains("employment history / previous employment");
     assertThat(payload.toString()).contains("HK identity card no. Yes/No rows");
     assertThat(payload.toString()).contains("return ONLY the exact visible ID number");
     assertThat(payload.toString()).contains("未填写");
