@@ -9,6 +9,7 @@ import {
 } from './fdhMockData.js'
 import { applyFieldAdjudications, localFieldAdjudications } from './fieldAdjudication.js'
 import { sourceValueSegments } from './fieldDiff.js'
+import { employmentPeriodsFromFields, isEmploymentPeriodAnchorField, reviewableFields } from './employmentFields.js'
 import { deriveFieldStats, deriveReviewDecision } from './reviewDecision.js'
 import {
   buildVerificationTemplate,
@@ -63,17 +64,19 @@ const fieldRows = computed(() => {
   return applyFieldAdjudications(reviewResult.value?.fields || [], fieldAdjudications.value)
 })
 
+const reviewableFieldRows = computed(() => reviewableFields(fieldRows.value))
+
 const displayReviewResult = computed(() => {
   if (!reviewResult.value) return null
-  return withDerivedDecision(reviewResult.value, fieldRows.value)
+  return withDerivedDecision(reviewResult.value, reviewableFieldRows.value)
 })
 
 const displayFieldStats = computed(() => {
-  return deriveFieldStats(fieldRows.value)
+  return deriveFieldStats(reviewableFieldRows.value)
 })
 
 const filteredFields = computed(() => {
-  const rows = fieldRows.value
+  const rows = reviewableFieldRows.value
   if (fieldFilter.value === 'issues') return rows.filter((field) => field.status === 'fail')
   if (fieldFilter.value === 'review') return rows.filter((field) => field.status === 'review')
   if (fieldFilter.value === 'required') return rows.filter((field) => field.required)
@@ -82,30 +85,17 @@ const filteredFields = computed(() => {
 
 // 匹配所有工作经验字段（employer_N_*，任意后缀），统一进段、不再单独罗列；
 // 段内按 key 含 name/address/from/to 分类。不同 N 不同 key，不会归一。
-const EMPLOYMENT_FIELD_RE = /^extracted\.employer_(\d+)/
-
-const nonEmploymentFields = computed(() =>
-  filteredFields.value.filter((field) => !EMPLOYMENT_FIELD_RE.test(field.key))
-)
-
-const employmentPeriods = computed(() => {
-  const map = new Map()
-  for (const field of filteredFields.value) {
-    const match = field.key.match(EMPLOYMENT_FIELD_RE)
-    if (!match) continue
-    const n = Number(match[1])
-    if (!map.has(n)) {
-      map.set(n, { n, nameField: null, addressField: null, periodFromField: null, periodToField: null })
-    }
-    const period = map.get(n)
-    const key = field.key.toLowerCase()
-    if (key.includes('name')) period.nameField = field
-    else if (key.includes('address')) period.addressField = field
-    else if (key.includes('from')) period.periodFromField = field
-    else if (key.includes('to')) period.periodToField = field
-  }
-  return [...map.values()].sort((a, b) => a.n - b.n)
+const filteredAllFields = computed(() => {
+  const rows = fieldRows.value
+  if (fieldFilter.value === 'issues') return rows.filter((field) => field.status === 'fail')
+  if (fieldFilter.value === 'review') return rows.filter((field) => field.status === 'review')
+  if (fieldFilter.value === 'required') return rows.filter((field) => field.required)
+  return rows
 })
+
+const nonEmploymentFields = computed(() => filteredFields.value)
+
+const employmentPeriods = computed(() => employmentPeriodsFromFields(filteredAllFields.value))
 
 function employmentValue(field) {
   if (!field) return '未识别'
@@ -124,7 +114,7 @@ const blockingFindings = computed(() => {
       source: `${item.shortName} · ${item.templateId}`
     }))
 
-  const fieldFindings = fieldRows.value
+  const fieldFindings = reviewableFieldRows.value
     .filter((field) => field.blocking && (field.status === 'fail' || field.status === 'review'))
     .map((field) => ({
       id: `field:${field.key}`,
@@ -210,7 +200,7 @@ const verificationTemplate = computed(() => {
   if (!result) return null
   return buildVerificationTemplate({
     ...result,
-    fields: fieldRows.value
+    fields: reviewableFieldRows.value
   }, {
     applicationTypeLabel: selectedApplicationType.value.label
   })
@@ -543,7 +533,7 @@ function reviewResultForConclusion(result) {
   const adjusted = withLocalFieldAdjudications(result)
   return {
     ...adjusted,
-    fields: adjusted.fields.map((field) => ({
+    fields: reviewableFields(adjusted.fields).map((field) => ({
       ...field,
       sources: field.sources.map((source) => ({
         ...source,
@@ -556,7 +546,7 @@ function reviewResultForConclusion(result) {
 function withLocalFieldAdjudications(result) {
   if (!result) return result
   const fields = applyFieldAdjudications(result.fields || [], localFieldAdjudications(result))
-  return withDerivedDecision(result, fields)
+  return withDerivedDecision(result, reviewableFields(fields))
 }
 
 function withDerivedDecision(result, fields) {
@@ -1038,7 +1028,7 @@ function verificationLineStatus(line) {
                 </div>
               </article>
 
-              <section v-if="field.key === 'extracted.address_of_current_employer' && employmentPeriods.length" class="employment-period-group">
+              <section v-if="isEmploymentPeriodAnchorField(field) && employmentPeriods.length" class="employment-period-group">
                 <h3 class="employment-period-title">家庭佣工的工作经验</h3>
                 <article v-for="period in employmentPeriods" :key="period.n" class="employment-period-card">
                   <div class="employment-period-header">雇主{{ period.n }}</div>

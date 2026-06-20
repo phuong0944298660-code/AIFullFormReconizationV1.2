@@ -1,3 +1,5 @@
+import { reviewableFields } from './employmentFields.js'
+
 export const TEMPLATE_FIELD_ORDER = [
   'case.application_type',
   'document.footer_id',
@@ -67,7 +69,7 @@ const EMPTY_VALUE_PATTERNS = [
 ]
 
 export function buildVerificationTemplate(result, options = {}) {
-  const resultFields = result?.fields || []
+  const resultFields = reviewableFields(result?.fields || [])
   const fieldByKey = new Map(resultFields.map((field) => [field.key, field]))
   const orderedKeys = new Set(TEMPLATE_FIELD_ORDER)
   const orderedFieldRows = TEMPLATE_FIELD_ORDER

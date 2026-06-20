@@ -31,6 +31,10 @@ public class FdhReviewAssembler {
   private static final DateTimeFormatter GENERATED_AT_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
   private static final Pattern MONEY_PATTERN = Pattern.compile("([0-9][0-9,]*(?:\\.\\d+)?)");
   private static final Pattern CJK_PATTERN = Pattern.compile("\\p{IsHan}");
+  private static final Pattern WORK_EXPERIENCE_PERIOD_PATH_PATTERN =
+      Pattern.compile("(?:^|\\.)employer_(\\d+)_(name|address|period_from|period_to)$");
+  private static final Pattern WORK_EXPERIENCE_TOTAL_DURATION_PATH_PATTERN =
+      Pattern.compile("(?:^|\\.)total_duration_(years|months)$");
   private static final String ID988A_ENTRY_TO_HK_APPLICATION_TYPE =
       "entry_to_hong_kong_to_take_up_employment_as_a_domestic_helper_from_abroad";
   private static final String ID988A_CONTRACT_RENEWAL_APPLICATION_TYPE =
@@ -842,12 +846,26 @@ public class FdhReviewAssembler {
     // 姓名/雇主名：标准化字段为拼接值，三元组无法命中原始 surname/given/name，按语义跳过。
     // 但工作经验的 employer_N_name（过往雇主名）不是申请人姓名，需保留展示。
     if (matchesAnyGroup(value.searchText(), NAME_TOKEN_GROUPS)) {
-      return !normalizeTokens(value.searchText()).matches(".*employer\\s+\\d+.*");
+      return !isId988aCurrentEmployerField(value, document)
+          && !normalizeTokens(value.searchText()).matches(".*employer\\s+\\d+.*");
     }
     return false;
   }
 
+  private boolean isId988aCurrentEmployerField(ExtractedValue value, FdhReviewDocument document) {
+    if (document == null || !"id988a".equalsIgnoreCase(document.materialId())) {
+      return false;
+    }
+    String normalized = normalizeTokens(value.searchText());
+    return normalized.contains("current employer")
+        && (normalized.contains("name") || normalized.contains("address"));
+  }
+
   private String supplementalFieldKey(ExtractedValue value) {
+    Optional<String> workExperienceKey = workExperienceFieldKeyFromPath(value.path());
+    if (workExperienceKey.isPresent()) {
+      return "extracted." + workExperienceKey.get();
+    }
     String normalized = normalizeFieldName(supplementalFieldLabel(value));
     if (normalized.isBlank() || normalized.matches("\\d+")) {
       return "";
@@ -1171,6 +1189,7 @@ public class FdhReviewAssembler {
                 detail.snapshotDataUrl()
             ));
             coveredByStructuredFields.add(fieldDedupKey(detail.label(), detail.displayValue()));
+            coveredByStructuredFields.add(fieldDedupKey(fieldNameFromPath(detail.path()), detail.displayValue()));
           }
         }
       }
@@ -1235,6 +1254,19 @@ public class FdhReviewAssembler {
         .replaceAll("[_-]+", " ")
         .replaceAll("\\s+", " ")
         .trim();
+  }
+
+  private Optional<String> workExperienceFieldKeyFromPath(String path) {
+    String normalizedPath = path == null ? "" : path.toLowerCase(Locale.ROOT);
+    Matcher periodMatcher = WORK_EXPERIENCE_PERIOD_PATH_PATTERN.matcher(normalizedPath);
+    if (periodMatcher.find()) {
+      return Optional.of("employer_" + periodMatcher.group(1) + "_" + periodMatcher.group(2));
+    }
+    Matcher totalDurationMatcher = WORK_EXPERIENCE_TOTAL_DURATION_PATH_PATTERN.matcher(normalizedPath);
+    if (totalDurationMatcher.find()) {
+      return Optional.of("total_duration_" + totalDurationMatcher.group(1));
+    }
+    return Optional.empty();
   }
 
   private boolean matchesAnyGroup(String path, List<List<String>> groups) {

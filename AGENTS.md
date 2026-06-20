@@ -111,6 +111,9 @@ mvn '-Dtest=FdhReviewConclusionServiceTest,FdhReviewControllerTest' test
 - 忽略 WPS 临时锁文件，例如 `docs/~$*.xlsx`。
 - 不要提交日志、本地凭据、临时生成文件或真实 API key。
 - 提交时尽量只包含与当前需求相关的文件。
+- 创建 git commit 时，提交说明必须备注本次更新了什么内容、变更背景，并用分点形式阐述关键改动。
+- 上传至云端 Git 前，必须先向用户总结本次改动需求以及实际修改内容，并用分点形式阐述。
+- 任何提交到云端 Git 的操作（包括 `git push`、创建 PR 或向远端分支发布提交）必须先获得用户明确同意。
 - 推送时遵循用户指定分支。当前用户常用分支为 `dev` 和 `UAT`。
 - 粤在信 Git 远端为 `http://192.168.5.221:8081/yuezaixin/immd.git`。
 - 后续提交或推送到粤在信 `master` 分支前，必须先获得用户明确同意。
