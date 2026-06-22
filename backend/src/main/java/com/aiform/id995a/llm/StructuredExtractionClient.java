@@ -8,6 +8,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -16,6 +21,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -25,6 +31,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import javax.imageio.ImageIO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -37,6 +44,7 @@ public class StructuredExtractionClient implements
     FieldRegionLocationGateway {
 
   private static final String DEFAULT_BASE_URL = "https://apie.zhisuaninfo.com/v1";
+  private static final int OFFICIAL_PAGE_NUMBER_IMAGE_MAX_LONG_SIDE = 1600;
 
   private final LlmProperties properties;
   private final HttpClient httpClient;
@@ -614,10 +622,57 @@ public class StructuredExtractionClient implements
       ObjectNode image = content.addObject();
       image.put("type", "image_url");
       ObjectNode imageUrl = image.putObject("image_url");
-      imageUrl.put("url", page.sourceImageDataUrl());
-      imageUrl.put("detail", "high");
+      imageUrl.put("url", officialPageNumberImageDataUrl(page));
+      imageUrl.put("detail", "low");
     }
     return root;
+  }
+
+  private String officialPageNumberImageDataUrl(RenderedOcrPage page) {
+    if (page == null || page.pngBytes() == null || page.pngBytes().length == 0) {
+      return page == null ? "" : page.sourceImageDataUrl();
+    }
+    try {
+      BufferedImage original = ImageIO.read(new ByteArrayInputStream(page.pngBytes()));
+      if (original == null) {
+        return page.sourceImageDataUrl();
+      }
+      BufferedImage normalized = downscaleForOfficialPageNumberRecognition(original);
+      ByteArrayOutputStream output = new ByteArrayOutputStream();
+      if (!ImageIO.write(normalized, "jpg", output)) {
+        return page.sourceImageDataUrl();
+      }
+      return "data:image/jpeg;base64," + Base64.getEncoder().encodeToString(output.toByteArray());
+    } catch (IOException | RuntimeException exception) {
+      return page.sourceImageDataUrl();
+    }
+  }
+
+  private BufferedImage downscaleForOfficialPageNumberRecognition(BufferedImage original) {
+    int width = original.getWidth();
+    int height = original.getHeight();
+    int longSide = Math.max(width, height);
+    if (longSide <= OFFICIAL_PAGE_NUMBER_IMAGE_MAX_LONG_SIDE) {
+      return toRgbImage(original, width, height);
+    }
+    double scale = OFFICIAL_PAGE_NUMBER_IMAGE_MAX_LONG_SIDE / (double) longSide;
+    int targetWidth = Math.max(1, (int) Math.round(width * scale));
+    int targetHeight = Math.max(1, (int) Math.round(height * scale));
+    return toRgbImage(original, targetWidth, targetHeight);
+  }
+
+  private BufferedImage toRgbImage(BufferedImage source, int width, int height) {
+    BufferedImage target = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+    Graphics2D graphics = target.createGraphics();
+    try {
+      graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+      graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+      graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+      graphics.drawImage(source, 0, 0, width, height, null);
+    } finally {
+      graphics.dispose();
+    }
+    return target;
   }
 
   private String buildOfficialPageNumberPrompt(

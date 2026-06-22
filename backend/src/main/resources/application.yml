@@ -54,6 +54,7 @@ field-ocr:
 fdh:
   review:
     file-concurrency: ${FDH_REVIEW_FILE_CONCURRENCY:2}
+    official-page-number-timeout-millis: ${FDH_OFFICIAL_PAGE_NUMBER_TIMEOUT_MILLIS:30000}
 
 rag:
   enabled: ${RAG_ENABLED:false}

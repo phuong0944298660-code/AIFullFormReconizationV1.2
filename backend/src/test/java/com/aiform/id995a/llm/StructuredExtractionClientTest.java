@@ -6,6 +6,10 @@ import com.aiform.id995a.ocr.DocumentTemplate;
 import com.aiform.id995a.ocr.RenderedOcrPage;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.net.Authenticator;
 import java.net.CookieHandler;
 import java.net.ProxySelector;
@@ -23,6 +27,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;
+import javax.imageio.ImageIO;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLSession;
@@ -510,7 +515,7 @@ class StructuredExtractionClientTest {
   }
 
   @Test
-  void recognizesOfficialFooterPageNumbersWithFullPageImages() throws Exception {
+  void recognizesOfficialFooterPageNumbersWithLowDetailDownscaledFullPageImages() throws Exception {
     StubHttpClient httpClient = new StubHttpClient(jsonResponse("""
         {"pages":[
           {"uploaded_page":1,"form_id":"ID 988B","version":"06/2024","page_no":1,"confidence":98,"evidence":"footer number 1"},
@@ -527,8 +532,8 @@ class StructuredExtractionClientTest {
         "sample.pdf",
         new DocumentTemplate("id988b_2024_06", "ID 988B (06/2024)", 2, 98, "test", "hash"),
         List.of(
-            new RenderedOcrPage(1, new byte[] {1}, "data:image/png;base64,page1", 1000, 1400),
-            new RenderedOcrPage(2, new byte[] {2}, "data:image/png;base64,page2", 1000, 1400)
+            renderedPageWithImage(1, 1984, 2806),
+            renderedPageWithImage(2, 1984, 2806)
         ),
         new LlmModelProfile(
             "local-qwen3.6-35b-a3b",
@@ -549,10 +554,13 @@ class StructuredExtractionClientTest {
         .containsExactly(1, 3);
     assertThat(requestText).contains("Identify the official printed footer page number");
     assertThat(requestText).contains("do not rely on upload order");
-    assertThat(payload.path("messages").get(1).path("content").get(1).path("image_url").path("url").asText())
-        .isEqualTo("data:image/png;base64,page1");
-    assertThat(payload.path("messages").get(1).path("content").get(2).path("image_url").path("url").asText())
-        .isEqualTo("data:image/png;base64,page2");
+    JsonNode firstImage = payload.path("messages").get(1).path("content").get(1).path("image_url");
+    JsonNode secondImage = payload.path("messages").get(1).path("content").get(2).path("image_url");
+    assertThat(firstImage.path("detail").asText()).isEqualTo("low");
+    assertThat(secondImage.path("detail").asText()).isEqualTo("low");
+    assertThat(firstImage.path("url").asText()).startsWith("data:image/jpeg;base64,");
+    assertThat(firstImage.path("url").asText()).isNotEqualTo("data:image/png;base64,page-1-original");
+    assertThat(secondImage.path("url").asText()).startsWith("data:image/jpeg;base64,");
   }
 
   @Test
@@ -651,6 +659,29 @@ class StructuredExtractionClientTest {
     message.put("reasoning", reasoning);
     root.putObject("usage").put("total_tokens", 128);
     return objectMapper.writeValueAsString(root);
+  }
+
+  private RenderedOcrPage renderedPageWithImage(int page, int width, int height) throws Exception {
+    BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+    Graphics2D graphics = image.createGraphics();
+    try {
+      graphics.setColor(Color.WHITE);
+      graphics.fillRect(0, 0, width, height);
+      graphics.setColor(Color.BLACK);
+      graphics.drawString("ID 988B (06/2024)", width / 4, height - 80);
+      graphics.drawString(String.valueOf(page), width / 2, height - 40);
+    } finally {
+      graphics.dispose();
+    }
+    ByteArrayOutputStream output = new ByteArrayOutputStream();
+    ImageIO.write(image, "png", output);
+    return new RenderedOcrPage(
+        page,
+        output.toByteArray(),
+        "data:image/png;base64,page-" + page + "-original",
+        width,
+        height
+    );
   }
 
   private StubHttpOutcome httpResponse(int statusCode, String body) {

@@ -212,6 +212,7 @@ public class FdhReviewJobService {
     List<RenderedOcrPage> pages = pageRenderer.render(upload.filename(), upload.contentType(), upload.bytes());
     DocumentTemplate template = templateDetectionService.detect(upload.filename(), upload.contentType(), upload.bytes(), pages);
     String materialId = FdhMaterialCatalog.classify(template, upload.filename());
+    state.markActive(upload.filename(), "正在识别官方页码/缺页情况");
     List<Integer> officialPageNumbers = detectOfficialPageNumbers(state, upload, template, pages, modelId);
     log.info(
         "FDH review job {} rendered and classified {} as {} (template={}, pages={}, source={}) in {} ms",

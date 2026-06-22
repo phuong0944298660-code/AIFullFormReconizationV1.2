@@ -315,6 +315,51 @@ class FdhReviewJobServiceTest {
   }
 
   @Test
+  void reportsOfficialPageNumberRecognitionProgressBeforeExtraction() throws Exception {
+    BaiduOcrPageRenderer renderer = mock(BaiduOcrPageRenderer.class);
+    TemplateDetectionService templateDetectionService = mock(TemplateDetectionService.class);
+    OcrDemoService ocrDemoService = mock(OcrDemoService.class);
+    FdhOfficialPageNumberDetector officialPageNumberDetector = mock(FdhOfficialPageNumberDetector.class);
+    FdhReviewJobService service = new FdhReviewJobService(
+        renderer,
+        templateDetectionService,
+        ocrDemoService,
+        new FdhReviewAssembler(5100, 1236, Clock.systemUTC()),
+        officialPageNumberDetector,
+        1
+    );
+    CountDownLatch pageNumberRecognitionStarted = new CountDownLatch(1);
+    CountDownLatch allowPageNumberRecognitionToFinish = new CountDownLatch(1);
+
+    when(renderer.render(anyString(), anyString(), any())).thenReturn(renderedPages(5));
+    when(templateDetectionService.detect(anyString(), anyString(), any(), anyList()))
+        .thenReturn(template("id988a_2024_06", "ID 988A (06/2024)", 5));
+    when(officialPageNumberDetector.detect(anyString(), any(DocumentTemplate.class), anyList(), any()))
+        .thenAnswer(invocation -> {
+          pageNumberRecognitionStarted.countDown();
+          assertThat(allowPageNumberRecognitionToFinish.await(2, TimeUnit.SECONDS)).isTrue();
+          return List.of(1, 2, 3, 4, 5);
+        });
+    when(ocrDemoService.recognizeRenderedForFdhReview(
+        anyString(),
+        anyList(),
+        any(ExtractionProgressListener.class),
+        any(),
+        any(DocumentTemplate.class)
+    )).thenAnswer(invocation -> response(invocation.getArgument(0), invocation.getArgument(4)));
+
+    FdhReviewJobStatusResponse started = service.start("entry_visa", List.of(file("ID988A.pdf")), null);
+    assertThat(pageNumberRecognitionStarted.await(2, TimeUnit.SECONDS)).isTrue();
+
+    FdhReviewJobStatusResponse running = service.status(started.jobId());
+    allowPageNumberRecognitionToFinish.countDown();
+
+    assertThat(running.status()).isEqualTo("running");
+    assertThat(running.message()).contains("官方页码");
+    assertThat(waitForCompletion(service, started.jobId()).status()).isEqualTo("completed");
+  }
+
+  @Test
   void continuesWhenOfficialPageNumberRecognitionConnectionCloses() throws Exception {
     BaiduOcrPageRenderer renderer = mock(BaiduOcrPageRenderer.class);
     TemplateDetectionService templateDetectionService = mock(TemplateDetectionService.class);
