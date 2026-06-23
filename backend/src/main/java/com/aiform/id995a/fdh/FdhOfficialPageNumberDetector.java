@@ -146,7 +146,7 @@ class FdhOfficialPageNumberDetector {
       if (!validResult(result, expectedForm, expectedVersion, expectedPages)) {
         return List.of();
       }
-      if (!seen.add(result.officialPageNumber())) {
+      if (!seen.add(result.officialPageNumber()) && !allowsDuplicateOfficialPageNumbers(template)) {
         return List.of();
       }
       pageNumbers.add(result.officialPageNumber());
@@ -185,6 +185,9 @@ class FdhOfficialPageNumberDetector {
     if (template == null) {
       return 0;
     }
+    if (isId990aTemplate(template)) {
+      return 5;
+    }
     return switch (template.templateId()) {
       case "id988a_2024_06" -> 5;
       case "id988b_2024_06", "id407_2016_11" -> 4;
@@ -195,6 +198,9 @@ class FdhOfficialPageNumberDetector {
   private String expectedFormId(DocumentTemplate template) {
     if (template == null) {
       return "";
+    }
+    if (isId990aTemplate(template)) {
+      return "ID 990A";
     }
     return switch (template.templateId()) {
       case "id988a_2024_06" -> "ID 988A";
@@ -208,11 +214,24 @@ class FdhOfficialPageNumberDetector {
     if (template == null) {
       return "";
     }
+    if (isId990aTemplate(template)) {
+      return "";
+    }
     return switch (template.templateId()) {
       case "id988a_2024_06", "id988b_2024_06" -> "06/2024";
       case "id407_2016_11" -> "11/2016";
       default -> "";
     };
+  }
+
+  private boolean allowsDuplicateOfficialPageNumbers(DocumentTemplate template) {
+    return isId990aTemplate(template);
+  }
+
+  private boolean isId990aTemplate(DocumentTemplate template) {
+    return template != null
+        && template.templateId() != null
+        && template.templateId().toLowerCase(Locale.ROOT).startsWith("id990a_");
   }
 
   private String normalize(String value) {

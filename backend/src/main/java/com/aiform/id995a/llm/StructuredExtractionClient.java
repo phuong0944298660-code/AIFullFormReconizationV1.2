@@ -964,6 +964,7 @@ public class StructuredExtractionClient implements
     builder.append("Find printed field labels, filling areas, handwriting, typed values, checked boxes, signatures, and photo/upload areas by visual reasoning.\n");
     builder.append("Return a compact result. Prioritize applicant-filled text, selected checkboxes, signatures, photos, and major visible blank fields. Do not enumerate every empty grid cell, every unchecked option, template instruction, explanatory paragraph, barcode, or page footer.\n");
     builder.append("Use nearby printed labels as JSON keys, normalized to lower_snake_case English where possible. Preserve Chinese or English field values exactly when visible.\n");
+    appendIangEducationProofInstructions(builder, filename);
     builder.append("Rules:\n");
     builder.append("- Include source_file and total_pages at the top level.\n");
     builder.append("- Group page content under page_1, page_2, etc.\n");
@@ -1000,6 +1001,30 @@ public class StructuredExtractionClient implements
     builder.append("source_file: ").append(filename == null || filename.isBlank() ? "uploaded-document" : filename).append('\n');
     builder.append("total_pages: ").append(totalPages).append('\n');
     return builder.toString();
+  }
+
+  private void appendIangEducationProofInstructions(StringBuilder builder, String filename) {
+    if (!isIangEducationProofFilename(filename)) {
+      return;
+    }
+    builder.append("IANG education/certifying letter guidance:\n");
+    builder.append("- This appears to be an IANG education/certifying letter. When visible, return these certificate fields under the page_N object: ref, recipient, student_name, hk_identity_card_no, university, programme_degree, date.\n");
+    builder.append("- Extract ref only from the Ref:/Reference line, and recipient only from the TO:/To:/Recipient line.\n");
+    builder.append("- Extract university from the issuing school letterhead, logo, or institution name. Do not use the generic phrase this University as the university value.\n");
+    builder.append("- Extract programme_degree as only the degree/programme text, for example Master of Science in Computer Science (Full-time). Do not return the full certification sentence for programme_degree.\n");
+    builder.append("- If the HKID value is covered, masked, cropped, or unreadable, return null or omit hk_identity_card_no; do not guess.\n");
+  }
+
+  private boolean isIangEducationProofFilename(String filename) {
+    String normalized = filename == null ? "" : filename.toLowerCase(Locale.ROOT);
+    return normalized.contains("毕业")
+        || normalized.contains("學歷")
+        || normalized.contains("学历")
+        || normalized.contains("certifying")
+        || normalized.contains("graduation")
+        || normalized.contains("transcript")
+        || normalized.contains("degree")
+        || normalized.contains("education");
   }
 
   private void mergeMetadataPage(ObjectNode target, JsonNode sourceMetadata, String pageKey) {

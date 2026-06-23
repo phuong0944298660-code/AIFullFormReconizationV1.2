@@ -199,5 +199,55 @@
     "structureHash" : "89e01ebe7ac4e134",
     "firstSeenAt" : "2026-06-18 10:39:23",
     "lastSeenAt" : "2026-06-22 13:50:06"
+  }, {
+    "filename" : "付款证明.png",
+    "templateId" : "unknown_1p_92037278",
+    "footerId" : "",
+    "pageCount" : 1,
+    "matchSource" : "structure_hash",
+    "confidence" : 65,
+    "structureHash" : "92037278f08676cf",
+    "firstSeenAt" : "2026-06-23 11:11:06",
+    "lastSeenAt" : "2026-06-23 17:07:26"
+  }, {
+    "filename" : "毕业证明.pdf",
+    "templateId" : "unknown_1p_923d4a81",
+    "footerId" : "",
+    "pageCount" : 1,
+    "matchSource" : "structure_hash",
+    "confidence" : 65,
+    "structureHash" : "923d4a81d3c1141c",
+    "firstSeenAt" : "2026-06-23 11:11:21",
+    "lastSeenAt" : "2026-06-23 17:06:47"
+  }, {
+    "filename" : "ID990A_employment_professionals_applicant_iang.pdf",
+    "templateId" : "id990a_2025_01",
+    "footerId" : "ID 990A (01/2025)",
+    "pageCount" : 9,
+    "matchSource" : "pdf_text_footer",
+    "confidence" : 98,
+    "structureHash" : "f62ba8595d7144ab",
+    "firstSeenAt" : "2026-06-23 11:11:54",
+    "lastSeenAt" : "2026-06-23 11:36:59"
+  }, {
+    "filename" : "港澳通行证_正面样证_译图OCR.jpg",
+    "templateId" : "unknown_1p_6d570660",
+    "footerId" : "",
+    "pageCount" : 1,
+    "matchSource" : "structure_hash",
+    "confidence" : 65,
+    "structureHash" : "6d57066025400797",
+    "firstSeenAt" : "2026-06-23 11:12:06",
+    "lastSeenAt" : "2026-06-23 17:08:01"
+  }, {
+    "filename" : "ID 990A-赵航宇.pdf",
+    "templateId" : "unknown_9p_d6e30a3e",
+    "footerId" : "",
+    "pageCount" : 9,
+    "matchSource" : "structure_hash",
+    "confidence" : 65,
+    "structureHash" : "d6e30a3e1804e519",
+    "firstSeenAt" : "2026-06-23 16:29:46",
+    "lastSeenAt" : "2026-06-23 17:09:13"
   } ]
 }

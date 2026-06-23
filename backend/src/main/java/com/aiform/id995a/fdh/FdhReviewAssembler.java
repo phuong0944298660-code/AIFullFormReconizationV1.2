@@ -95,6 +95,7 @@ public class FdhReviewAssembler {
         uploadedFiles(safeDocuments),
         materialRows,
         fields,
+        List.of(),
         decision,
         decisionText(decision, materialRows, fields),
         stats,

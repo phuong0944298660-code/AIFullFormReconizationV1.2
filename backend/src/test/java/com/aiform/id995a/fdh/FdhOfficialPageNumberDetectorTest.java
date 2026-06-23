@@ -55,6 +55,19 @@ class FdhOfficialPageNumberDetectorTest {
   }
 
   @Test
+  void acceptsDuplicateOfficialPageFiveForId990a() throws Exception {
+    assertThat(detectorReturning(List.of(
+        result(1, "ID 990A", "", 1),
+        result(2, "ID 990A", "", 2),
+        result(3, "ID 990A", "", 3),
+        result(4, "ID 990A", "", 4),
+        result(5, "ID 990A", "", 5),
+        result(6, "ID 990A", "", 5)
+    )).detect("ID990A.pdf", template("id990a_2025_01", "ID 990A (01/2025)", 6), renderedPages(6), null))
+        .containsExactly(1, 2, 3, 4, 5, 5);
+  }
+
+  @Test
   void rejectsLlmPageNumbersWithWrongFormOutOfRangeOrDuplicates() throws Exception {
     assertThat(detectorReturning(List.of(
         result(1, "ID 988A", "06/2024", 1),

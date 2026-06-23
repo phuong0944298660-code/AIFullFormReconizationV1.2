@@ -1,12 +1,17 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import {
-  applicationTypes,
-  buildReviewResult,
-  buildUploadedFiles,
-  materials,
-  scenarios
+  applicationTypes as fdhApplicationTypes,
+  buildReviewResult as buildFdhReviewResult,
+  buildUploadedFiles as buildFdhUploadedFiles,
+  scenarios as fdhScenarios
 } from './fdhMockData.js'
+import {
+  applicationTypes as studentApplicationTypes,
+  buildReviewResult as buildStudentReviewResult,
+  buildUploadedFiles as buildStudentUploadedFiles,
+  scenarios as studentScenarios
+} from './studentIangMockData.js'
 import { applyFieldAdjudications, localFieldAdjudications } from './fieldAdjudication.js'
 import { sourceValueSegments } from './fieldDiff.js'
 import { employmentPeriodsFromFields, isEmploymentPeriodAnchorField, reviewableFields } from './employmentFields.js'
@@ -17,8 +22,24 @@ import {
 } from './verificationTemplate.js'
 import { verificationNotice } from './verificationNotice.js'
 
-const selectedApplicationTypeId = ref(applicationTypes[0].id)
-const selectedScenarioId = ref('missing_core')
+const demoModes = [
+  {
+    id: 'student_iang',
+    label: 'IANG 应届毕业生在港首次申请',
+    shortLabel: '学生 / IANG',
+    description: '默认演示学生出入境 IANG 应届毕业生在港首次申请材料识别。'
+  },
+  {
+    id: 'fdh',
+    label: '家庭佣工',
+    shortLabel: '家庭佣工',
+    description: '保留当前外籍家庭佣工材料核验流程。'
+  }
+]
+
+const selectedDemoModeId = ref('student_iang')
+const selectedApplicationTypeId = ref(studentApplicationTypes[0].id)
+const selectedScenarioId = ref(studentScenarios[0].id)
 const uploadedFiles = ref([])
 const uploadedFileObjects = ref([])
 const reviewResult = ref(null)
@@ -37,19 +58,62 @@ let uploadBatchSequence = 0
 let verificationSequence = 0
 const FDH_JOB_POLL_INTERVAL_MS = 1000
 const FDH_JOB_POLL_LIMIT = 1500
+const REVIEW_JOB_START_TIMEOUT_MS = 60000
 const demoFlowDescription = '本Demo主要演示「申请材料上传→文档解析识别→字段结构化提取与归一→跨档智能校验→自动生成审核结论」端到端全流程'
 
+const selectedDemoMode = computed(() => {
+  return demoModes.find((item) => item.id === selectedDemoModeId.value) || demoModes[0]
+})
+
+const isFdhMode = computed(() => selectedDemoModeId.value === 'fdh')
+
+const activeApplicationTypes = computed(() => {
+  return isFdhMode.value ? fdhApplicationTypes : studentApplicationTypes
+})
+
+const activeScenarios = computed(() => {
+  return isFdhMode.value ? fdhScenarios : studentScenarios
+})
+
+const activeWorkflowLabel = computed(() => {
+  return isFdhMode.value ? '外籍家庭佣工入境审核' : 'IANG 应届毕业生在港首次申请'
+})
+
+const uploadHelperText = computed(() => {
+  return isFdhMode.value
+    ? 'PDF / PNG / JPG · 支持 ID 988A、ID 988B、ID 407 与其他证明材料'
+    : 'PDF / PNG / JPG · 支持 ID 990A、毕业证明、港澳通行证 / 护照 / HKID、付款截图'
+})
+
+const checklistDescription = computed(() => {
+  return isFdhMode.value
+    ? '材料 1-3 纳入最终判定；材料 4-12 只展示是否上传，不阻断本 demo 结论。'
+    : '展示 IANG 应届毕业生在港首次申请官方材料清单；标记“Demo审批”的材料参与当前结论。'
+})
+
 const selectedApplicationType = computed(() => {
-  return applicationTypes.find((item) => item.id === selectedApplicationTypeId.value) || applicationTypes[0]
+  return activeApplicationTypes.value.find((item) => item.id === selectedApplicationTypeId.value) || activeApplicationTypes.value[0]
 })
 
 const selectedScenario = computed(() => {
-  return scenarios.find((item) => item.id === selectedScenarioId.value) || scenarios[0]
+  return activeScenarios.value.find((item) => item.id === selectedScenarioId.value) || activeScenarios.value[0]
 })
 
 const checklistPreview = computed(() => {
-  return buildReviewResult(selectedApplicationTypeId.value, selectedScenarioId.value).materials
+  return buildActiveReviewResult().materials
 })
+
+function buildActiveUploadedFiles() {
+  return isFdhMode.value
+    ? buildFdhUploadedFiles(selectedScenarioId.value)
+    : buildStudentUploadedFiles(selectedScenarioId.value)
+}
+
+function buildActiveReviewResult() {
+  return isFdhMode.value
+    ? buildFdhReviewResult(selectedApplicationTypeId.value, selectedScenarioId.value)
+    : buildStudentReviewResult(selectedApplicationTypeId.value, selectedScenarioId.value)
+}
 
 const fieldAdjudications = computed(() => {
   const local = localFieldAdjudications(reviewResult.value || {})
@@ -146,6 +210,7 @@ const reviewJsonPayload = computed(() => {
     decisionText: result.decisionText,
     generatedAt: result.generatedAt,
     stats: result.stats,
+    documentFieldGroups: result.documentFieldGroups || [],
     materialCompleteness: result.materials.map((material) => ({
       no: material.no,
       id: material.id,
@@ -202,13 +267,14 @@ const verificationTemplate = computed(() => {
     ...result,
     fields: reviewableFieldRows.value
   }, {
-    applicationTypeLabel: selectedApplicationType.value.label
+    applicationTypeLabel: selectedApplicationType.value.label,
+    workflowLabel: activeWorkflowLabel.value
   })
 })
 
 const templateStatusLegend = TEMPLATE_STATUS_LEGEND
 
-watch([selectedApplicationTypeId, selectedScenarioId], () => {
+watch([selectedDemoModeId, selectedApplicationTypeId, selectedScenarioId], () => {
   fieldFilter.value = 'all'
   apiError.value = ''
   verificationSequence += 1
@@ -216,12 +282,25 @@ watch([selectedApplicationTypeId, selectedScenarioId], () => {
   verificationConclusion.value = null
   verificationError.value = ''
   if (uploadedFiles.value.length && !uploadedFileObjects.value.length) {
-    uploadedFiles.value = buildUploadedFiles(selectedScenarioId.value)
+    uploadedFiles.value = buildActiveUploadedFiles()
   }
   if (reviewResult.value?.scenarioId) {
-    reviewResult.value = buildReviewResult(selectedApplicationTypeId.value, selectedScenarioId.value)
+    reviewResult.value = buildActiveReviewResult()
   }
 })
+
+function selectDemoMode(modeId) {
+  if (processing.value || selectedDemoModeId.value === modeId) return
+  selectedDemoModeId.value = modeId
+  if (modeId === 'fdh') {
+    selectedApplicationTypeId.value = fdhApplicationTypes[0].id
+    selectedScenarioId.value = 'missing_core'
+  } else {
+    selectedApplicationTypeId.value = studentApplicationTypes[0].id
+    selectedScenarioId.value = studentScenarios[0].id
+  }
+  resetDemo()
+}
 
 function openFilePicker() {
   fileInput.value?.click()
@@ -289,7 +368,7 @@ function handleDragLeave(event) {
 function simulateUpload() {
   uploadedFileObjects.value = []
   uploadBatchSequence = 0
-  uploadedFiles.value = buildUploadedFiles(selectedScenarioId.value)
+  uploadedFiles.value = buildActiveUploadedFiles()
   reviewResult.value = null
   jobStatus.value = null
   apiError.value = ''
@@ -306,7 +385,7 @@ async function startRecognition() {
   processing.value = true
   reviewResult.value = null
   window.setTimeout(() => {
-    const result = buildReviewResult(selectedApplicationTypeId.value, selectedScenarioId.value)
+    const result = buildActiveReviewResult()
     reviewResult.value = result
     resultView.value = 'recognition'
     verificationConclusion.value = null
@@ -319,8 +398,17 @@ async function startRecognition() {
 async function startBackendRecognition() {
   processing.value = true
   reviewResult.value = null
-  jobStatus.value = null
   apiError.value = ''
+  jobStatus.value = {
+    status: 'uploading',
+    totalFiles: uploadedFileObjects.value.length,
+    processedFiles: 0,
+    progress: 1,
+    activeFilename: '',
+    message: '正在上传材料并创建识别任务。',
+    error: '',
+    result: null
+  }
   try {
     const form = new FormData()
     for (const entry of uploadedFileObjects.value) {
@@ -331,9 +419,10 @@ async function startBackendRecognition() {
 
     const started = await requestJson('/api/fdh/review/jobs', {
       method: 'POST',
-      body: form
+      body: form,
+      timeoutMs: REVIEW_JOB_START_TIMEOUT_MS
     })
-    jobStatus.value = started
+    jobStatus.value = mergeJobStatus(started)
     const completed = await pollFdhJob(started.jobId)
     jobStatus.value = completed
     if (completed.status !== 'completed') {
@@ -403,7 +492,8 @@ async function pollFdhJob(jobId) {
   for (let attempt = 0; attempt < FDH_JOB_POLL_LIMIT; attempt += 1) {
     await delay(FDH_JOB_POLL_INTERVAL_MS)
     latest = await requestJson(`/api/fdh/review/jobs/${jobId}`)
-    jobStatus.value = latest
+    jobStatus.value = mergeJobStatus(latest)
+    latest = jobStatus.value
     if (['completed', 'failed', 'canceled'].includes(latest.status)) {
       return latest
     }
@@ -411,13 +501,47 @@ async function pollFdhJob(jobId) {
   throw new Error('识别任务仍在处理中，请稍后刷新任务状态或检查后端日志。')
 }
 
-async function requestJson(url, options = {}) {
-  const response = await fetch(url, options)
-  if (!response.ok) {
-    const text = await response.text()
-    throw new Error(text || `HTTP ${response.status}`)
+function mergeJobStatus(nextStatus) {
+  if (!nextStatus) return nextStatus
+  const currentProgress = Number(jobStatus.value?.progress)
+  const nextProgress = Number(nextStatus.progress)
+  if (!Number.isFinite(currentProgress) || !Number.isFinite(nextProgress)) {
+    return nextStatus
   }
-  return response.json()
+  if (nextProgress >= currentProgress || ['completed', 'failed', 'canceled'].includes(nextStatus.status)) {
+    return nextStatus
+  }
+  return {
+    ...nextStatus,
+    progress: currentProgress
+  }
+}
+
+async function requestJson(url, options = {}) {
+  const { timeoutMs, signal, ...fetchOptions } = options
+  let timeoutId = null
+  if (timeoutMs && !signal) {
+    const controller = new AbortController()
+    fetchOptions.signal = controller.signal
+    timeoutId = window.setTimeout(() => controller.abort(), timeoutMs)
+  } else if (signal) {
+    fetchOptions.signal = signal
+  }
+  try {
+    const response = await fetch(url, fetchOptions)
+    if (!response.ok) {
+      const text = await response.text()
+      throw new Error(text || `HTTP ${response.status}`)
+    }
+    return response.json()
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new Error('请求超时，请检查后端服务后重试。')
+    }
+    throw error
+  } finally {
+    if (timeoutId) window.clearTimeout(timeoutId)
+  }
 }
 
 function delay(milliseconds) {
@@ -482,6 +606,7 @@ function decisionLabel(decision) {
 }
 
 function materialRequirementLabel(material) {
+  if (material.requirementLabel) return material.requirementLabel
   if (!material.applicable) return '不适用'
   if (material.core) return '核心必交'
   if (material.conditional) return '条件应交'
@@ -502,6 +627,16 @@ async function startVerificationConclusion(result) {
   verificationSequence = sequence
   verificationLoading.value = true
   verificationError.value = ''
+  if (!isFdhMode.value) {
+    verificationConclusion.value = {
+      llmEnabled: false,
+      status: 'student_demo_frontend',
+      model: '',
+      text: localVerificationConclusion(withLocalFieldAdjudications(result))
+    }
+    verificationLoading.value = false
+    return
+  }
   try {
     const conclusion = await requestJson('/api/fdh/review/conclusion', {
       method: 'POST',
@@ -641,11 +776,27 @@ function verificationLineStatus(line) {
   <main class="fdh-app">
     <header class="app-header">
       <div class="brand-block">
-        <p class="eyebrow">FDH Entry Visa Review Demo</p>
-        <h1>外籍家庭傭工入境簽證材料核验</h1>
+        <p class="eyebrow">Immigration Document Review Demo</p>
+        <h1>香港出入境申请材料识别与核验Demo</h1>
         <p class="header-copy">
           {{ demoFlowDescription }}
         </p>
+      </div>
+
+      <div class="workflow-tabs" role="tablist" aria-label="申请场景切换">
+        <button
+          v-for="mode in demoModes"
+          :key="mode.id"
+          type="button"
+          role="tab"
+          :aria-selected="selectedDemoModeId === mode.id"
+          :class="{ active: selectedDemoModeId === mode.id }"
+          :disabled="processing"
+          @click="selectDemoMode(mode.id)"
+        >
+          <strong>{{ mode.label }}</strong>
+          <span>{{ mode.description }}</span>
+        </button>
       </div>
 
     </header>
@@ -655,15 +806,15 @@ function verificationLineStatus(line) {
         <section class="case-section" aria-labelledby="case-title">
           <div class="section-heading">
             <div>
-              <h2 id="case-title">选择申请类别</h2>
-              <p>用户只能选择所属类别；材料清单中的勾选状态不可交互。</p>
+              <h2 id="case-title">{{ isFdhMode ? '选择申请类别' : '当前学生出入境场景' }}</h2>
+              <p>{{ isFdhMode ? '用户只能选择所属类别；材料清单中的勾选状态不可交互。' : '默认展示 IANG 应届毕业生在港首次申请，材料清单标明官方要求和 Demo 审批范围。' }}</p>
             </div>
             <span class="selected-case">{{ selectedApplicationType.checklistKey }}</span>
           </div>
 
-          <div class="case-grid">
+          <div class="case-grid" :class="{ single: !isFdhMode }">
             <button
-              v-for="applicationType in applicationTypes"
+              v-for="applicationType in activeApplicationTypes"
               :key="applicationType.id"
               type="button"
               class="case-card"
@@ -680,8 +831,8 @@ function verificationLineStatus(line) {
         <section class="checklist-section" aria-labelledby="checklist-title">
           <div class="section-heading">
             <div>
-              <h2 id="checklist-title">该类别官方材料清单</h2>
-              <p>材料 1-3 纳入最终判定；材料 4-12 只展示是否上传，不阻断本 demo 结论。</p>
+              <h2 id="checklist-title">{{ isFdhMode ? '该类别官方材料清单' : 'IANG 应届毕业生在港首次申请材料清单' }}</h2>
+              <p>{{ checklistDescription }}</p>
             </div>
           </div>
 
@@ -700,6 +851,7 @@ function verificationLineStatus(line) {
               <div class="material-main">
                 <strong>{{ material.no }}. {{ material.name }}</strong>
                 <span>{{ material.shortName }} · {{ material.templateId }} · {{ material.expectedPages }}{{ material.note ? ` · ${material.note}` : '' }}</span>
+                <small v-if="!isFdhMode && material.scopeText" class="material-scope-note">{{ material.scopeText }}</small>
               </div>
               <span class="requirement-badge" :class="{ core: material.core }">
                 {{ materialRequirementLabel(material) }}
@@ -712,7 +864,7 @@ function verificationLineStatus(line) {
           <div class="section-heading">
             <div>
               <h2 id="upload-title">上传申请材料包</h2>
-              <p>当前阶段点击上传会生成模拟多文件列表；文件内容暂不解析。</p>
+              <p>{{ isFdhMode ? '家庭佣工流程保持现有真实上传识别能力；未选择文件时使用内置演示数据。' : '上传真实学生材料时走后端识别；未选择文件时使用内置演示数据。' }}</p>
             </div>
           </div>
 
@@ -736,7 +888,7 @@ function verificationLineStatus(line) {
                 </svg>
               </span>
               <strong>选择并上传多份申请材料</strong>
-              <small>PDF / PNG / JPG · 支持 ID 988A、ID 988B、ID 407 与其他证明材料</small>
+              <small>{{ uploadHelperText }}</small>
             </button>
             <input
               ref="fileInput"
@@ -819,7 +971,7 @@ function verificationLineStatus(line) {
     <section v-else class="result-stage">
       <div class="result-toolbar">
         <div class="file-summary">
-          <span class="file-label">申请类别</span>
+          <span class="file-label">{{ selectedDemoMode.shortLabel }}</span>
           <strong>{{ selectedApplicationType.label }}</strong>
           <span>{{ reviewResult.uploadedFiles.length }} 份上传材料</span>
         </div>
@@ -870,7 +1022,7 @@ function verificationLineStatus(line) {
           <section class="side-panel">
             <div class="panel-heading">
               <h2>材料完整性</h2>
-              <p>1-3 为最终判定范围；4-12 为展示项。</p>
+              <p>{{ isFdhMode ? '1-3 为最终判定范围；4-12 为展示项。' : '标记“Demo审批”的材料参与当前结论，其余官方应交材料作为提示展示。' }}</p>
             </div>
             <div class="compact-material-list">
               <article
@@ -891,7 +1043,7 @@ function verificationLineStatus(line) {
           <section class="side-panel">
             <div class="panel-heading">
               <h2>上传文件</h2>
-              <p>当前场景生成的模拟材料包。</p>
+              <p>{{ isFdhMode ? '当前场景生成的模拟材料包。' : 'IANG 应届毕业生在港首次申请的演示材料包。' }}</p>
             </div>
             <div class="sidebar-file-list">
               <article v-for="file in reviewResult.uploadedFiles" :key="file.filename">
@@ -903,6 +1055,50 @@ function verificationLineStatus(line) {
         </aside>
 
         <section class="review-main">
+          <section v-if="reviewResult.documentFieldGroups?.length" class="document-fields-panel">
+            <div class="panel-heading">
+              <div>
+                <h2>材料逐页字段识别</h2>
+                <p>按材料和页码顺序展示可填写字段；ID 990A 当前仅识别前 5 页。</p>
+              </div>
+            </div>
+            <div class="document-group-list">
+              <article
+                v-for="group in reviewResult.documentFieldGroups"
+                :key="group.materialId"
+                class="document-group-card"
+              >
+                <header>
+                  <div>
+                    <strong>{{ group.materialName }}</strong>
+                    <span>{{ group.templateId }}{{ group.note ? ` · ${group.note}` : '' }}</span>
+                  </div>
+                </header>
+                <div class="document-page-list">
+                  <section v-for="page in group.pages" :key="`${group.materialId}:${page.pageNo}`" class="document-page-card">
+                    <h3>第 {{ page.pageNo }} 页 · {{ page.title }}</h3>
+                    <div class="document-field-table">
+                      <div class="document-field-row document-field-head">
+                        <span>字段</span>
+                        <span>填写内容 / 识别值</span>
+                        <span>状态</span>
+                      </div>
+                      <div
+                        v-for="item in page.fields"
+                        :key="`${group.materialId}:${page.pageNo}:${item.label}`"
+                        class="document-field-row"
+                      >
+                        <span>{{ item.label }}</span>
+                        <strong>{{ item.value || '未识别' }}</strong>
+                        <span class="status-badge" :class="item.status">{{ statusLabel(item.status) }}</span>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+              </article>
+            </div>
+          </section>
+
           <section class="findings-panel">
             <div class="panel-heading">
               <h2>逐条结论与出处</h2>

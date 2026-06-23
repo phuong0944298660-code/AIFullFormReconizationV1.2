@@ -38,6 +38,7 @@ public class FdhReviewJobService {
   private final TemplateDetectionService templateDetectionService;
   private final OcrDemoService ocrDemoService;
   private final FdhReviewAssembler reviewAssembler;
+  private final StudentIangReviewAssembler studentIangReviewAssembler;
   private final FdhOfficialPageNumberDetector officialPageNumberDetector;
   private final int fileConcurrency;
   private final ConcurrentMap<String, JobState> jobs = new ConcurrentHashMap<>();
@@ -49,6 +50,7 @@ public class FdhReviewJobService {
       TemplateDetectionService templateDetectionService,
       OcrDemoService ocrDemoService,
       FdhReviewAssembler reviewAssembler,
+      StudentIangReviewAssembler studentIangReviewAssembler,
       FdhOfficialPageNumberDetector officialPageNumberDetector,
       @Value("${fdh.review.file-concurrency:2}") int fileConcurrency
   ) {
@@ -56,6 +58,7 @@ public class FdhReviewJobService {
     this.templateDetectionService = templateDetectionService;
     this.ocrDemoService = ocrDemoService;
     this.reviewAssembler = reviewAssembler;
+    this.studentIangReviewAssembler = studentIangReviewAssembler;
     this.officialPageNumberDetector = officialPageNumberDetector;
     this.fileConcurrency = Math.max(1, Math.min(3, fileConcurrency));
   }
@@ -66,7 +69,34 @@ public class FdhReviewJobService {
       OcrDemoService ocrDemoService,
       FdhReviewAssembler reviewAssembler
   ) {
-    this(pageRenderer, templateDetectionService, ocrDemoService, reviewAssembler, new FdhOfficialPageNumberDetector(), DEFAULT_FILE_CONCURRENCY);
+    this(
+        pageRenderer,
+        templateDetectionService,
+        ocrDemoService,
+        reviewAssembler,
+        new StudentIangReviewAssembler(),
+        new FdhOfficialPageNumberDetector(),
+        DEFAULT_FILE_CONCURRENCY
+    );
+  }
+
+  FdhReviewJobService(
+      BaiduOcrPageRenderer pageRenderer,
+      TemplateDetectionService templateDetectionService,
+      OcrDemoService ocrDemoService,
+      FdhReviewAssembler reviewAssembler,
+      FdhOfficialPageNumberDetector officialPageNumberDetector,
+      int fileConcurrency
+  ) {
+    this(
+        pageRenderer,
+        templateDetectionService,
+        ocrDemoService,
+        reviewAssembler,
+        new StudentIangReviewAssembler(),
+        officialPageNumberDetector,
+        fileConcurrency
+    );
   }
 
   public FdhReviewJobStatusResponse start(
@@ -159,7 +189,7 @@ public class FdhReviewJobService {
           .sorted(Comparator.comparingInt(IndexedReviewDocument::index))
           .map(IndexedReviewDocument::document)
           .toList();
-      FdhReviewResult result = reviewAssembler.assemble(state.applicationTypeId(), orderedDocuments);
+      FdhReviewResult result = assembleResult(state.applicationTypeId(), orderedDocuments);
       state.markCompleted(result);
       log.info(
           "FDH review job {} completed with decision={} in {} ms",
@@ -211,7 +241,7 @@ public class FdhReviewJobService {
     state.markActive(upload.filename(), "正在渲染并识别材料类型");
     List<RenderedOcrPage> pages = pageRenderer.render(upload.filename(), upload.contentType(), upload.bytes());
     DocumentTemplate template = templateDetectionService.detect(upload.filename(), upload.contentType(), upload.bytes(), pages);
-    String materialId = FdhMaterialCatalog.classify(template, upload.filename());
+    String materialId = classifyMaterial(state.applicationTypeId(), template, upload.filename());
     state.markActive(upload.filename(), "正在识别官方页码/缺页情况");
     List<Integer> officialPageNumbers = detectOfficialPageNumbers(state, upload, template, pages, modelId);
     log.info(
@@ -228,7 +258,13 @@ public class FdhReviewJobService {
       return null;
     }
     long extractionStartedAt = System.nanoTime();
-    List<RenderedOcrPage> extractionPages = extractionPages(template, pages, officialPageNumbers);
+    List<RenderedOcrPage> extractionPages = extractionPages(
+        state.applicationTypeId(),
+        materialId,
+        template,
+        pages,
+        officialPageNumbers
+    );
     state.markActive(upload.filename(), "正在按已识别模板执行字段提取");
     OcrDemoResponse response = ocrDemoService.recognizeRenderedForFdhReview(
         upload.filename(),
@@ -258,12 +294,31 @@ public class FdhReviewJobService {
     );
   }
 
+  private FdhReviewResult assembleResult(String applicationTypeId, List<FdhReviewDocument> documents) {
+    if (StudentIangMaterialCatalog.supports(applicationTypeId)) {
+      return studentIangReviewAssembler.assemble(applicationTypeId, documents);
+    }
+    return reviewAssembler.assemble(applicationTypeId, documents);
+  }
+
+  private String classifyMaterial(String applicationTypeId, DocumentTemplate template, String filename) {
+    if (StudentIangMaterialCatalog.supports(applicationTypeId)) {
+      return StudentIangMaterialCatalog.classify(template, filename);
+    }
+    return FdhMaterialCatalog.classify(template, filename);
+  }
+
   private List<RenderedOcrPage> extractionPages(
+      String applicationTypeId,
+      String materialId,
       DocumentTemplate template,
       List<RenderedOcrPage> pages,
       List<Integer> officialPageNumbers
   ) {
     List<RenderedOcrPage> safePages = pages == null ? List.of() : pages;
+    if (StudentIangMaterialCatalog.supports(applicationTypeId) && "id990a".equals(materialId)) {
+      return id990aExtractionPages(safePages, officialPageNumbers);
+    }
     if (template == null) {
       return safePages;
     }
@@ -282,6 +337,27 @@ public class FdhReviewJobService {
       return List.copyOf(filtered);
     }
     return safePages.stream().filter(page -> page.page() != skippedOfficialPage).toList();
+  }
+
+  private List<RenderedOcrPage> id990aExtractionPages(
+      List<RenderedOcrPage> pages,
+      List<Integer> officialPageNumbers
+  ) {
+    if (officialPageNumbers != null && officialPageNumbers.size() == pages.size()) {
+      List<RenderedOcrPage> selected = new ArrayList<>();
+      for (int targetPage = 1; targetPage <= 5; targetPage += 1) {
+        for (int index = 0; index < pages.size(); index += 1) {
+          if (officialPageNumbers.get(index) == targetPage) {
+            selected.add(pages.get(index));
+            break;
+          }
+        }
+      }
+      if (!selected.isEmpty()) {
+        return List.copyOf(selected);
+      }
+    }
+    return pages.stream().limit(5).toList();
   }
 
   private int nonFillableOfficialPage(String templateId) {
@@ -426,7 +502,7 @@ public class FdhReviewJobService {
     if (normalized.contains("timed out") || normalized.contains("timeout")) {
       return "模型服务响应超时，请稍后重试。";
     }
-    return message == null || message.isBlank() ? "FDH review job failed." : message;
+    return message == null || message.isBlank() ? "材料审批任务失败。" : message;
   }
 
   private record ReviewUpload(String filename, String contentType, byte[] bytes) {
@@ -447,7 +523,7 @@ public class FdhReviewJobService {
     private int processedFiles;
     private int progress;
     private String activeFilename = "";
-    private String message = "FDH 审批任务已创建，等待开始处理。";
+    private String message = "材料审批任务已创建，等待开始处理。";
     private String error = "";
     private FdhReviewResult result;
     private Future<?> future;
@@ -481,7 +557,7 @@ public class FdhReviewJobService {
       }
       status = "running";
       activeFilename = filename == null ? "" : filename;
-      progress = progressFor(processedFiles, totalFiles, 10);
+      advanceProgressTo(progressFor(processedFiles, totalFiles, 10));
       message = stage + "：" + activeFilename;
     }
 
@@ -492,7 +568,7 @@ public class FdhReviewJobService {
       status = "running";
       processedFiles = Math.max(processedFiles, processed);
       activeFilename = filename == null ? "" : filename;
-      progress = progressFor(processedFiles, totalFiles, 0);
+      advanceProgressTo(progressFor(processedFiles, totalFiles, 0));
       message = "已完成 " + processedFiles + " / " + totalFiles + " 份材料识别。";
     }
 
@@ -503,7 +579,7 @@ public class FdhReviewJobService {
       status = "running";
       processedFiles = Math.min(totalFiles, processedFiles + 1);
       activeFilename = filename == null ? "" : filename;
-      progress = progressFor(processedFiles, totalFiles, 0);
+      advanceProgressTo(progressFor(processedFiles, totalFiles, 0));
       message = "已完成 " + processedFiles + " / " + totalFiles + " 份材料识别。";
     }
 
@@ -512,7 +588,7 @@ public class FdhReviewJobService {
         return;
       }
       status = "post_processing";
-      progress = 96;
+      advanceProgressTo(96);
       activeFilename = "";
       message = "正在汇总材料清单、标准化字段和跨文件规则结论。";
     }
@@ -526,7 +602,7 @@ public class FdhReviewJobService {
       processedFiles = totalFiles;
       progress = 100;
       activeFilename = "";
-      message = "FDH 材料审批识别完成。";
+      message = "材料审批识别完成。";
       error = "";
     }
 
@@ -536,7 +612,7 @@ public class FdhReviewJobService {
       }
       status = "failed";
       progress = Math.max(progress, progressFor(processedFiles, totalFiles, 0));
-      error = failureMessage == null || failureMessage.isBlank() ? "FDH review job failed." : failureMessage;
+      error = failureMessage == null || failureMessage.isBlank() ? "材料审批任务失败。" : failureMessage;
       message = error;
     }
 
@@ -549,7 +625,7 @@ public class FdhReviewJobService {
       result = null;
       activeFilename = "";
       progress = 100;
-      message = "FDH 审批任务已取消。";
+      message = "材料审批任务已取消。";
       return future;
     }
 
@@ -602,7 +678,7 @@ public class FdhReviewJobService {
       }
       status = "running";
       activeFilename = filename == null ? "" : filename;
-      progress = progressForPage(processedFiles, totalFiles, page, pageCount);
+      advanceProgressTo(progressForPage(processedFiles, totalFiles, page, pageCount));
       message = stage + "：" + activeFilename;
     }
 
@@ -612,7 +688,7 @@ public class FdhReviewJobService {
       }
       status = "running";
       activeFilename = filename == null ? "" : filename;
-      progress = progressForPostProcessing(processedFiles, totalFiles, stepProgress);
+      advanceProgressTo(progressForPostProcessing(processedFiles, totalFiles, stepProgress));
       message = stage + "：" + activeFilename;
     }
 
@@ -642,6 +718,10 @@ public class FdhReviewJobService {
 
     private boolean isTerminal() {
       return "completed".equals(status) || "failed".equals(status) || "canceled".equals(status);
+    }
+
+    private void advanceProgressTo(int candidate) {
+      progress = Math.max(progress, Math.max(0, Math.min(100, candidate)));
     }
 
     private int progressFor(int processed, int total, int activeOffset) {

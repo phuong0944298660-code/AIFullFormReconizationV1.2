@@ -7,6 +7,7 @@ public record FdhReviewResult(
     List<UploadedFile> uploadedFiles,
     List<MaterialRow> materials,
     List<StandardField> fields,
+    List<DocumentFieldGroup> documentFieldGroups,
     String decision,
     String decisionText,
     FieldStats stats,
@@ -20,9 +21,23 @@ public record FdhReviewResult(
     uploadedFiles = uploadedFiles == null ? List.of() : List.copyOf(uploadedFiles);
     materials = materials == null ? List.of() : List.copyOf(materials);
     fields = fields == null ? List.of() : List.copyOf(fields);
+    documentFieldGroups = documentFieldGroups == null ? List.of() : List.copyOf(documentFieldGroups);
     decision = decision == null || decision.isBlank() ? "REVIEW" : decision;
     decisionText = decisionText == null ? "" : decisionText;
     generatedAt = generatedAt == null ? "" : generatedAt;
+  }
+
+  public FdhReviewResult(
+      String applicationTypeId,
+      List<UploadedFile> uploadedFiles,
+      List<MaterialRow> materials,
+      List<StandardField> fields,
+      String decision,
+      String decisionText,
+      FieldStats stats,
+      String generatedAt
+  ) {
+    this(applicationTypeId, uploadedFiles, materials, fields, List.of(), decision, decisionText, stats, generatedAt);
   }
 
   public record UploadedFile(
@@ -133,4 +148,47 @@ public record FdhReviewResult(
       int review,
       int required
   ) {}
+
+  public record DocumentFieldGroup(
+      String materialId,
+      String materialName,
+      String templateId,
+      String note,
+      List<DocumentFieldPage> pages
+  ) {
+
+    public DocumentFieldGroup {
+      materialId = materialId == null ? "" : materialId;
+      materialName = materialName == null || materialName.isBlank() ? materialId : materialName;
+      templateId = templateId == null ? "" : templateId;
+      note = note == null ? "" : note;
+      pages = pages == null ? List.of() : List.copyOf(pages);
+    }
+  }
+
+  public record DocumentFieldPage(
+      int pageNo,
+      String title,
+      List<DocumentField> fields
+  ) {
+
+    public DocumentFieldPage {
+      pageNo = Math.max(1, pageNo);
+      title = title == null || title.isBlank() ? "识别字段" : title;
+      fields = fields == null ? List.of() : List.copyOf(fields);
+    }
+  }
+
+  public record DocumentField(
+      String label,
+      String value,
+      String status
+  ) {
+
+    public DocumentField {
+      label = label == null || label.isBlank() ? "未命名字段" : label;
+      value = value == null ? "" : value;
+      status = status == null || status.isBlank() ? "pass" : status;
+    }
+  }
 }

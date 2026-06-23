@@ -264,7 +264,7 @@ function buildOverallBullets(result, options, summary) {
   return [
     {
       label: '申请类别',
-      value: '外籍家庭佣工入境审核'
+      value: options.workflowLabel || '外籍家庭佣工入境审核'
     },
     {
       label: '细分类别',
@@ -285,7 +285,7 @@ function buildCaseRows(result, options, summary) {
   return [
     {
       label: '申请类别',
-      value: '外籍家庭佣工入境审核',
+      value: options.workflowLabel || '外籍家庭佣工入境审核',
       status: 'pass'
     },
     {

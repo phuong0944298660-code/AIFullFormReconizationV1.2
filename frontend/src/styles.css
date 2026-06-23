@@ -116,6 +116,48 @@ svg {
   line-height: 1.5;
 }
 
+.workflow-tabs {
+  flex: 0 0 min(760px, 48vw);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  box-shadow: 0 10px 24px rgba(31, 42, 55, 0.05);
+}
+
+.workflow-tabs button {
+  min-height: 58px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #344054;
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  padding: 9px 12px;
+  text-align: left;
+}
+
+.workflow-tabs button.active {
+  background: var(--teal);
+  color: #fff;
+}
+
+.workflow-tabs strong {
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.workflow-tabs span {
+  color: currentColor;
+  opacity: 0.76;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 .scenario-pill,
 .status-chip {
   min-height: 42px;
@@ -205,6 +247,10 @@ svg {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
+}
+
+.case-grid.single {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .case-card {
@@ -306,6 +352,12 @@ svg {
 
 .material-main span {
   color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.material-scope-note {
+  color: #475467;
   font-size: 12px;
   line-height: 1.35;
 }
@@ -730,11 +782,103 @@ svg {
 .side-panel,
 .findings-panel,
 .fields-panel,
+.document-fields-panel,
 .json-result-panel,
 .verification-page {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
+}
+
+.document-fields-panel {
+  padding: 18px;
+}
+
+.document-group-list,
+.document-page-list {
+  display: grid;
+  gap: 10px;
+}
+
+.document-group-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-muted);
+  overflow: hidden;
+}
+
+.document-group-card > header {
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+  padding: 12px 14px;
+}
+
+.document-group-card > header div {
+  display: grid;
+  gap: 4px;
+}
+
+.document-group-card strong {
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.document-group-card header span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.document-page-list {
+  padding: 12px;
+}
+
+.document-page-card {
+  border: 1px solid #d8e0eb;
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.document-page-card h3 {
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+  padding: 9px 11px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.document-field-table {
+  display: grid;
+}
+
+.document-field-row {
+  min-height: 42px;
+  border-bottom: 1px solid #edf2f7;
+  display: grid;
+  grid-template-columns: minmax(150px, 0.8fr) minmax(0, 1.4fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 11px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.document-field-row:last-child {
+  border-bottom: 0;
+}
+
+.document-field-head {
+  min-height: 34px;
+  background: #fbfdff;
+  color: #17456b;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.document-field-row strong {
+  color: #0f2f24;
+  overflow-wrap: anywhere;
 }
 
 .json-result-panel,
@@ -1733,6 +1877,12 @@ svg {
     flex-direction: column;
   }
 
+  .workflow-tabs {
+    width: 100%;
+    flex-basis: auto;
+    grid-template-columns: 1fr;
+  }
+
   .scenario-pill,
   .scenario-pill select,
   .status-chip,
@@ -1759,6 +1909,11 @@ svg {
 
   .material-row {
     grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .document-field-row {
+    grid-template-columns: 1fr;
+    align-items: start;
   }
 
   .material-row .requirement-badge {

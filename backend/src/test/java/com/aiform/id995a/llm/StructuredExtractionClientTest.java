@@ -95,6 +95,29 @@ class StructuredExtractionClientTest {
   }
 
   @Test
+  void iangEducationProofPromptRequestsCertificateHeaderAndProgrammeFields() throws Exception {
+    StructuredExtractionClient client = new StructuredExtractionClient(
+        new LlmProperties(true, "https://apie.zhisuaninfo.com/v1", "test-key", "Qwen3.6-35B-A3B", 4096, 60, 4),
+        new StubHttpClient(jsonResponse("{\"page_1\":{\"student_name\":\"ZHAO\"}}")),
+        objectMapper
+    );
+
+    JsonNode payload = client.buildRequestPayload(
+        "毕业证明.pdf",
+        List.of(new RenderedOcrPage(1, new byte[] {1, 2, 3}, "data:image/png;base64,abc123", 1000, 1400))
+    );
+
+    assertThat(payload.toString()).contains("IANG education/certifying letter");
+    assertThat(payload.toString()).contains("ref");
+    assertThat(payload.toString()).contains("recipient");
+    assertThat(payload.toString()).contains("student_name");
+    assertThat(payload.toString()).contains("hk_identity_card_no");
+    assertThat(payload.toString()).contains("university");
+    assertThat(payload.toString()).contains("programme_degree");
+    assertThat(payload.toString()).contains("Do not use the generic phrase this University as the university value");
+  }
+
+  @Test
   void locatesMissingFieldBboxesViaVisualReasoning() throws Exception {
     StubHttpClient httpClient = new StubHttpClient(jsonResponse("""
         {"fields":[{"path":"name_of_current_employer","value_bbox":{"x":0.32,"y":0.39,"width":0.55,"height":0.03}}]}

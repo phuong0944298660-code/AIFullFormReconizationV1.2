@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 
 const css = readFileSync(new URL('./styles.css', import.meta.url), 'utf8')
 const app = readFileSync(new URL('./App.vue', import.meta.url), 'utf8')
+const studentIangMockData = readFileSync(new URL('./studentIangMockData.js', import.meta.url), 'utf8')
 const viteConfig = readFileSync(new URL('../vite.config.js', import.meta.url), 'utf8')
 const packageJson = readFileSync(new URL('../package.json', import.meta.url), 'utf8')
 const startLocal = readFileSync(new URL('../../start-local.ps1', import.meta.url), 'utf8')
@@ -132,6 +133,44 @@ test('FDH backend polling does not timeout before the backend LLM request budget
   assert.match(app, /const FDH_JOB_POLL_LIMIT = 1500/)
   assert.doesNotMatch(app, /attempt < 240/)
   assert.match(app, /识别任务仍在处理中/)
+})
+
+test('backend upload job creation has visible startup progress and timeout handling', () => {
+  assert.match(app, /const REVIEW_JOB_START_TIMEOUT_MS = 60000/)
+  assert.match(app, /status:\s*'uploading'/)
+  assert.match(app, /progress:\s*1/)
+  assert.match(app, /timeoutMs:\s*REVIEW_JOB_START_TIMEOUT_MS/)
+  assert.match(app, /AbortController/)
+  assert.match(app, /throw new Error\('请求超时，请检查后端服务后重试。'\)/)
+  assert.match(app, /function mergeJobStatus/)
+  assert.match(app, /progress:\s*currentProgress/)
+  assert.match(app, /jobStatus\.value = mergeJobStatus\(started\)/)
+  assert.match(app, /jobStatus\.value = mergeJobStatus\(latest\)/)
+})
+
+test('student IANG ID990A copy consistently references the first five pages', () => {
+  const studentFrontendCopy = `${app}\n${studentIangMockData}`
+  assert.match(studentFrontendCopy, /ID 990A 当前仅识别前 5 页/)
+  assert.match(studentFrontendCopy, /按页尾页码识别 ID 990A 前 5 页/)
+  assert.doesNotMatch(studentFrontendCopy, /前 6 页/)
+  assert.doesNotMatch(studentFrontendCopy, /第 6 页/)
+  assert.doesNotMatch(studentFrontendCopy, /pages_1-6/)
+})
+
+test('student IANG mock document fields keep education and payment pages concise', () => {
+  assert.match(studentIangMockData, /\['Ref', 'GS\/19\/1', 'pass'\]/)
+  assert.match(studentIangMockData, /\['收件人', 'IMMIGRATION DEPARTMENT', 'pass'\]/)
+  assert.match(studentIangMockData, /\['姓名', 'ZHAO, Hangyu', 'pass'\]/)
+  assert.match(studentIangMockData, /\['身份证号', 'F539325\(2\)', 'pass'\]/)
+  assert.match(studentIangMockData, /\['大学', 'The Chinese University of Hong Kong', 'pass'\]/)
+  assert.match(studentIangMockData, /\['学科及学位', 'Master of Science in Computer Science \(Full-time\)', 'pass'\]/)
+  assert.match(studentIangMockData, /\['日期', '16 June 2026', 'pass'\]/)
+  assert.match(studentIangMockData, /\['申请人', 'ZHAO, HAN\*\*\*', 'review'\]/)
+  assert.match(studentIangMockData, /\['申请编号', '1340351-25', 'pass'\]/)
+  assert.match(studentIangMockData, /\['申请人数', '1', 'pass'\]/)
+  assert.match(studentIangMockData, /\['每份申请需缴纳的申请费', 'HK\$ 600\.00', 'pass'\]/)
+  assert.match(studentIangMockData, /\['申请费总金额', 'HK\$ 600\.00', 'pass'\]/)
+  assert.doesNotMatch(studentIangMockData, /\['付款状态', 'NOT YET COMPLETE'/)
 })
 
 test('local startup uses stable port ownership and conservative FDH LLM defaults', () => {
