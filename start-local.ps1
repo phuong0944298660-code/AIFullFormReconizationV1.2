@@ -170,6 +170,15 @@ $env:SERVER_PORT = [string]$BackendPort
 $env:FRONTEND_PORT = [string]$FrontendPort
 $env:VITE_BACKEND_ORIGIN = "http://127.0.0.1:$BackendPort"
 $env:BACKEND_ORIGIN = $env:VITE_BACKEND_ORIGIN
+$localNoProxy = "127.0.0.1,localhost"
+foreach ($proxyBypassName in @("NO_PROXY", "no_proxy")) {
+  $currentBypass = [Environment]::GetEnvironmentVariable($proxyBypassName, "Process")
+  if ([string]::IsNullOrWhiteSpace($currentBypass)) {
+    [Environment]::SetEnvironmentVariable($proxyBypassName, $localNoProxy, "Process")
+  } elseif ($currentBypass -notmatch "(^|,)127\.0\.0\.1(,|$)" -or $currentBypass -notmatch "(^|,)localhost(,|$)") {
+    [Environment]::SetEnvironmentVariable($proxyBypassName, "$currentBypass,$localNoProxy", "Process")
+  }
+}
 $env:RAG_ENABLED = "false"
 $env:FIELD_OCR_ENABLED = $(if ($shouldStartSidecar) { "true" } else { "false" })
 $env:FIELD_OCR_BASE_URL = "http://127.0.0.1:$FieldOcrPort"
