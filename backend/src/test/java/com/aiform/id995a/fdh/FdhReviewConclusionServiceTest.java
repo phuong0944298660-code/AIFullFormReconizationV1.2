@@ -129,6 +129,44 @@ class FdhReviewConclusionServiceTest {
   }
 
   @Test
+  void iangConclusionPromptLetsLlmPassTranslatedAndDateEquivalentFields() throws Exception {
+    ObjectMapper objectMapper = new ObjectMapper();
+    String modelText = objectMapper.writeValueAsString(Map.of(
+        "text", "整体结论：REVIEW - 付款状态仍需复核；学历字段经语义比对一致。\n材料识别结果：\n- 毕业证明：PASS\n字段识别结果：\n- 毕业院校：PASS",
+        "fieldAdjudications", List.of(Map.of(
+            "key", "education.institution",
+            "suggestedValue", "The Chinese University of Hong Kong",
+            "status", "pass",
+            "corrected", false,
+            "reason", "香港中文大学与 The Chinese University of Hong Kong 为同一院校，额外月份不是院校名称的一部分。"
+        ))
+    ));
+    StableHttpClient httpClient = new StableHttpClient(jsonResponse(objectMapper, modelText));
+    FdhReviewConclusionService service = new FdhReviewConclusionService(
+        new LlmProperties(true, "https://apie.zhisuaninfo.com/v1", "test-key", "Qwen3.6-35B-A3B", 2048, 20, 2),
+        httpClient,
+        objectMapper
+    );
+
+    FdhReviewConclusionResponse response = service.generate(iangSemanticReviewResult());
+
+    assertThat(response.status()).isEqualTo("ok");
+    assertThat(response.fieldAdjudications()).singleElement()
+        .satisfies(adjudication -> {
+          assertThat(adjudication.key()).isEqualTo("education.institution");
+          assertThat(adjudication.status()).isEqualTo("pass");
+          assertThat(adjudication.corrected()).isFalse();
+          assertThat(adjudication.reason()).contains("同一院校");
+        });
+    assertThat(httpClient.lastRequestBody())
+        .contains("IANG")
+        .contains("中英文")
+        .contains("日期写法")
+        .contains("status=pass")
+        .contains("corrected=false");
+  }
+
+  @Test
   void fallsBackWhenModelChangesRuleDecision() throws Exception {
     ObjectMapper objectMapper = new ObjectMapper();
     String contradictoryText = "整体结论：FAIL - 模型错误改写了规则结论。\n材料识别结果：\n- ID 988A：FAIL\n字段识别结果：\n- 申请类别：FAIL";
@@ -434,6 +472,67 @@ class FdhReviewConclusionServiceTest {
         "REVIEW",
         "field requires review",
         new FdhReviewResult.FieldStats(1, 0, 0, 1, 1),
+        "2026-06-01"
+    );
+  }
+
+  private FdhReviewResult iangSemanticReviewResult() {
+    return new FdhReviewResult(
+        "iang_recent_in_hk",
+        List.of(),
+        List.of(new FdhReviewResult.MaterialRow(
+            "educationProof",
+            2,
+            "学历 / 毕业资格证明",
+            "毕业证明",
+            "Certifying letter",
+            "按证明",
+            true,
+            true,
+            true,
+            true,
+            false,
+            "pass",
+            "毕业资格可核验",
+            "Demo审批",
+            List.of("毕业证明.pdf"),
+            ""
+        )),
+        List.of(
+            new FdhReviewResult.StandardField(
+                "education.institution",
+                "学历与毕业资格",
+                "毕业院校",
+                true,
+                "The Chinese University of Hong Kong / 香港中文大学, 2024年9月",
+                "review",
+                "跨材料字段值不一致，需要人工复核。",
+                true,
+                List.of(
+                    new FdhReviewResult.FieldSource("毕业证明", "毕业证明.pdf", "第 1 页", "University", "The Chinese University of Hong Kong", 95, "", ""),
+                    new FdhReviewResult.FieldSource("ID 990A", "ID990A.pdf", "第 4 页", "Institution", "香港中文大学, 2024年9月", 88, "", "")
+                ),
+                "毕业院校应为香港认可院校或符合 IANG 资格的院校范围。"
+            ),
+            new FdhReviewResult.StandardField(
+                "education.graduation_date",
+                "学历与毕业资格",
+                "毕业 / 完成课程日期",
+                true,
+                "16 June 2025 / 2025年6月",
+                "review",
+                "跨材料字段值不一致，需要人工复核。",
+                true,
+                List.of(
+                    new FdhReviewResult.FieldSource("毕业证明", "毕业证明.pdf", "第 1 页", "Date", "16 June 2025", 95, "", ""),
+                    new FdhReviewResult.FieldSource("ID 990A", "ID990A.pdf", "第 4 页", "Graduation date", "2025年6月", 88, "", "")
+                ),
+                "应届毕业生通常以毕业证书或院校证明所载日期判断 6 个月申请窗口。"
+            )
+        ),
+        "REVIEW",
+        "付款状态仍需复核。",
+        new FdhReviewResult.FieldStats(2, 0, 0, 2, 2),
         "2026-06-01"
     );
   }

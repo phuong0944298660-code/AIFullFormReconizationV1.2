@@ -115,6 +115,8 @@ class StructuredExtractionClientTest {
     assertThat(payload.toString()).contains("university");
     assertThat(payload.toString()).contains("programme_degree");
     assertThat(payload.toString()).contains("Do not use the generic phrase this University as the university value");
+    assertThat(payload.toString()).doesNotContain("For each IANG certificate field you return");
+    assertThat(payload.toString()).doesNotContain("crop contains only the filled value text");
   }
 
   @Test
@@ -468,6 +470,11 @@ class StructuredExtractionClientTest {
         new StubHttpClient(jsonResponse("{\"page_1\":{\"surname_en\":\"CHAN\"}}")),
         objectMapper
     );
+    StructuredExtractionClient id990aClient = new StructuredExtractionClient(
+        new LlmProperties(true, "https://apie.zhisuaninfo.com/v1", "test-key", "Qwen3.6-35B-A3B", 4096, 60, 5),
+        new StubHttpClient(jsonResponse("{\"page_1\":{\"surname_en\":\"CHAN\"}}")),
+        objectMapper
+    );
 
     assertThat(defaultClient.pageConcurrency(1)).isEqualTo(1);
     assertThat(defaultClient.pageConcurrency(2)).isEqualTo(2);
@@ -475,7 +482,9 @@ class StructuredExtractionClientTest {
     assertThat(defaultClient.pageConcurrency(4)).isEqualTo(4);
     assertThat(defaultClient.pageConcurrency(5)).isEqualTo(4);
     assertThat(defaultClient.pageConcurrency(7)).isEqualTo(4);
-    assertThat(widerClient.pageConcurrency(12)).isEqualTo(4);
+    assertThat(widerClient.pageConcurrency(12)).isEqualTo(8);
+    assertThat(id990aClient.pageConcurrency(5)).isEqualTo(5);
+    assertThat(id990aClient.pageConcurrency(9)).isEqualTo(5);
   }
 
   @Test

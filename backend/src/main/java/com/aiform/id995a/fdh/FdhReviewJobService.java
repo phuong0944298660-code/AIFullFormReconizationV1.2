@@ -266,13 +266,25 @@ public class FdhReviewJobService {
         officialPageNumbers
     );
     state.markActive(upload.filename(), "正在按已识别模板执行字段提取");
-    OcrDemoResponse response = ocrDemoService.recognizeRenderedForFdhReview(
-        upload.filename(),
-        extractionPages,
-        state.progressListener(upload.filename(), extractionPages.size()),
-        modelId,
-        template
-    );
+    OcrDemoResponse response;
+    if (StudentIangMaterialCatalog.supports(state.applicationTypeId())) {
+      response = ocrDemoService.recognizeRenderedForFdhReview(
+          upload.filename(),
+          extractionPages,
+          state.progressListener(upload.filename(), extractionPages.size()),
+          modelId,
+          template,
+          false
+      );
+    } else {
+      response = ocrDemoService.recognizeRenderedForFdhReview(
+          upload.filename(),
+          extractionPages,
+          state.progressListener(upload.filename(), extractionPages.size()),
+          modelId,
+          template
+      );
+    }
     log.info(
         "FDH review job {} completed extraction for {} in {} ms",
         state.jobId,

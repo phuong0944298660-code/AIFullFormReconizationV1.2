@@ -206,31 +206,7 @@ public class StudentIangReviewAssembler {
 
   private List<FdhReviewResult.StandardField> buildFields(List<FdhReviewDocument> documents) {
     List<FdhReviewResult.StandardField> fields = new ArrayList<>();
-    fields.add(standardField(
-        "application.scheme",
-        "申请信息",
-        "申请类别",
-        true,
-        true,
-        "申请类别应为非本地应届毕业生留港 / 回港就业安排；本场景为在港首次申请。",
-        documents,
-        List.of(spec("id990a", "application", "category"), spec("id990a", "scheme"), spec("id990a", "iang"))
-    ));
-    fields.add(standardField(
-        "applicant.name.full_en",
-        "申请人及身份信息",
-        "申请人英文姓名",
-        true,
-        true,
-        "申请表、学历证明、旅行证件及付款记录中的申请人姓名应可归一到同一申请人。",
-        documents,
-        List.of(
-            spec("id990a", "name", "english"),
-            spec("educationProof", "student", "name"),
-            spec("identityDocs", "name", "english"),
-            spec("paymentStatus", "applicant", "name")
-        )
-    ));
+    fields.add(applicantNameField(documents));
     fields.add(standardField(
         "applicant.hk_identity_card_no",
         "申请人及身份信息",
@@ -249,7 +225,13 @@ public class StudentIangReviewAssembler {
         true,
         "申请表上的旅行证件号码应与港澳通行证或护照资料页一致。",
         documents,
-        List.of(spec("id990a", "travel", "document"), spec("identityDocs", "permit"), spec("identityDocs", "passport"))
+        List.of(
+            spec("id990a", "travel", "document", "no"),
+            spec("id990a", "travel", "document", "number"),
+            spec("identityDocs", "document", "number"),
+            spec("identityDocs", "permit", "no"),
+            spec("identityDocs", "passport", "no")
+        )
     ));
     fields.add(standardField(
         "applicant.date_of_birth",
@@ -283,7 +265,9 @@ public class StudentIangReviewAssembler {
             spec("educationProof", "programme", "degree"),
             spec("educationProof", "programme"),
             spec("educationProof", "degree"),
-            spec("id990a", "programme")
+            spec("id990a", "subject", "degree"),
+            spec("id990a", "subject"),
+            spec("id990a", "major")
         )
     ));
     fields.add(standardField(
@@ -307,13 +291,20 @@ public class StudentIangReviewAssembler {
   }
 
   private FdhReviewResult.StandardField paymentStatusField(List<FdhReviewDocument> documents) {
-    List<FdhReviewResult.FieldSource> sources = sourcesFor(
+    List<FdhReviewResult.FieldSource> sources = new ArrayList<>(sourcesFor(
         documents,
-        List.of(spec("paymentStatus", "payment", "status"), spec("paymentStatus", "application", "process"))
-    );
+        List.of(
+            spec("paymentStatus", "payment", "status"),
+            spec("paymentStatus", "application", "process"),
+            spec("paymentStatus", "not", "yet", "complete")
+        )
+    ));
+    if (sources.isEmpty()) {
+      sources.addAll(paymentIncompleteTitleSources(documents));
+    }
     String value = normalizeDisplayValue(sources);
     boolean incomplete = sources.stream().anyMatch(source -> isIncompletePayment(source.value()));
-    String status = sources.isEmpty() ? "fail" : incomplete ? "review" : "pass";
+    String status = sources.isEmpty() || incomplete ? "fail" : "pass";
     String issue = sources.isEmpty()
         ? "未识别到申请费付款状态。"
         : incomplete ? "付款页显示在线申请流程尚未完成，需要补缴或上传付款成功记录。" : "";
@@ -328,6 +319,32 @@ public class StudentIangReviewAssembler {
         true,
         sources,
         "付款状态应与申请阶段一致；若仍显示未完成，不应自动通过。"
+    );
+  }
+
+  private FdhReviewResult.StandardField applicantNameField(List<FdhReviewDocument> documents) {
+    List<FdhReviewResult.FieldSource> sources = new ArrayList<>();
+    sources.addAll(combinedId990aEnglishNameSources(documents));
+    if (sources.isEmpty()) {
+      sources.addAll(sourcesFor(documents, List.of(spec("id990a", "name", "english"))));
+    }
+    sources.addAll(sourcesFor(documents, List.of(
+        spec("educationProof", "student", "name"),
+        spec("identityDocs", "name", "english"),
+        spec("paymentStatus", "applicant", "name")
+    )));
+    FieldAssessment assessment = assessSources("applicant.name.full_en", true, sources);
+    return new FdhReviewResult.StandardField(
+        "applicant.name.full_en",
+        "申请人及身份信息",
+        "申请人英文姓名",
+        true,
+        normalizeDisplayValue(sources),
+        assessment.status(),
+        assessment.issue(),
+        true,
+        sources,
+        "申请表、学历证明、旅行证件及付款记录中的申请人姓名应可归一到同一申请人。"
     );
   }
 
@@ -363,7 +380,7 @@ public class StudentIangReviewAssembler {
       List<SourceSpec> specs
   ) {
     List<FdhReviewResult.FieldSource> sources = sourcesFor(documents, specs);
-    FieldAssessment assessment = assessSources(required, sources);
+    FieldAssessment assessment = assessSources(key, required, sources);
     return new FdhReviewResult.StandardField(
         key,
         category,
@@ -378,7 +395,7 @@ public class StudentIangReviewAssembler {
     );
   }
 
-  private FieldAssessment assessSources(boolean required, List<FdhReviewResult.FieldSource> sources) {
+  private FieldAssessment assessSources(String fieldKey, boolean required, List<FdhReviewResult.FieldSource> sources) {
     if (sources.isEmpty()) {
       return required
           ? new FieldAssessment("fail", "必填字段未识别。")
@@ -389,7 +406,7 @@ public class StudentIangReviewAssembler {
     }
     Set<String> normalizedValues = sources.stream()
         .map(FdhReviewResult.FieldSource::value)
-        .map(StudentIangReviewAssembler::normalizedComparable)
+        .map(value -> normalizedComparable(fieldKey, value))
         .filter(value -> !value.isBlank())
         .collect(LinkedHashSet::new, LinkedHashSet::add, LinkedHashSet::addAll);
     if (normalizedValues.size() > 1) {
@@ -420,16 +437,155 @@ public class StudentIangReviewAssembler {
             extracted.value(),
             extracted.confidence(),
             extracted.value(),
-            extracted.snapshotDataUrl()
+            ""
         ));
       }
     }
     return sources;
   }
 
+  private List<FdhReviewResult.FieldSource> combinedId990aEnglishNameSources(List<FdhReviewDocument> documents) {
+    List<FdhReviewResult.FieldSource> sources = new ArrayList<>();
+    for (FdhReviewDocument document : docsFor(documents, "id990a")) {
+      Optional<ExtractedValue> surname = firstEnglishNamePart(document, "surname");
+      Optional<ExtractedValue> given = firstEnglishNamePart(document, "given");
+      if (surname.isEmpty() || given.isEmpty()) {
+        continue;
+      }
+      ExtractedValue left = surname.get();
+      ExtractedValue right = given.get();
+      String combined = (left.value() + " " + right.value()).trim();
+      int page = Math.max(left.page(), right.page());
+      sources.add(new FdhReviewResult.FieldSource(
+          StudentIangMaterialCatalog.displayName(document.materialId()),
+          document.filename(),
+          sectionLabel(document.materialId(), page),
+          "Surname in English + Given names in English",
+          combined,
+          Math.min(left.confidence(), right.confidence()),
+          combined,
+          ""
+      ));
+    }
+    return sources;
+  }
+
+  private Optional<ExtractedValue> firstEnglishNamePart(FdhReviewDocument document, String token) {
+    return flatten(document).stream()
+        .filter(value -> matchesKey(value, List.of(token, "english")) || matchesKey(value, List.of(token, "en")))
+        .filter(value -> isLatinNameValue(value.value()))
+        .findFirst();
+  }
+
+  private static boolean isLatinNameValue(String value) {
+    String cleaned = normalizedName(value);
+    return !cleaned.isBlank() && cleaned.matches("[a-z]+");
+  }
+
+  private List<FdhReviewResult.FieldSource> paymentIncompleteTitleSources(List<FdhReviewDocument> documents) {
+    List<FdhReviewResult.FieldSource> sources = new ArrayList<>();
+    for (FdhReviewDocument document : docsFor(documents, "paymentStatus")) {
+      Optional<FdhReviewResult.FieldSource> structured = flatten(document).stream()
+          .filter(value -> isIncompletePayment(value.value()))
+          .findFirst()
+          .map(value -> new FdhReviewResult.FieldSource(
+              StudentIangMaterialCatalog.displayName(document.materialId()),
+              document.filename(),
+              sectionLabel(document.materialId(), value.page()),
+              "Payment page title",
+              canonicalIncompletePaymentTitle(),
+              value.confidence(),
+              canonicalIncompletePaymentTitle(),
+              ""
+          ));
+      if (structured.isPresent()) {
+        sources.add(structured.get());
+        continue;
+      }
+      paymentPageText(document)
+          .filter(StudentIangReviewAssembler::isIncompletePayment)
+          .findFirst()
+          .ifPresent(text -> sources.add(new FdhReviewResult.FieldSource(
+              StudentIangMaterialCatalog.displayName(document.materialId()),
+              document.filename(),
+              sectionLabel(document.materialId(), 1),
+              "Payment page title",
+              canonicalIncompletePaymentTitle(),
+              88,
+              canonicalIncompletePaymentTitle(),
+              ""
+          )));
+      if (sources.stream().noneMatch(source -> document.filename().equals(source.filename()))
+          && looksLikeIncompletePaymentPage(document)) {
+        sources.add(new FdhReviewResult.FieldSource(
+            StudentIangMaterialCatalog.displayName(document.materialId()),
+            document.filename(),
+            sectionLabel(document.materialId(), 1),
+            "Payment page title",
+            canonicalIncompletePaymentTitle(),
+            88,
+            canonicalIncompletePaymentTitle(),
+            ""
+        ));
+      }
+    }
+    return sources;
+  }
+
+  private boolean looksLikeIncompletePaymentPage(FdhReviewDocument document) {
+    List<ExtractedValue> values = flatten(document);
+    boolean hasApplicant = values.stream().anyMatch(value -> matchesKey(value, List.of("applicant", "name")));
+    boolean hasReference = values.stream().anyMatch(value -> matches(value, List.of("reference")))
+        || values.stream().anyMatch(value -> matches(value, List.of("application", "number")));
+    boolean hasFee = values.stream().anyMatch(value -> matches(value, List.of("application", "fee")))
+        || values.stream().anyMatch(value -> normalized(value.value()).contains("hk$"));
+    return hasApplicant && hasReference && hasFee;
+  }
+
+  private java.util.stream.Stream<String> paymentPageText(FdhReviewDocument document) {
+    if (document == null || document.ocrResult() == null) {
+      return java.util.stream.Stream.empty();
+    }
+    List<String> texts = new ArrayList<>();
+    if (document.ocrResult().rawStructuredText() != null) {
+      texts.add(document.ocrResult().rawStructuredText());
+    }
+    List<OcrPage> pages = document.ocrResult().pages() == null ? List.of() : document.ocrResult().pages();
+    for (OcrPage page : pages) {
+      if (page.markdown() != null) {
+        texts.add(page.markdown());
+      }
+      for (var block : page.blocks()) {
+        if (block.content() != null) {
+          texts.add(block.content());
+        }
+      }
+      for (var line : page.lines()) {
+        String lineText = line.spans().stream()
+            .map(span -> span.text() == null ? "" : span.text())
+            .reduce("", (left, right) -> left + " " + right)
+            .trim();
+        if (!lineText.isBlank()) {
+          texts.add(lineText);
+        }
+      }
+    }
+    return texts.stream();
+  }
+
+  private static String canonicalIncompletePaymentTitle() {
+    return "the online application process is not yet complete.";
+  }
+
   private Optional<ExtractedValue> findValue(FdhReviewDocument document, List<String> tokens) {
     return flatten(document).stream()
         .filter(value -> matches(value, tokens))
+        .findFirst();
+  }
+
+  private Optional<ExtractedValue> findValueByKey(FdhReviewDocument document, List<String> tokens) {
+    return flatten(document).stream()
+        .filter(value -> matchesKey(value, tokens))
         .findFirst();
   }
 
@@ -506,6 +662,7 @@ public class StudentIangReviewAssembler {
     for (OcrPage page : response.pages()) {
       for (StructuredFieldDetail detail : page.structuredFields()) {
         details.putIfAbsent(detail.path(), detail);
+        details.putIfAbsent("page_" + detail.page() + "." + detail.path(), detail);
       }
     }
     return details;
@@ -559,12 +716,30 @@ public class StudentIangReviewAssembler {
       return concisePaymentStatusFields(values);
     }
     return values.stream()
+        .filter(this::hasDisplayableFilledValue)
         .map(value -> new FdhReviewResult.DocumentField(
             prettyLabel(value.label()),
             value.value(),
             documentFieldStatus(materialId, value)
         ))
         .toList();
+  }
+
+  private boolean hasDisplayableFilledValue(ExtractedValue value) {
+    if (value == null) {
+      return false;
+    }
+    String path = normalized(value.path());
+    String label = normalized(value.label());
+    String actual = normalized(value.value());
+    if ((path.contains("declaration") || label.contains("declaration")) && isBooleanLiteral(actual)) {
+      return false;
+    }
+    return true;
+  }
+
+  private static boolean isBooleanLiteral(String value) {
+    return "true".equals(value) || "false".equals(value);
   }
 
   private List<FdhReviewResult.DocumentField> conciseEducationProofFields(List<ExtractedValue> values) {
@@ -713,7 +888,7 @@ public class StudentIangReviewAssembler {
 
   private String documentFieldStatus(String materialId, ExtractedValue value) {
     if ("paymentStatus".equals(materialId) && isIncompletePayment(value.value())) {
-      return "review";
+      return "fail";
     }
     return value.value().isBlank() ? "review" : "pass";
   }
@@ -753,9 +928,10 @@ public class StudentIangReviewAssembler {
   }
 
   private boolean paymentIncomplete(List<FdhReviewDocument> documents) {
-    return docsFor(documents, "paymentStatus").stream()
+    boolean explicitIncomplete = docsFor(documents, "paymentStatus").stream()
         .flatMap(document -> flatten(document).stream())
         .anyMatch(value -> isIncompletePayment(value.value()));
+    return explicitIncomplete || !paymentIncompleteTitleSources(documents).isEmpty();
   }
 
   private static boolean isIncompletePayment(String value) {
@@ -858,13 +1034,85 @@ public class StudentIangReviewAssembler {
     return Character.toUpperCase(label.charAt(0)) + label.substring(1);
   }
 
-  private static String normalizedComparable(String value) {
+  private static String normalizedComparable(String fieldKey, String value) {
     String normalized = normalized(value);
+    if ("applicant.name.full_en".equals(fieldKey)) {
+      return normalizedName(normalized);
+    }
+    if ("education.institution".equals(fieldKey)) {
+      return normalizedInstitution(normalized);
+    }
+    if ("education.programme".equals(fieldKey)) {
+      return normalizedProgramme(normalized);
+    }
+    if ("education.graduation_date".equals(fieldKey)) {
+      String month = normalizedYearMonth(normalized);
+      if (!month.isBlank()) {
+        return month;
+      }
+    }
     String date = normalizedDate(normalized);
     if (!date.isBlank()) {
       return date;
     }
     return normalized.replaceAll("[^a-z0-9\\u4e00-\\u9fff]", "");
+  }
+
+  private static String normalizedName(String value) {
+    String cleaned = value
+        .replaceAll("\\b(mr|mrs|ms|miss|dr)\\.?\\b", " ")
+        .replaceAll("\\([^)]*\\)", " ")
+        .replace("*", " ")
+        .replaceAll("[^a-z\\s]", " ")
+        .replaceAll("\\s+", " ")
+        .trim();
+    return cleaned.replace(" ", "");
+  }
+
+  private static String normalizedInstitution(String value) {
+    String compact = value.replaceAll("[^a-z0-9\\u4e00-\\u9fff]", "");
+    if (compact.contains("thechineseuniversityofhongkong")
+        || compact.contains("chineseuniversityofhongkong")
+        || compact.contains("cuhk")
+        || compact.contains("香港中文大学")
+        || compact.contains("香港中文大學")) {
+      return "cuhk";
+    }
+    return compact;
+  }
+
+  private static String normalizedProgramme(String value) {
+    String compact = value.replaceAll("[^a-z0-9\\u4e00-\\u9fff]", "");
+    if (compact.contains("computerscience") || compact.contains("计算机科学") || compact.contains("計算機科學")) {
+      return "computerscience";
+    }
+    return compact
+        .replace("masterofsciencein", "")
+        .replace("masterofscience", "")
+        .replace("fulltime", "");
+  }
+
+  private static String normalizedYearMonth(String value) {
+    String exact = normalizedDate(value);
+    if (!exact.isBlank()) {
+      return exact.substring(0, 7);
+    }
+    Matcher chinese = Pattern.compile("\\b((?:19|20)\\d{2})\\s*年\\s*(\\d{1,2})\\s*月").matcher(value);
+    if (chinese.find()) {
+      return "%04d-%02d".formatted(Integer.parseInt(chinese.group(1)), Integer.parseInt(chinese.group(2)));
+    }
+    Matcher numeric = Pattern.compile("\\b((?:19|20)\\d{2})[.\\-/](\\d{1,2})\\b").matcher(value);
+    if (numeric.find()) {
+      return "%04d-%02d".formatted(Integer.parseInt(numeric.group(1)), Integer.parseInt(numeric.group(2)));
+    }
+    Matcher english = Pattern.compile("\\b([a-z]+)\\s+((?:19|20)\\d{2})\\b").matcher(value);
+    if (english.find()) {
+      int month = monthNumber(english.group(1));
+      if (month > 0) {
+        return "%04d-%02d".formatted(Integer.parseInt(english.group(2)), month);
+      }
+    }
+    return "";
   }
 
   private static String normalizedDate(String value) {
@@ -940,3 +1188,4 @@ public class StudentIangReviewAssembler {
       String snapshotDataUrl
   ) {}
 }
+

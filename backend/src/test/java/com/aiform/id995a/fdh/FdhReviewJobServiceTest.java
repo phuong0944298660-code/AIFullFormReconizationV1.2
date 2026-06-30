@@ -16,6 +16,7 @@ import com.aiform.id995a.ocr.OcrDemoResponse;
 import com.aiform.id995a.ocr.OcrDemoService;
 import com.aiform.id995a.ocr.OcrPage;
 import com.aiform.id995a.ocr.RenderedOcrPage;
+import com.aiform.id995a.ocr.StructuredFieldDetail;
 import com.aiform.id995a.ocr.TemplateDetectionService;
 import com.aiform.id995a.review.EngineStatus;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -211,7 +212,8 @@ class FdhReviewJobServiceTest {
         anyList(),
         any(ExtractionProgressListener.class),
         any(),
-        any(DocumentTemplate.class)
+        any(DocumentTemplate.class),
+        org.mockito.ArgumentMatchers.eq(false)
     )).thenAnswer(invocation -> iangResponse(
         invocation.getArgument(0),
         invocation.getArgument(1),
@@ -233,17 +235,17 @@ class FdhReviewJobServiceTest {
     assertThat(completed.status()).isEqualTo("completed");
     assertThat(completed.result()).isNotNull();
     assertThat(completed.result().applicationTypeId()).isEqualTo("iang_recent_in_hk");
-    assertThat(completed.result().decision()).isEqualTo("REVIEW");
+    assertThat(completed.result().decision()).isEqualTo("FAIL");
     assertThat(completed.result().decisionText()).contains("付款");
     assertThat(material(completed.result(), "id990a").statusText()).contains("前 5 页");
     assertThat(material(completed.result(), "paymentStatus").status()).isEqualTo("review");
     assertThat(completed.result().fields()).extracting(FdhReviewResult.StandardField::key)
         .contains(
-            "application.scheme",
             "applicant.name.full_en",
             "education.graduation_date",
             "payment.application_fee_status"
-        );
+        )
+        .doesNotContain("application.scheme");
     assertThat(completed.result().documentFieldGroups())
         .extracting(FdhReviewResult.DocumentFieldGroup::materialId)
         .contains("id990a", "educationProof", "identityDocs", "paymentStatus");
@@ -257,8 +259,90 @@ class FdhReviewJobServiceTest {
         org.mockito.ArgumentMatchers.argThat(pages -> pages.size() == 5),
         any(ExtractionProgressListener.class),
         any(),
-        any(DocumentTemplate.class)
+        any(DocumentTemplate.class),
+        org.mockito.ArgumentMatchers.eq(false)
     );
+  }
+
+  @Test
+  void iangRecentGraduateStandardFieldsUseStudentSpecificSemanticComparison() throws Exception {
+    StudentIangReviewAssembler assembler = new StudentIangReviewAssembler(
+        Clock.fixed(Instant.parse("2026-06-22T08:30:00Z"), ZoneOffset.UTC)
+    );
+
+    FdhReviewResult result = assembler.assemble(
+        "iang_recent_in_hk",
+        List.of(
+            studentDocument("ID990A.pdf", "id990a", 5, """
+                {
+                  "page_1": {
+                    "name_in_chinese": {
+                      "surname": "赵",
+                      "given_names": "航宇"
+                    },
+                    "surname_in_english": "Zhao",
+                    "given_names_in_english": "HangYu",
+                    "travel_document_type": "港澳通行证",
+                    "travel_document_no": "CA3213201",
+                    "date_of_birth": "23 08 1992"
+                  },
+                  "page_3": {
+                    "name_of_education_institution_and_period_of_study": "香港中文大学，2024年9月",
+                    "subject_and_degree_awarded": "计算机科学，理学硕士",
+                    "date_of_issue_of_graduation_certificate": "2025年6月"
+                  },
+                  "page_5": {
+                    "signature_of_applicant": "signature detected"
+                  }
+                }
+                """),
+            studentDocument("毕业证明.pdf", "educationProof", 1, """
+                {
+                  "page_1": {
+                    "student_name": "Mr. ZHAO, Hangyu（赵航宇）",
+                    "university": "The Chinese University of Hong Kong",
+                    "programme_degree": "Master of Science in Computer Science (Full-time)",
+                    "date": "16 June 2025"
+                  }
+                }
+                """),
+            studentDocument("港澳通行证.jpg", "identityDocs", 1, """
+                {
+                  "page_1": {
+                    "document_name": "往来港澳通行证",
+                    "document_number": "CA3213201",
+                    "name_in_english": "ZHAO HANGYU",
+                    "date_of_birth": "1992.08.23"
+                  }
+                }
+                """),
+            studentDocument("付款证明.png", "paymentStatus", 1, """
+                {
+                  "page_1": {
+                    "applicant_name": "ZHAO, HAN***",
+                    "temporary_application_reference_number": "1340351-25",
+                    "application_fee_to_be_paid_for_each_application": "HK$ 600.00",
+                    "total_amount_of_application_fee": "HK$ 600.00"
+                  }
+                }
+                """)
+        )
+    );
+
+    FdhReviewResult.StandardField name = standardField(result, "applicant.name.full_en");
+    assertThat(name.sources()).filteredOn(source -> "ID 990A".equals(source.documentName()))
+        .singleElement()
+        .extracting(FdhReviewResult.FieldSource::value)
+        .isEqualTo("Zhao HangYu");
+
+    assertThat(standardField(result, "applicant.travel_doc.number").normalizedValue()).isEqualTo("CA3213201");
+    assertThat(standardField(result, "applicant.travel_doc.number").status()).isEqualTo("pass");
+    assertThat(standardField(result, "education.institution").status()).isEqualTo("pass");
+    assertThat(standardField(result, "education.programme").status()).isEqualTo("pass");
+    assertThat(standardField(result, "education.graduation_date").status()).isEqualTo("pass");
+    assertThat(standardField(result, "payment.application_fee_status").normalizedValue())
+        .isEqualTo("the online application process is not yet complete.");
+    assertThat(standardField(result, "payment.application_fee_status").status()).isEqualTo("fail");
   }
 
   @Test
@@ -286,7 +370,8 @@ class FdhReviewJobServiceTest {
         anyList(),
         any(ExtractionProgressListener.class),
         any(),
-        any(DocumentTemplate.class)
+        any(DocumentTemplate.class),
+        org.mockito.ArgumentMatchers.eq(false)
     )).thenAnswer(invocation -> iangResponse(
         invocation.getArgument(0),
         invocation.getArgument(1),
@@ -331,7 +416,8 @@ class FdhReviewJobServiceTest {
         anyList(),
         any(ExtractionProgressListener.class),
         any(),
-        any(DocumentTemplate.class)
+        any(DocumentTemplate.class),
+        org.mockito.ArgumentMatchers.eq(false)
     )).thenAnswer(invocation -> iangResponse(
         invocation.getArgument(0),
         invocation.getArgument(1),
@@ -379,7 +465,8 @@ class FdhReviewJobServiceTest {
         anyList(),
         any(ExtractionProgressListener.class),
         any(),
-        any(DocumentTemplate.class)
+        any(DocumentTemplate.class),
+        org.mockito.ArgumentMatchers.eq(false)
     )).thenAnswer(invocation -> iangResponse(
         invocation.getArgument(0),
         invocation.getArgument(1),
@@ -424,7 +511,8 @@ class FdhReviewJobServiceTest {
         anyList(),
         any(ExtractionProgressListener.class),
         any(),
-        any(DocumentTemplate.class)
+        any(DocumentTemplate.class),
+        org.mockito.ArgumentMatchers.eq(false)
     )).thenAnswer(invocation -> iangResponse(
         invocation.getArgument(0),
         invocation.getArgument(1),
@@ -444,6 +532,114 @@ class FdhReviewJobServiceTest {
         .isEqualTo("Master of Science in Computer Science (Full-time)");
     assertThat(standardField(completed.result(), "education.graduation_date").normalizedValue())
         .isEqualTo("16 June 2025");
+  }
+
+  @Test
+  void iangRecentGraduateStandardFieldSourcesDoNotExposeSnapshotsForSpeed() throws Exception {
+    BaiduOcrPageRenderer renderer = mock(BaiduOcrPageRenderer.class);
+    TemplateDetectionService templateDetectionService = mock(TemplateDetectionService.class);
+    OcrDemoService ocrDemoService = mock(OcrDemoService.class);
+    FdhOfficialPageNumberDetector officialPageNumberDetector = mock(FdhOfficialPageNumberDetector.class);
+    FdhReviewJobService service = new FdhReviewJobService(
+        renderer,
+        templateDetectionService,
+        ocrDemoService,
+        new FdhReviewAssembler(5100, 1236, Clock.fixed(Instant.parse("2026-06-22T08:30:00Z"), ZoneOffset.UTC)),
+        officialPageNumberDetector,
+        2
+    );
+
+    when(renderer.render(anyString(), anyString(), any())).thenReturn(renderedPages(1));
+    when(templateDetectionService.detect(anyString(), anyString(), any(), anyList()))
+        .thenReturn(DocumentTemplate.unknown(1, "test"));
+    when(officialPageNumberDetector.detect(anyString(), any(DocumentTemplate.class), anyList(), any()))
+        .thenReturn(List.of());
+    when(ocrDemoService.recognizeRenderedForFdhReview(
+        anyString(),
+        anyList(),
+        any(ExtractionProgressListener.class),
+        any(),
+        any(DocumentTemplate.class),
+        org.mockito.ArgumentMatchers.eq(false)
+    )).thenAnswer(invocation -> iangResponse(
+        invocation.getArgument(0),
+        invocation.getArgument(1),
+        invocation.getArgument(4)
+    ));
+
+    FdhReviewJobStatusResponse started = service.start(
+        "iang_recent_in_hk",
+        List.of(file("毕业证明.pdf")),
+        null
+    );
+    FdhReviewJobStatusResponse completed = waitForCompletion(service, started.jobId());
+
+    assertThat(standardField(completed.result(), "education.institution").sources())
+        .filteredOn(source -> "毕业证明.pdf".equals(source.filename()))
+        .singleElement()
+        .satisfies(source -> {
+          assertThat(source.confidence()).isEqualTo(95);
+          assertThat(source.snapshotDataUrl()).isBlank();
+        });
+  }
+
+  @Test
+  void iangRecentGraduateDocumentFieldsHideBooleanDeclarationClauses() throws Exception {
+    BaiduOcrPageRenderer renderer = mock(BaiduOcrPageRenderer.class);
+    TemplateDetectionService templateDetectionService = mock(TemplateDetectionService.class);
+    OcrDemoService ocrDemoService = mock(OcrDemoService.class);
+    FdhOfficialPageNumberDetector officialPageNumberDetector = mock(FdhOfficialPageNumberDetector.class);
+    FdhReviewJobService service = new FdhReviewJobService(
+        renderer,
+        templateDetectionService,
+        ocrDemoService,
+        new FdhReviewAssembler(5100, 1236, Clock.fixed(Instant.parse("2026-06-22T08:30:00Z"), ZoneOffset.UTC)),
+        officialPageNumberDetector,
+        2
+    );
+
+    when(renderer.render(anyString(), anyString(), any())).thenReturn(renderedPages(5));
+    when(templateDetectionService.detect(anyString(), anyString(), any(), anyList()))
+        .thenReturn(template("id990a_2025_01", "ID 990A (01/2025)", 5));
+    when(officialPageNumberDetector.detect(anyString(), any(DocumentTemplate.class), anyList(), any()))
+        .thenReturn(List.of(1, 2, 3, 4, 5));
+    when(ocrDemoService.recognizeRenderedForFdhReview(
+        anyString(),
+        anyList(),
+        any(ExtractionProgressListener.class),
+        any(),
+        any(DocumentTemplate.class),
+        org.mockito.ArgumentMatchers.eq(false)
+    )).thenAnswer(invocation -> iangResponse(
+        invocation.getArgument(0),
+        invocation.getArgument(1),
+        invocation.getArgument(4)
+    ));
+
+    FdhReviewJobStatusResponse started = service.start(
+        "iang_recent_in_hk",
+        List.of(file("ID990A_declaration.pdf")),
+        null
+    );
+    FdhReviewJobStatusResponse completed = waitForCompletion(service, started.jobId());
+
+    FdhReviewResult.DocumentFieldPage declarationPage = completed.result().documentFieldGroups().stream()
+        .filter(group -> "id990a".equals(group.materialId()))
+        .findFirst()
+        .orElseThrow()
+        .pages()
+        .stream()
+        .filter(page -> page.pageNo() == 4)
+        .findFirst()
+        .orElseThrow();
+
+    assertThat(declarationPage.fields())
+        .extracting(FdhReviewResult.DocumentField::label)
+        .doesNotContain("Declaration of applicant ii", "Declaration of applicant iii");
+    assertThat(documentFieldValue(declarationPage, "Declaration of applicant viii domicile"))
+        .isEqualTo("Guangzhou, China");
+    assertThat(documentFieldValue(declarationPage, "Date")).isEqualTo("2026.6.23");
+    assertThat(documentFieldValue(declarationPage, "Signature of applicant")).isEqualTo("赵航宇");
   }
 
   @Test
@@ -838,7 +1034,23 @@ class FdhReviewJobServiceTest {
   ) throws Exception {
     int pageCount = pages == null ? 0 : pages.size();
     String json;
-    if (filename.contains("ID990A")) {
+    if (filename.contains("ID990A_declaration")) {
+      json = """
+          {
+            "page_4": {
+              "declaration_of_applicant_ii": true,
+              "declaration_of_applicant_iii": true,
+              "declaration_of_applicant_iv": true,
+              "declaration_of_applicant_v": true,
+              "declaration_of_applicant_vi": true,
+              "declaration_of_applicant_vii": true,
+              "declaration_of_applicant_viii_domicile": "Guangzhou, China",
+              "date": "2026.6.23",
+              "signature_of_applicant": "赵航宇"
+            }
+          }
+          """;
+    } else if (filename.contains("ID990A")) {
       json = """
           {
             "page_1": {
@@ -951,13 +1163,93 @@ class FdhReviewJobServiceTest {
                 List.of(),
                 List.of(),
                 List.of(),
-                List.of()
+                structuredFieldsFor(filename, page.page())
             ))
             .toList(),
         List.of(),
         new EngineStatus("test", false, List.of()),
         objectMapper.readTree(json),
         ""
+    );
+  }
+
+  private List<StructuredFieldDetail> structuredFieldsFor(String filename, int page) {
+    if (page != 1 || !filename.contains("毕业")) {
+      return List.of();
+    }
+    if (filename.contains("专用字段")) {
+      return List.of(structuredField(
+          "university",
+          "University",
+          "The Chinese University of Hong Kong",
+          95,
+          "data:image/jpeg;base64,EDU_INSTITUTION"
+      ));
+    }
+    return List.of(structuredField(
+        "institution",
+        "Institution",
+        "The Chinese University of Hong Kong",
+        95,
+        "data:image/jpeg;base64,EDU_INSTITUTION"
+    ));
+  }
+
+  private StructuredFieldDetail structuredField(
+      String path,
+      String label,
+      String value,
+      double confidence,
+      String snapshotDataUrl
+  ) {
+    return new StructuredFieldDetail(
+        1,
+        path,
+        label,
+        objectMapper.valueToTree(value),
+        value,
+        confidence,
+        List.of(1, 2, 3, 4),
+        snapshotDataUrl,
+        "",
+        0,
+        "not_run",
+        List.of()
+    );
+  }
+
+  private FdhReviewDocument studentDocument(String filename, String materialId, int pageCount, String json)
+      throws Exception {
+    List<OcrPage> pages = java.util.stream.IntStream.rangeClosed(1, pageCount)
+        .mapToObj(page -> new OcrPage(
+            page,
+            "data:image/png;base64,AAA=",
+            100,
+            100,
+            "",
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of()
+        ))
+        .toList();
+    return new FdhReviewDocument(
+        filename,
+        "application/pdf",
+        pageCount,
+        DocumentTemplate.unknown(pageCount, "test"),
+        new OcrDemoResponse(
+            filename,
+            "test",
+            pageCount,
+            pages,
+            List.of(),
+            new EngineStatus("test", false, List.of()),
+            objectMapper.readTree(json),
+            ""
+        ),
+        materialId,
+        java.util.stream.IntStream.rangeClosed(1, pageCount).boxed().toList()
     );
   }
 

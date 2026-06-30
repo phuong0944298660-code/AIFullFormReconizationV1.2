@@ -125,7 +125,11 @@ const fieldAdjudications = computed(() => {
 })
 
 const fieldRows = computed(() => {
-  return applyFieldAdjudications(reviewResult.value?.fields || [], fieldAdjudications.value)
+  return applyFieldAdjudications(
+    reviewResult.value?.fields || [],
+    fieldAdjudications.value,
+    { applicationTypeId: reviewResult.value?.applicationTypeId }
+  )
 })
 
 const reviewableFieldRows = computed(() => reviewableFields(fieldRows.value))
@@ -680,7 +684,11 @@ function reviewResultForConclusion(result) {
 
 function withLocalFieldAdjudications(result) {
   if (!result) return result
-  const fields = applyFieldAdjudications(result.fields || [], localFieldAdjudications(result))
+  const fields = applyFieldAdjudications(
+    result.fields || [],
+    localFieldAdjudications(result),
+    { applicationTypeId: result.applicationTypeId }
+  )
   return withDerivedDecision(result, reviewableFields(fields))
 }
 
@@ -1169,16 +1177,16 @@ function verificationLineStatus(line) {
                       v-for="source in field.sources"
                       :key="`${field.key}:${source.documentName}:${source.fieldName}`"
                       class="evidence-card"
-                      :class="{ 'without-crop': !source.snapshotDataUrl }"
+                      :class="{ 'without-crop': !isFdhMode || !source.snapshotDataUrl }"
                     >
-                      <div v-if="source.snapshotDataUrl" class="snapshot-card">
+                      <div v-if="isFdhMode && source.snapshotDataUrl" class="snapshot-card">
                         <img :src="source.snapshotDataUrl" :alt="`${source.documentName} ${source.fieldName}`">
                       </div>
                       <div class="evidence-meta">
                         <strong>{{ source.documentName }}</strong>
                         <span>{{ source.section }}</span>
                         <span>{{ source.fieldName }}</span>
-                        <small v-if="!source.snapshotDataUrl" class="evidence-crop-missing">未取得原始裁剪</small>
+                        <small v-if="isFdhMode && !source.snapshotDataUrl" class="evidence-crop-missing">未取得原始裁剪</small>
                         <div class="evidence-value-block">
                           <span class="evidence-value-label">识别值</span>
                           <strong class="evidence-value">
@@ -1372,10 +1380,10 @@ function verificationLineStatus(line) {
                         v-for="source in fieldRow.sources"
                         :key="`${fieldRow.key}:${source.documentName}:${source.section}:${source.fieldName}`"
                         class="template-evidence-card"
-                        :class="{ 'without-crop': !source.snapshotDataUrl }"
+                        :class="{ 'without-crop': !isFdhMode || !source.snapshotDataUrl }"
                       >
                         <div
-                          v-if="source.snapshotDataUrl"
+                          v-if="isFdhMode && source.snapshotDataUrl"
                           class="template-evidence-snapshot"
                         >
                           <img
@@ -1387,7 +1395,7 @@ function verificationLineStatus(line) {
                           <strong>{{ source.documentName }}</strong>
                           <span>{{ source.section }}</span>
                           <span>{{ source.fieldName }}</span>
-                          <small v-if="!source.snapshotDataUrl" class="template-evidence-crop-missing">未取得原始裁剪</small>
+                          <small v-if="isFdhMode && !source.snapshotDataUrl" class="template-evidence-crop-missing">未取得原始裁剪</small>
                           <div class="template-evidence-value">
                             <span>识别值</span>
                             <strong>{{ templateSourceValue(source) }}</strong>

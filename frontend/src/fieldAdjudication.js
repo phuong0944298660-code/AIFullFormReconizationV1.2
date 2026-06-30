@@ -9,13 +9,19 @@ const EMPTY_VALUE_PATTERNS = [
 ]
 
 export function localFieldAdjudications(result = {}) {
+  if (cleanValue(result.applicationTypeId) === 'iang_recent_in_hk') {
+    return []
+  }
   return (result.fields || [])
     .map(localFieldAdjudication)
     .filter(Boolean)
 }
 
-export function applyFieldAdjudications(fields = [], adjudications = []) {
-  const localMap = new Map(localFieldAdjudications({ fields }).map((item) => [item.key, item]))
+export function applyFieldAdjudications(fields = [], adjudications = [], options = {}) {
+  const localMap = new Map(localFieldAdjudications({
+    applicationTypeId: options.applicationTypeId,
+    fields
+  }).map((item) => [item.key, item]))
   const remoteMap = new Map((adjudications || [])
     .filter((item) => item?.key)
     .map((item) => [item.key, normalizeAdjudication(item)]))

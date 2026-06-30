@@ -129,13 +129,7 @@ public class FdhReviewConclusionService {
         "response_format", Map.of("type", "json_object"),
         "chat_template_kwargs", Map.of("enable_thinking", false),
         "messages", List.of(
-            Map.of("role", "system", "content", """
-                你是香港入境处外籍家庭佣工材料核验结果整理助手。
-                只能基于输入 JSON 和香港入境处外籍家庭佣工申请材料规则输出结论，不得添加未提供事实。
-                必须返回合法 JSON，不得返回 Markdown 代码块。
-                对跨文件字段不一致的情况，可以给出一个建议采用值；但只要经历过纠偏或建议取值，字段状态必须保持 review，并说明需人工复核。
-                材料缺失、缺页、模板错误属于材料层面，不得用字段建议值覆盖材料层阻断结论。
-                """),
+            Map.of("role", "system", "content", systemPrompt(result)),
             Map.of("role", "user", "content", buildPrompt(result))
         )
     );
@@ -156,6 +150,27 @@ public class FdhReviewConclusionService {
 
     JsonNode content = objectMapper.readTree(response.body()).at("/choices/0/message/content");
     return content.isMissingNode() || content.isNull() ? "" : content.asText();
+  }
+
+  private String systemPrompt(FdhReviewResult result) {
+    if (isStudentIang(result)) {
+      return """
+          你是香港入境处 IANG 应届毕业生在港首次申请材料核验结果整理助手。
+          只能基于输入 JSON 和香港入境处 IANG 学生申请材料规则输出结论，不得添加未提供事实。
+          必须返回合法 JSON，不得返回 Markdown 代码块。
+          对跨材料字段不一致的情况，必须结合字段含义、材料来源和来源值进行语义比对；中英文翻译、日期写法或日期粒度差异如果指向同一事实，可以裁定为 pass。
+          如果确认语义一致，fieldAdjudications 返回 status=pass、corrected=false，并说明中英文或日期等价依据；不要标成纠偏。
+          如果无法确认语义一致，才返回 review，并说明需要人工复核。
+          材料缺失、缺页、模板错误属于材料层面，不得用字段建议值覆盖材料层阻断结论。
+          """;
+    }
+    return """
+        你是香港入境处外籍家庭佣工材料核验结果整理助手。
+        只能基于输入 JSON 和香港入境处外籍家庭佣工申请材料规则输出结论，不得添加未提供事实。
+        必须返回合法 JSON，不得返回 Markdown 代码块。
+        对跨文件字段不一致的情况，可以给出一个建议采用值；但只要经历过纠偏或建议取值，字段状态必须保持 review，并说明需人工复核。
+        材料缺失、缺页、模板错误属于材料层面，不得用字段建议值覆盖材料层阻断结论。
+        """;
   }
 
   private String buildPrompt(FdhReviewResult result) throws IOException {
@@ -180,9 +195,22 @@ public class FdhReviewConclusionService {
         - 标准雇佣合约编号 contract.dh_contract_no 的开头必须为 FH-CON-；若识别到 RFH-CON- 等可判断为前缀涂抹或误写的结果，建议采用值应归一为 FH-CON- 开头；年份优先选择不超过当前年份且最接近当前年份的值，例如 2016/2026 取 2026，2026/2036 取 2026；但 status 仍为 review。
         - 若只是格式或 OCR 噪声差异，可建议采用更可信材料值；若年份、号码等实质差异仍须 corrected=true 且 status=review。
         - 不要把经历纠偏的字段改成 pass。
-
+        """ + studentIangPromptRules(result) + """
         下面是机器识别与规则审核 JSON，已移除图片 base64：
         """ + objectMapper.writeValueAsString(compactResult(result));
+  }
+
+  private String studentIangPromptRules(FdhReviewResult result) {
+    if (!isStudentIang(result)) {
+      return "";
+    }
+    return """
+        - IANG 学生场景不要用后端字符串规则替代语义判断；请你基于 sources 做中英文、日期写法、日期粒度和字段含义比对。
+        - 中英文院校名称、姓名音译/大小写/称谓差异，如果语义上指向同一实体，可以返回 status=pass、corrected=false；suggestedValue 写更清晰的标准展示值。
+        - 日期写法不同但指向同一日期或同一申请窗口事实，例如 16 June 2025 与 2025年6月，可返回 status=pass、corrected=false，并解释等价依据。
+        - 如果来源值包含额外上下文，例如 “香港中文大学, 2024年9月”，字段只核验毕业院校时，应只比较院校名称，不要因额外年月直接判不一致。
+        - 只有在翻译、日期或字段语义无法确认一致时，才返回 status=review、corrected=false 或 corrected=true 并说明人工复核原因。
+        """;
   }
 
   private ModelConclusion parseModelConclusion(String rawText) throws IOException {
@@ -344,7 +372,7 @@ public class FdhReviewConclusionService {
   }
 
   private List<FdhFieldAdjudication> deterministicFieldAdjudications(FdhReviewResult result) {
-    if (result == null) {
+    if (result == null || isStudentIang(result)) {
       return List.of();
     }
     return result.fields().stream()
@@ -600,6 +628,10 @@ public class FdhReviewConclusionService {
 
   private boolean blank(String value) {
     return value == null || value.isBlank();
+  }
+
+  private boolean isStudentIang(FdhReviewResult result) {
+    return result != null && "iang_recent_in_hk".equals(result.applicationTypeId());
   }
 
   private String clean(String value) {

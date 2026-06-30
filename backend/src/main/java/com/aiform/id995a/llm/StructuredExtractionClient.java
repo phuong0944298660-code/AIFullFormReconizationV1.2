@@ -271,13 +271,8 @@ public class StructuredExtractionClient implements
 
   int pageConcurrency(int pageCount) {
     int configuredMaximum = Math.max(1, properties.pageConcurrency());
-    int natural = switch (pageCount) {
-      case 0, 1 -> 1;
-      case 2 -> 2;
-      case 3 -> 3;
-      default -> 4;
-    };
-    return Math.max(1, Math.min(configuredMaximum, natural));
+    int safePageCount = Math.max(1, pageCount);
+    return Math.max(1, Math.min(configuredMaximum, safePageCount));
   }
 
   JsonNode buildRequestPayload(String filename, List<RenderedOcrPage> pages) {

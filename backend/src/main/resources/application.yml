@@ -38,7 +38,7 @@ llm:
   model: ${LLM_MODEL:Qwen3.6-35B-A3B}
   max-tokens: ${LLM_MAX_TOKENS:8192}
   timeout-seconds: ${LLM_TIMEOUT_SECONDS:1200}
-  page-concurrency: ${LLM_PAGE_CONCURRENCY:2}
+  page-concurrency: ${LLM_PAGE_CONCURRENCY:5}
 
 dashscope:
   base-url: ${DASHSCOPE_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}

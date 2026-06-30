@@ -18,6 +18,21 @@ const conflictField = {
   rule: 'ID 988A、ID 988B 与 ID 407 的标准雇佣合约编号必须完整填写并保持一致。'
 }
 
+const studentInstitutionConflict = {
+  key: 'education.institution',
+  category: '学历与毕业资格',
+  label: '毕业院校',
+  required: true,
+  normalizedValue: 'The Chinese University of Hong Kong / 香港中文大学, 2024年9月',
+  status: 'review',
+  issue: '跨材料字段值不一致，需要人工复核。',
+  sources: [
+    { documentName: '毕业证明', section: '第 1 页', fieldName: 'University', value: 'The Chinese University of Hong Kong', confidence: 95 },
+    { documentName: 'ID 990A', section: '第 4 页', fieldName: 'Institution', value: '香港中文大学, 2024年9月', confidence: 88 }
+  ],
+  rule: '毕业院校应为香港认可院校或符合 IANG 资格的院校范围。'
+}
+
 test('localFieldAdjudications keeps corrected conflict fields in review with a suggested value', () => {
   const [adjudication] = localFieldAdjudications({ fields: [conflictField] })
 
@@ -73,6 +88,42 @@ test('applyFieldAdjudications keeps the contract year rule when backend suggesti
   assert.equal(field.status, 'review')
   assert.equal(field.correctionApplied, true)
   assert.match(field.suggestionReason, /current year|当前年份|褰撳墠骞翠唤/)
+})
+
+test('student IANG conflicts wait for backend LLM instead of local suggested values', () => {
+  assert.deepEqual(localFieldAdjudications({
+    applicationTypeId: 'iang_recent_in_hk',
+    fields: [studentInstitutionConflict]
+  }), [])
+
+  const [field] = applyFieldAdjudications(
+    [studentInstitutionConflict],
+    [],
+    { applicationTypeId: 'iang_recent_in_hk' }
+  )
+
+  assert.equal(field.status, 'review')
+  assert.equal(field.suggestedValue, studentInstitutionConflict.normalizedValue)
+  assert.equal(field.correctionApplied, false)
+})
+
+test('student IANG backend LLM semantic pass overrides review without correction warning', () => {
+  const [field] = applyFieldAdjudications(
+    [studentInstitutionConflict],
+    [{
+      key: 'education.institution',
+      suggestedValue: 'The Chinese University of Hong Kong',
+      status: 'pass',
+      corrected: false,
+      reason: '中英文院校名称指向同一院校。'
+    }],
+    { applicationTypeId: 'iang_recent_in_hk' }
+  )
+
+  assert.equal(field.status, 'pass')
+  assert.equal(field.suggestedValue, 'The Chinese University of Hong Kong')
+  assert.equal(field.correctionApplied, false)
+  assert.match(field.suggestionReason, /同一院校/)
 })
 
 test('contract number adjudication normalizes smudged leading R to the required FH-CON prefix', () => {

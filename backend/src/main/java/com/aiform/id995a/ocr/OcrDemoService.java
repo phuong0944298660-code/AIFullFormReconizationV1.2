@@ -101,7 +101,7 @@ public class OcrDemoService {
       String modelId,
       DocumentTemplate template
   ) throws IOException {
-    return recognizeRenderedInternal(filename, pages, progressListener, modelId, template, true);
+    return recognizeRenderedInternal(filename, pages, progressListener, modelId, template, true, true);
   }
 
   public OcrDemoResponse recognizeRenderedForFdhReview(
@@ -111,7 +111,18 @@ public class OcrDemoService {
       String modelId,
       DocumentTemplate template
   ) throws IOException {
-    return recognizeRenderedInternal(filename, pages, progressListener, modelId, template, false);
+    return recognizeRenderedForFdhReview(filename, pages, progressListener, modelId, template, true);
+  }
+
+  public OcrDemoResponse recognizeRenderedForFdhReview(
+      String filename,
+      List<RenderedOcrPage> pages,
+      ExtractionProgressListener progressListener,
+      String modelId,
+      DocumentTemplate template,
+      boolean recoverMissingFieldSnapshots
+  ) throws IOException {
+    return recognizeRenderedInternal(filename, pages, progressListener, modelId, template, false, recoverMissingFieldSnapshots);
   }
 
   private OcrDemoResponse recognizeRenderedInternal(
@@ -120,7 +131,8 @@ public class OcrDemoService {
       ExtractionProgressListener progressListener,
       String modelId,
       DocumentTemplate template,
-      boolean refineFieldCrops
+      boolean refineFieldCrops,
+      boolean recoverMissingFieldSnapshots
   ) throws IOException {
     String normalizedFilename = normalizeFilename(filename);
     List<RenderedOcrPage> safePages = pages == null ? List.of() : pages;
@@ -190,12 +202,16 @@ public class OcrDemoService {
       statusMessages.add("FDH review fast path skipped second-pass field crop transcription to keep multi-file material review responsive.");
     }
 
-    listener.postProcessingStep("field_evidence", "Building field snapshots and display results.", 98);
+    listener.postProcessingStep(
+        "field_evidence",
+        recoverMissingFieldSnapshots ? "Building field snapshots and display results." : "Building field display results.",
+        98
+    );
     JsonNode finalStructuredData = withTemplateMetadata(structuredData, resolvedTemplate);
     templateClassificationLogService.record(normalizedFilename, resolvedTemplate);
     Map<Integer, List<StructuredFieldDetail>> fieldDetailsByPage =
         structuredFieldEvidenceService.buildFieldDetails(finalStructuredData, safePages);
-    if (!refineFieldCrops) {
+    if (!refineFieldCrops && recoverMissingFieldSnapshots) {
       FieldBboxRefill refill = refillMissingFieldBboxes(
           normalizedFilename, finalStructuredData, fieldDetailsByPage, safePages, modelProfile, listener
       );
@@ -207,6 +223,8 @@ public class OcrDemoService {
         fieldDetailsByPage.putAll(rebuilt);
         statusMessages.add("Located " + refill.refilled() + " missing field region(s) with the multimodal LLM to recover field snapshots.");
       }
+    } else if (!refineFieldCrops) {
+      statusMessages.add("Field snapshot recovery was disabled for this review mode; recognized values are returned without crop images.");
     }
     List<OcrPage> responsePages = safePages.stream()
         .map(page -> new OcrPage(

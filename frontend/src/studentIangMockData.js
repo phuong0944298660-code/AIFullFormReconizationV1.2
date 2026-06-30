@@ -204,17 +204,6 @@ export function buildReviewResult(applicationTypeId = 'iang_recent_in_hk', scena
 function buildFields() {
   return [
     field({
-      key: 'case.application_type',
-      category: '案件与文档',
-      label: '申请类别',
-      required: true,
-      normalizedValue: 'IANG - Non-local recent graduate in Hong Kong',
-      sources: [
-        source('ID 990A', '第 1 页 Application category', 'Scheme / category', 'IANG - recent graduate', 96)
-      ],
-      rule: '申请类别应为非本地应届毕业生留港 / 回港就业安排；本场景为在港首次申请。'
-    }),
-    field({
       key: 'applicant.name.full_en',
       category: '申请人身份',
       label: '申请人英文姓名',
