@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -95,12 +96,85 @@ public class FdhReviewAssembler {
         uploadedFiles(safeDocuments),
         materialRows,
         fields,
-        List.of(),
+        documentFieldGroups(safeDocuments),
         reviewPages(safeDocuments),
         decision,
         decisionText(decision, materialRows, fields),
         stats,
         LocalDateTime.now(clock).format(GENERATED_AT_FORMAT)
+    );
+  }
+
+  private List<FdhReviewResult.DocumentFieldGroup> documentFieldGroups(List<FdhReviewDocument> documents) {
+    return documents.stream()
+        .map(document -> new FdhReviewResult.DocumentFieldGroup(
+            document.materialId(),
+            FdhMaterialCatalog.displayName(document.materialId()),
+            document.template() == null ? "" : document.template().templateId(),
+            document.filename() + " · " + Math.max(0, document.pageCount()) + " 页",
+            documentFieldPages(document)
+        ))
+        .toList();
+  }
+
+  private List<FdhReviewResult.DocumentFieldPage> documentFieldPages(FdhReviewDocument document) {
+    Map<Integer, List<ExtractedValue>> valuesByPage = new LinkedHashMap<>();
+    for (ExtractedValue value : flatten(document)) {
+      if (!shouldDisplayExtractedValue(value)) {
+        continue;
+      }
+      valuesByPage.computeIfAbsent(documentFieldPageNo(value), ignored -> new ArrayList<>()).add(value);
+    }
+
+    Set<Integer> pageNumbers = new TreeSet<>();
+    OcrDemoResponse response = document.ocrResult();
+    if (response != null && response.pages() != null) {
+      response.pages().stream()
+          .map(OcrPage::page)
+          .filter(page -> page > 0)
+          .forEach(pageNumbers::add);
+    }
+    pageNumbers.addAll(valuesByPage.keySet());
+    if (pageNumbers.isEmpty() && document.pageCount() > 0) {
+      for (int page = 1; page <= document.pageCount(); page += 1) {
+        pageNumbers.add(page);
+      }
+    }
+
+    return pageNumbers.stream()
+        .map(pageNo -> new FdhReviewResult.DocumentFieldPage(
+            pageNo,
+            documentFieldPageTitle(document, pageNo),
+            valuesByPage.getOrDefault(pageNo, List.of()).stream()
+                .map(this::documentFieldFromExtracted)
+                .toList()
+        ))
+        .toList();
+  }
+
+  private int documentFieldPageNo(ExtractedValue value) {
+    if (value.pageNo() > 0) {
+      return value.pageNo();
+    }
+    Matcher matcher = Pattern.compile("(?:^|\\.)page_(\\d+)(?:\\.|$)").matcher(value.path() + "." + value.section());
+    return matcher.find() ? Integer.parseInt(matcher.group(1)) : 1;
+  }
+
+  private String documentFieldPageTitle(FdhReviewDocument document, int pageNo) {
+    return FdhMaterialCatalog.displayName(document.materialId()) + " 第 " + pageNo + " 页";
+  }
+
+  private FdhReviewResult.DocumentField documentFieldFromExtracted(ExtractedValue value) {
+    return new FdhReviewResult.DocumentField(
+        value.fieldName(),
+        value.value(),
+        value.value().isBlank() ? "review" : "pass",
+        value.confidence(),
+        documentFieldPageNo(value),
+        value.imageWidth(),
+        value.imageHeight(),
+        value.bbox(),
+        locatorConfidence(value)
     );
   }
 

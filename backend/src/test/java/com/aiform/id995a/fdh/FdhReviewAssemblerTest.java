@@ -294,6 +294,49 @@ class FdhReviewAssemblerTest {
   }
 
   @Test
+  void fdhReviewResultIncludesPerMaterialDocumentFieldsWithLocatorMetadata() throws Exception {
+    StructuredFieldDetail travelDocumentNo = new StructuredFieldDetail(
+        1, "page_1.personal_particulars.travel_document_no", "Travel document no.", text("C8923745"), "C8923745", 94,
+        List.of(12, 24, 120, 38), "data:image/jpeg;base64,TRAVEL_DOC", "", 0, "not_run", List.of()
+    );
+    OcrPage page = new OcrPage(
+        1, "data:image/png;base64,AAA=", 1000, 1400, "", List.of(), List.of(), List.of(), List.of(travelDocumentNo)
+    );
+    OcrDemoResponse response = new OcrDemoResponse(
+        "ID988A.pdf", "test", 1, List.of(page), List.of(),
+        new EngineStatus("test", false, List.of()),
+        objectMapper.readTree("{\"page_1\":{\"personal_particulars\":{\"travel_document_no\":\"C8923745\"}}}"),
+        ""
+    );
+    FdhReviewDocument document = new FdhReviewDocument(
+        "ID988A.pdf", "application/pdf", 1,
+        new DocumentTemplate("id988a_2024_06", "ID 988A (06/2024)", 5, 98, "test", "id988a_2024_06"),
+        response,
+        "id988a"
+    );
+
+    FdhReviewResult result = assembler.assemble("entry_visa", List.of(document));
+
+    FdhReviewResult.DocumentFieldGroup group = result.documentFieldGroups().stream()
+        .filter(item -> item.materialId().equals("id988a"))
+        .findFirst()
+        .orElseThrow();
+    FdhReviewResult.DocumentField field = group.pages().stream()
+        .filter(item -> item.pageNo() == 1)
+        .flatMap(item -> item.fields().stream())
+        .filter(item -> item.label().equals("Travel document no."))
+        .findFirst()
+        .orElseThrow();
+
+    assertThat(field.value()).isEqualTo("C8923745");
+    assertThat(field.pageNo()).isEqualTo(1);
+    assertThat(field.imageWidth()).isEqualTo(1000);
+    assertThat(field.imageHeight()).isEqualTo(1400);
+    assertThat(field.bbox()).containsExactly(12, 24, 120, 38);
+    assertThat(field.locatorConfidence()).isEqualTo(94);
+  }
+
+  @Test
   void hkIdentityCardNoYesWithNumberPasses() throws Exception {
     FdhReviewResult result = assembler.assemble(
         "entry_visa",
