@@ -8,29 +8,58 @@ const studentIangMockData = readFileSync(new URL('./studentIangMockData.js', imp
 const viteConfig = readFileSync(new URL('../vite.config.js', import.meta.url), 'utf8')
 const packageJson = readFileSync(new URL('../package.json', import.meta.url), 'utf8')
 const startLocal = readFileSync(new URL('../../start-local.ps1', import.meta.url), 'utf8')
+const forbiddenPrototypeCopy = new RegExp([
+  ['OCR', 'bbox'].join(' '),
+  ['LLM', 'bbox'].join(' '),
+  ['bbox', '动态定位'].join(' '),
+  ['方案', 'A'].join(' ')
+].join('|'))
 
-test('FDH result page keeps review sidebar and field evidence areas distinct', () => {
-  assert.match(css, /\.review-workspace\s*\{[^}]*grid-template-columns:\s*390px minmax\(0, 1fr\)/s)
-  assert.match(css, /\.review-sidebar,[\s\S]*?\.review-main\s*\{[^}]*display:\s*grid/s)
-  assert.match(css, /\.field-card-body\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1\.15fr\) minmax\(300px, 0\.85fr\)/s)
+test('recognition result page keeps source pages and field evidence areas distinct', () => {
+  assert.match(css, /\.review-workspace\s*\{[^}]*grid-template-columns:\s*minmax\(520px, 58%\) minmax\(420px, 42%\)/s)
+  assert.match(css, /\.recognized-materials-panel\s*\{[^}]*grid-column:\s*1 \/ -1/s)
+  assert.match(css, /\.source-review-panel\s*\{[^}]*height:\s*calc\(100vh - 168px\)[^}]*min-height:\s*640px/s)
+  assert.match(css, /\.document-fields-panel\.locator-document-fields\s*\{[^}]*height:\s*calc\(100vh - 168px\)[^}]*min-height:\s*640px/s)
+  assert.match(css, /\.source-review-body\s*\{[^}]*grid-template-columns:\s*98px minmax\(0, 1fr\)[^}]*height:\s*auto/s)
+  assert.match(css, /\.source-page-scroll\s*\{[^}]*overflow-y:\s*auto/s)
+  assert.match(css, /\.locator-document-fields > \.document-group-list\s*\{[^}]*overflow-y:\s*auto/s)
+  assert.match(css, /\.source-evidence-row\s*\{[^}]*grid-template-columns:\s*minmax\(180px, 1\.35fr\) minmax\(120px, 0\.9fr\) auto auto/s)
   assert.doesNotMatch(css, /body\s*\{[^}]*overflow:\s*hidden/s)
 })
 
+test('document field groups render above findings and support locator clicks', () => {
+  assert.match(app, /displayReviewResult\.documentFieldGroups\?\.length/)
+  assert.match(app, /class="document-fields-panel locator-document-fields"/)
+  assert.match(app, /v-for="group in displayReviewResult\.documentFieldGroups"/)
+  assert.match(app, /documentFieldKey\(group, page, item\)/)
+  assert.match(app, /documentFieldIsActive\(group, page, item\)/)
+  assert.match(app, /selectDocumentField\(group, page, item\)/)
+  assert.match(app, /documentFieldSourceRows/)
+  assert.match(app, /documentFieldSourceRow\(group, page, item\)/)
+  assert.doesNotMatch(app, /function documentFieldMatchScore/)
+  assert.match(css, /\.review-main > \.locator-document-fields\s*\{[^}]*order:\s*1/s)
+  assert.match(css, /\.review-main > \.compact-findings\s*\{[^}]*order:\s*2/s)
+  assert.match(css, /\.review-main > \.fields-panel\s*\{[^}]*order:\s*3/s)
+  assert.match(css, /\.locator-document-field-row\.active\s*\{/)
+  assert.match(css, /\.document-field-status small\s*\{/)
+})
+
 test('standardized field cards render source evidence and normalized values', () => {
-  assert.match(app, /v-for="source in field\.sources"/)
+  assert.match(app, /v-for="\(\s*source,\s*index\s*\) in field\.sources"/)
   assert.match(app, /source\.documentName/)
   assert.match(app, /source\.section/)
   assert.match(app, /source\.fieldName/)
-  assert.match(app, /v-if="isFdhMode && source\.snapshotDataUrl"/)
-  assert.match(app, /v-if="isFdhMode && !source\.snapshotDataUrl"/)
+  assert.match(app, /selectFieldSource\(field, source, index\)/)
+  assert.match(app, /sourceConfidence\(source\)/)
+  assert.match(app, /locatorConfidence\(source\)/)
   assert.match(app, /sourceValueSegments\(field, source\)/)
   assert.match(app, /field\.normalizedValue/)
-  assert.match(css, /\.snapshot-card\s*\{/)
-  assert.match(css, /\.evidence-card\s*\{/)
-  assert.match(css, /\.evidence-value\s*\{/)
+  assert.match(css, /\.source-evidence-row\s*\{/)
+  assert.match(css, /\.source-confidence-pill\s*\{/)
+  assert.match(css, /\.field-value-panel\.compact\s*\{/)
   assert.match(css, /\.value-diff-char\s*\{/)
   assert.doesNotMatch(app, /<span v-else>\{\{\s*source\.snapshotText\s*\}\}<\/span>/)
-  assert.doesNotMatch(css, /\.snapshot-card\s*\{[\s\S]*?linear-gradient\(transparent/)
+  assert.doesNotMatch(app, forbiddenPrototypeCopy)
 })
 
 test('upload page supports application type selection while hiding mock scenario switching', () => {
@@ -152,7 +181,7 @@ test('backend upload job creation has visible startup progress and timeout handl
 
 test('student IANG ID990A copy consistently references the first five pages', () => {
   const studentFrontendCopy = `${app}\n${studentIangMockData}`
-  assert.match(studentFrontendCopy, /ID 990A 当前仅识别前 5 页/)
+  assert.match(studentFrontendCopy, /当前 demo 按页尾页码仅识别前 5 页/)
   assert.match(studentFrontendCopy, /按页尾页码识别 ID 990A 前 5 页/)
   assert.doesNotMatch(studentFrontendCopy, /前 6 页/)
   assert.doesNotMatch(studentFrontendCopy, /第 6 页/)

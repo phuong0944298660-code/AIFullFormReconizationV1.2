@@ -96,11 +96,35 @@ public class FdhReviewAssembler {
         materialRows,
         fields,
         List.of(),
+        reviewPages(safeDocuments),
         decision,
         decisionText(decision, materialRows, fields),
         stats,
         LocalDateTime.now(clock).format(GENERATED_AT_FORMAT)
     );
+  }
+
+  private List<FdhReviewResult.ReviewPage> reviewPages(List<FdhReviewDocument> documents) {
+    List<FdhReviewResult.ReviewPage> pages = new ArrayList<>();
+    for (FdhReviewDocument document : documents) {
+      OcrDemoResponse response = document.ocrResult();
+      if (response == null || response.pages() == null) {
+        continue;
+      }
+      for (OcrPage page : response.pages()) {
+        pages.add(new FdhReviewResult.ReviewPage(
+            document.materialId(),
+            FdhMaterialCatalog.displayName(document.materialId()),
+            document.filename(),
+            page.page(),
+            "第 " + page.page() + " 页",
+            page.sourceImageDataUrl(),
+            page.imageWidth(),
+            page.imageHeight()
+        ));
+      }
+    }
+    return pages;
   }
 
   private List<FdhReviewResult.UploadedFile> uploadedFiles(List<FdhReviewDocument> documents) {
@@ -427,7 +451,13 @@ public class FdhReviewAssembler {
               displayValue,
               value.confidence(),
               displayValue,
-              value.snapshotDataUrl()
+              value.snapshotDataUrl(),
+              extracted.materialId(),
+              value.pageNo(),
+              value.imageWidth(),
+              value.imageHeight(),
+              value.bbox(),
+              locatorConfidence(value)
           );
         })
         .toList();
@@ -798,7 +828,13 @@ public class FdhReviewAssembler {
             value.value(),
             value.confidence(),
             value.value(),
-            value.snapshotDataUrl()
+            value.snapshotDataUrl(),
+            document.materialId(),
+            value.pageNo(),
+            value.imageWidth(),
+            value.imageHeight(),
+            value.bbox(),
+            locatorConfidence(value)
         ));
       }
     }
@@ -1003,6 +1039,9 @@ public class FdhReviewAssembler {
     if (surname.isPresent() && given.isPresent()) {
       FdhReviewResult.FieldSource surnameSource = surname.get();
       FdhReviewResult.FieldSource givenSource = given.get();
+      FdhReviewResult.FieldSource locationSource = surnameSource.bbox().isEmpty() && !givenSource.bbox().isEmpty()
+          ? givenSource
+          : surnameSource;
       String fullName = givenSource.value() + " " + surnameSource.value();
       return Optional.of(new FdhReviewResult.FieldSource(
           surnameSource.documentName(),
@@ -1012,7 +1051,13 @@ public class FdhReviewAssembler {
           fullName,
           Math.min(surnameSource.confidence(), givenSource.confidence()),
           fullName,
-          surnameSource.snapshotDataUrl().isBlank() ? givenSource.snapshotDataUrl() : surnameSource.snapshotDataUrl()
+          surnameSource.snapshotDataUrl().isBlank() ? givenSource.snapshotDataUrl() : surnameSource.snapshotDataUrl(),
+          locationSource.materialId(),
+          locationSource.pageNo(),
+          locationSource.imageWidth(),
+          locationSource.imageHeight(),
+          locationSource.bbox(),
+          locationSource.locatorConfidence()
       ));
     }
     Optional<FdhReviewResult.FieldSource> full = evidence(
@@ -1052,6 +1097,9 @@ public class FdhReviewAssembler {
     if (surname.isPresent() && given.isPresent()) {
       FdhReviewResult.FieldSource first = surname.get();
       FdhReviewResult.FieldSource second = given.get();
+      FdhReviewResult.FieldSource locationSource = first.bbox().isEmpty() && !second.bbox().isEmpty()
+          ? second
+          : first;
       String fullName = first.value() + " " + second.value();
       return Optional.of(new FdhReviewResult.FieldSource(
           first.documentName(),
@@ -1061,7 +1109,13 @@ public class FdhReviewAssembler {
           fullName,
           Math.min(first.confidence(), second.confidence()),
           fullName,
-          first.snapshotDataUrl().isBlank() ? second.snapshotDataUrl() : first.snapshotDataUrl()
+          first.snapshotDataUrl().isBlank() ? second.snapshotDataUrl() : first.snapshotDataUrl(),
+          locationSource.materialId(),
+          locationSource.pageNo(),
+          locationSource.imageWidth(),
+          locationSource.imageHeight(),
+          locationSource.bbox(),
+          locationSource.locatorConfidence()
       ));
     }
     Optional<FdhReviewResult.FieldSource> full = evidence(
@@ -1085,6 +1139,7 @@ public class FdhReviewAssembler {
         applicationTypeCandidate(value).ifPresent(candidate -> {
           String key = document.filename() + "|" + candidate.applicationTypeKey() + "|" + value.value();
           extractions.putIfAbsent(key, new ApplicationTypeExtraction(
+              document.materialId(),
               document.filename(),
               candidate.applicationTypeKey(),
               candidate.label(),
@@ -1157,11 +1212,21 @@ public class FdhReviewAssembler {
             extracted.value(),
             extracted.confidence(),
             extracted.value(),
-            extracted.snapshotDataUrl()
+            extracted.snapshotDataUrl(),
+            document.materialId(),
+            extracted.pageNo(),
+            extracted.imageWidth(),
+            extracted.imageHeight(),
+            extracted.bbox(),
+            locatorConfidence(extracted)
         ));
       }
     }
     return Optional.empty();
+  }
+
+  private double locatorConfidence(ExtractedValue value) {
+    return value.bbox().isEmpty() ? 0 : value.confidence();
   }
 
   private Optional<ExtractedValue> findValue(FdhReviewDocument document, List<List<String>> tokenGroups) {
@@ -1175,7 +1240,7 @@ public class FdhReviewAssembler {
     List<ExtractedValue> values = new ArrayList<>();
     OcrDemoResponse response = document.ocrResult();
     if (response != null) {
-      // structuredFields 路（带 LLM bbox + 真实截图、原始 label）已覆盖的字段：记录归一化键，
+      // structuredFields 路（带定位信息、真实截图、原始 label）已覆盖的字段：记录归一化键，
       // 让 flattenJson 跳过这些字段的「无截图副本」，避免同一字段展示两条证据。
       Set<String> coveredByStructuredFields = new LinkedHashSet<>();
       for (OcrPage page : response.pages()) {
@@ -1187,7 +1252,11 @@ public class FdhReviewAssembler {
                 "page_" + detail.page() + "." + sectionFromPath(detail.path()),
                 detail.displayValue(),
                 detail.confidence(),
-                detail.snapshotDataUrl()
+                detail.snapshotDataUrl(),
+                page.page(),
+                page.imageWidth(),
+                page.imageHeight(),
+                detail.bbox()
             ));
             coveredByStructuredFields.add(fieldDedupKey(detail.label(), detail.displayValue()));
             coveredByStructuredFields.add(fieldDedupKey(fieldNameFromPath(detail.path()), detail.displayValue()));
@@ -1533,6 +1602,7 @@ public class FdhReviewAssembler {
   }
 
   private record ApplicationTypeExtraction(
+      String materialId,
       String filename,
       String applicationTypeKey,
       String label,
@@ -1610,8 +1680,23 @@ public class FdhReviewAssembler {
       String section,
       String value,
       double confidence,
-      String snapshotDataUrl
+      String snapshotDataUrl,
+      int pageNo,
+      int imageWidth,
+      int imageHeight,
+      List<Integer> bbox
   ) {
+    private ExtractedValue(
+        String path,
+        String fieldName,
+        String section,
+        String value,
+        double confidence,
+        String snapshotDataUrl
+    ) {
+      this(path, fieldName, section, value, confidence, snapshotDataUrl, 0, 0, 0, List.of());
+    }
+
     private String searchText() {
       return path + " " + fieldName;
     }

@@ -446,14 +446,37 @@ function field(config) {
 }
 
 function source(documentName, section, fieldName, value, confidence) {
+  const materialId = materialIdForSourceDocument(documentName)
+  const pageNo = pageNoForSource(documentName, section, fieldName)
   return {
     documentName,
+    materialId,
+    pageNo,
     section,
     fieldName,
     value,
     confidence,
+    locatorConfidence: 0,
     snapshotText: value || 'blank'
   }
+}
+
+function materialIdForSourceDocument(documentName) {
+  if (documentName === 'ID 990A') return 'id990a'
+  if (documentName === '毕业证明') return 'educationProof'
+  if (documentName === '港澳通行证' || documentName === 'HKID') return 'identityDocs'
+  if (documentName === '付款状态') return 'paymentStatus'
+  return ''
+}
+
+function pageNoForSource(documentName, section, fieldName) {
+  const pageMatch = String(section || '').match(/第\s*(\d+)\s*页/)
+  if (pageMatch) return Number(pageMatch[1]) || 0
+  if (documentName === '毕业证明' || documentName === '付款状态') return 1
+  if (documentName === '港澳通行证') return 1
+  if (documentName === 'HKID') return 2
+  if (documentName === 'ID 990A' && fieldName.includes('Signature')) return 5
+  return 0
 }
 
 function fieldStats(fields) {

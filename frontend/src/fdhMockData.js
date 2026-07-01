@@ -216,6 +216,7 @@ export function buildReviewResult(applicationTypeId, scenarioId) {
     scenarioId,
     uploadedFiles: buildUploadedFiles(scenarioId),
     materials: materialRows,
+    documentFieldGroups: buildDocumentFieldGroups(scenarioId, uploadedIds),
     fields,
     decision,
     decisionText: decisionText(decision, blockingMaterialFindings, blockingFieldFindings, reviewFindings),
@@ -264,6 +265,123 @@ function fieldStats(fields) {
     fail: fields.filter((field) => field.status === 'fail').length,
     review: fields.filter((field) => field.status === 'review').length,
     required: fields.filter((field) => field.required).length
+  }
+}
+
+function buildDocumentFieldGroups(scenarioId, uploadedIds) {
+  const groups = []
+  if (uploadedIds.has('id988a')) {
+    groups.push({
+      materialId: 'id988a',
+      materialName: 'ID 988A',
+      templateId: 'ID 988A (06/2024)',
+      note: '申请人表格按页参与字段识别；第 5 页不做字段抽取。',
+      pages: [
+        page(1, 'Application Type', [
+          ['Application type', 'Entry visa - Domestic helper from abroad', 'pass'],
+          ['Template footer', scenarioId === 'review_low_confidence' ? 'ID 988A low confidence' : 'ID 988A (06/2024)', scenarioId === 'review_low_confidence' ? 'review' : 'pass']
+        ]),
+        page(2, 'Personal Particulars', [
+          ['Surname / Given names', 'SITI NURHALIZA', 'pass'],
+          ['Travel document no.', scenarioId === 'review_low_confidence' ? 'C8923745 / C892374S' : 'C8923745', scenarioId === 'review_low_confidence' ? 'review' : 'pass'],
+          ['Date of birth', '27/11/1992', 'pass'],
+          ['Nationality', 'Indonesian', 'pass']
+        ]),
+        page(4, 'Undertaking', [
+          ['Employment contract no.', uploadedIds.has('id407') ? 'FH-CON-IDN2026-0612' : '未识别', uploadedIds.has('id407') ? 'pass' : 'fail']
+        ]),
+        page(5, 'Declaration', [
+          ['Signature of applicant', scenarioId === 'missing_required_field' ? '未检测到' : '已检测到', scenarioId === 'missing_required_field' ? 'fail' : 'pass']
+        ])
+      ]
+    })
+  }
+  if (uploadedIds.has('id988b')) {
+    groups.push({
+      materialId: 'id988b',
+      materialName: 'ID 988B',
+      templateId: 'ID 988B (06/2024)',
+      note: '雇主表格按页参与字段识别；第 4 页不做字段抽取。',
+      pages: [
+        page(1, 'Employer particulars', [
+          ['Name of employer', 'CHAN TAI MAN', 'pass'],
+          ['Template footer', 'ID 988B (06/2024)', 'pass']
+        ]),
+        page(3, 'Undertaking', [
+          ['Employment contract no.', uploadedIds.has('id407') ? 'FH-CON-IDN2026-0612' : '未识别', uploadedIds.has('id407') ? 'pass' : 'fail']
+        ]),
+        page(4, 'Declaration', [
+          ['Signature of employer', '已检测到', 'pass']
+        ])
+      ]
+    })
+  }
+  if (uploadedIds.has('id407')) {
+    groups.push({
+      materialId: 'id407',
+      materialName: 'ID 407',
+      templateId: 'ID 407 (11/2016)',
+      note: '标准雇佣合约用于姓名、合约编号、工资和签名校验。',
+      pages: [
+        page(1, 'Contract cover', [
+          ['Name of Helper', scenarioId === 'field_mismatch' ? 'SITI NURHALIZA BINTI' : 'SITI NURHALIZA', scenarioId === 'field_mismatch' ? 'fail' : 'pass'],
+          ['Name of employer', 'CHAN TAI MAN', 'pass'],
+          ['Contract No.', 'FH-CON-IDN2026-0612', 'pass'],
+          ['Template footer', 'ID 407 (11/2016)', 'pass']
+        ]),
+        page(2, 'Wages and food allowance', [
+          ['Monthly wages', 'HK$5,100', 'pass'],
+          ['Food allowance', 'HK$1,236', 'pass']
+        ]),
+        page(4, 'Signature', [
+          ['Employer signature', '已检测到', 'pass']
+        ])
+      ]
+    })
+  }
+  if (uploadedIds.has('helperTravelCopy')) {
+    groups.push({
+      materialId: 'helperTravelCopy',
+      materialName: '旅行证件副本',
+      templateId: 'Passport biodata page',
+      note: '用于核对雇工姓名、证件号码、出生日期和国籍。',
+      pages: [
+        page(1, 'Bio-data page', [
+          ['Name', 'SITI NURHALIZA', 'pass'],
+          ['Passport No.', scenarioId === 'review_low_confidence' ? 'C892374S' : 'C8923745', scenarioId === 'review_low_confidence' ? 'review' : 'pass'],
+          ['Date of birth', '27 NOV 1992', 'pass'],
+          ['Nationality', 'Indonesia', 'pass']
+        ])
+      ]
+    })
+  }
+  if (uploadedIds.has('employerId')) {
+    groups.push({
+      materialId: 'employerId',
+      materialName: '雇主身份证明',
+      templateId: 'HKID / Passport',
+      note: '用于展示已上传的雇主身份证明材料。',
+      pages: [
+        page(1, 'HKID copy', [
+          ['Name', 'CHAN TAI MAN', 'pass'],
+          ['Document type', 'HKID copy', 'pass']
+        ])
+      ]
+    })
+  }
+  return groups
+}
+
+function page(pageNo, title, rows) {
+  return {
+    pageNo,
+    title,
+    fields: rows.map(([label, value, status]) => ({
+      label,
+      value,
+      status,
+      confidence: status === 'review' ? 78 : 92
+    }))
   }
 }
 
@@ -462,12 +580,49 @@ function field(config) {
 }
 
 function source(documentName, section, fieldName, value, confidence) {
+  const materialId = materialIdForSourceDocument(documentName)
+  const pageNo = pageNoForSource(documentName, section, fieldName)
   return {
     documentName,
+    materialId,
+    pageNo,
     section,
     fieldName,
     value,
     confidence,
+    locatorConfidence: 0,
     snapshotText: value || 'blank'
   }
+}
+
+function materialIdForSourceDocument(documentName) {
+  if (documentName === 'ID 988A') return 'id988a'
+  if (documentName === 'ID 988B') return 'id988b'
+  if (documentName === 'ID 407') return 'id407'
+  if (documentName === '旅行证件副本') return 'helperTravelCopy'
+  if (documentName === '雇主身份证明') return 'employerId'
+  return ''
+}
+
+function pageNoForSource(documentName, section, fieldName) {
+  if (documentName === 'ID 988A') {
+    if (section.includes('Application Type')) return 1
+    if (section.includes('Personal Particulars')) return 2
+    if (section.includes('Undertaking')) return 4
+    if (section.includes('声明') || fieldName.includes('Signature')) return 5
+    return 1
+  }
+  if (documentName === 'ID 988B') {
+    if (section.includes('Part A') || section.includes('Employer particulars')) return 1
+    if (section.includes('Undertaking')) return 3
+    if (section.includes('Declaration')) return 4
+    return 1
+  }
+  if (documentName === 'ID 407') {
+    if (section.includes('工资') || section.includes('膳食')) return 2
+    if (section.includes('签署')) return 4
+    return 1
+  }
+  if (documentName === '旅行证件副本' || documentName === '雇主身份证明') return 1
+  return 0
 }

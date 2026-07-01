@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import {
   applicationTypes as fdhApplicationTypes,
   buildReviewResult as buildFdhReviewResult,
@@ -49,6 +49,7 @@ const verificationLoading = ref(false)
 const verificationError = ref('')
 const processing = ref(false)
 const fieldFilter = ref('all')
+const selectedFieldSourceKey = ref('')
 const fileInput = ref(null)
 const jobStatus = ref(null)
 const apiError = ref('')
@@ -202,6 +203,328 @@ const nonBlockingMaterialHints = computed(() => {
   return reviewResult.value.materials.filter((item) => !item.blocking && item.status === 'warn')
 })
 
+const recognizedMaterials = computed(() => {
+  const result = displayReviewResult.value
+  if (!result) return []
+  const uploadedByMaterial = new Map((result.uploadedFiles || []).map((file) => [file.materialId, file]))
+  return (result.materials || [])
+    .filter((material) => material.uploaded || uploadedByMaterial.has(material.id))
+    .map((material) => {
+      const upload = uploadedByMaterial.get(material.id)
+      return {
+        id: material.id,
+        shortName: material.shortName,
+        templateId: upload?.templateId || material.templateId || upload?.footerId || '',
+        pages: upload?.pages || material.expectedPages || '',
+        status: material.status,
+        statusText: material.statusText,
+        uploaded: Boolean(material.uploaded),
+        scopeText: material.scopeText
+      }
+    })
+})
+
+const reviewSourcePages = computed(() => {
+  const result = displayReviewResult.value
+  if (!result) return []
+  const backendPages = Array.isArray(result.reviewPages) ? result.reviewPages : []
+  if (backendPages.length) {
+    return backendPages.map((page) => ({
+      key: reviewPageKey(page),
+      materialId: page.materialId || '',
+      documentName: page.documentName || page.materialId || '材料',
+      filename: page.filename || '',
+      pageNo: Number(page.pageNo) || 1,
+      title: page.title || `第 ${Number(page.pageNo) || 1} 页`,
+      imageDataUrl: page.imageDataUrl || '',
+      imageWidth: Number(page.imageWidth) || 0,
+      imageHeight: Number(page.imageHeight) || 0,
+      fields: []
+    }))
+  }
+  return fallbackReviewPages(result)
+})
+
+const fieldSourceRows = computed(() => {
+  const rows = []
+  for (const field of nonEmploymentFields.value) {
+    ;(field.sources || []).forEach((source, index) => {
+      const key = fieldSourceKey(field, source, index)
+      rows.push({
+        key,
+        field,
+        source,
+        index,
+        pageKey: sourcePageKey(source),
+        bbox: sourceBbox(source),
+        locatorConfidence: locatorConfidence(source),
+        confidence: sourceConfidence(source),
+        status: field.status
+      })
+    })
+  }
+  return rows
+})
+
+const documentFieldSourceRows = computed(() => {
+  const rows = []
+  const groups = displayReviewResult.value?.documentFieldGroups || []
+  for (const group of groups) {
+    for (const page of group.pages || []) {
+      for (const item of page.fields || []) {
+        const bbox = sourceBbox(item)
+        const key = documentFieldKey(group, page, item)
+        const source = {
+          documentName: group.materialName || group.materialId || '',
+          filename: item.filename || '',
+          section: `第 ${Number(item.pageNo) || Number(page.pageNo) || 1} 页 · ${page.title || ''}`,
+          fieldName: item.label || '',
+          value: item.value || '',
+          confidence: item.confidence || 0,
+          materialId: group.materialId || '',
+          pageNo: Number(item.pageNo) || Number(page.pageNo) || 1,
+          imageWidth: item.imageWidth || 0,
+          imageHeight: item.imageHeight || 0,
+          bbox,
+          locatorConfidence: item.locatorConfidence || 0
+        }
+        rows.push({
+          key,
+          field: {
+            key,
+            label: item.label || '',
+            status: item.status || 'pass'
+          },
+          source,
+          pageKey: sourcePageKey(source),
+          bbox,
+          locatorConfidence: locatorConfidence(source),
+          confidence: sourceConfidence(source),
+          status: item.status || 'pass',
+          documentField: true
+        })
+      }
+    }
+  }
+  return rows
+})
+
+const locatorSourceRows = computed(() => [
+  ...fieldSourceRows.value,
+  ...documentFieldSourceRows.value
+])
+
+const selectedFieldSource = computed(() => {
+  return locatorSourceRows.value.find((row) => row.key === selectedFieldSourceKey.value) || null
+})
+
+const selectedLocatorText = computed(() => {
+  const selected = selectedFieldSource.value
+  if (!selected) return '点击右侧字段来源后，左侧将定位到对应材料页面。'
+  return `当前定位：${selected.field.label} · ${selected.source.documentName || '材料'} ${selected.source.pageNo ? `第 ${selected.source.pageNo} 页` : ''}`
+})
+
+function fallbackReviewPages(result) {
+  const groups = result?.documentFieldGroups || []
+  return groups.flatMap((group) => (group.pages || []).map((page) => ({
+    key: `${group.materialId || group.materialName}:mock:${page.pageNo}`,
+    materialId: group.materialId || '',
+    documentName: group.materialName || group.materialId || '材料',
+    filename: '',
+    pageNo: Number(page.pageNo) || 1,
+    title: page.title || `第 ${Number(page.pageNo) || 1} 页`,
+    imageDataUrl: '',
+    imageWidth: 0,
+    imageHeight: 0,
+    fields: page.fields || []
+  })))
+}
+
+function reviewPageKey(page) {
+  return `${page.filename || page.materialId || page.documentName}:page:${Number(page.pageNo) || 1}`
+}
+
+function sourcePageKey(source) {
+  const pageNo = Number(source?.pageNo) || sourcePageNo(source)
+  const matched = reviewSourcePages.value.find((page) => {
+    const samePage = pageNo > 0 ? page.pageNo === pageNo : true
+    return samePage && sourceMatchesPage(source, page)
+  })
+  if (matched) return matched.key
+  return pageNo > 0 ? `${source?.filename || source?.materialId || source?.documentName}:page:${pageNo}` : ''
+}
+
+function sourceMatchesPage(source, page) {
+  const sourceDocument = String(source?.documentName || '')
+  const pageDocument = String(page.documentName || '')
+  return Boolean(
+    (source?.filename && page.filename === source.filename)
+      || (source?.materialId && page.materialId === source.materialId)
+      || (sourceDocument && pageDocument === sourceDocument)
+      || (sourceDocument && pageDocument.includes(sourceDocument))
+      || (pageDocument && sourceDocument.includes(pageDocument))
+  )
+}
+
+function sourcePageNo(source) {
+  const section = String(source?.section || '')
+  const match = section.match(/第\s*(\d+)\s*页|page[_\s-]*(\d+)/i)
+  return match ? Number(match[1] || match[2]) || 0 : 0
+}
+
+function fieldSourceKey(field, source, index) {
+  return [
+    field?.key || 'field',
+    source?.filename || source?.documentName || 'source',
+    source?.section || '',
+    source?.fieldName || '',
+    index
+  ].join('|')
+}
+
+function pageSourceRows(page) {
+  const selected = selectedFieldSource.value
+  return selected?.pageKey === page.key && selected.bbox.length === 4 ? [selected] : []
+}
+
+function documentFieldKey(group, page, item) {
+  return [
+    group?.materialId || group?.materialName || 'material',
+    Number(page?.pageNo) || 1,
+    item?.label || 'field',
+    item?.value || ''
+  ].join('|')
+}
+
+function normalizedMatchText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[\s:_/\\().,，。；;：·-]+/g, '')
+}
+
+function documentFieldSourceRow(group, page, item) {
+  const key = documentFieldKey(group, page, item)
+  return documentFieldSourceRows.value.find((row) => row.key === key) || null
+}
+
+function documentFieldIsActive(group, page, item) {
+  const row = documentFieldSourceRow(group, page, item)
+  return Boolean(row && selectedFieldSourceKey.value === row.key)
+}
+
+function selectDocumentField(group, page, item) {
+  const row = documentFieldSourceRow(group, page, item)
+  if (row) {
+    selectFieldSourceRow(row)
+    return
+  }
+  selectedFieldSourceKey.value = ''
+  const pageKey = sourcePageKey({
+    materialId: group?.materialId || '',
+    documentName: group?.materialName || '',
+    pageNo: Number(page?.pageNo) || 1
+  })
+  if (pageKey) scrollToReviewPage(pageKey)
+}
+
+function sourceBbox(source) {
+  if (!Array.isArray(source?.bbox) || source.bbox.length !== 4) return []
+  const values = source.bbox.map((value) => Number(value))
+  return values.every((value) => Number.isFinite(value)) && values[2] > values[0] && values[3] > values[1]
+    ? values
+    : []
+}
+
+function sourceConfidence(source) {
+  const confidence = Number(source?.confidence)
+  return Number.isFinite(confidence) ? Math.max(0, Math.min(100, Math.round(confidence))) : 0
+}
+
+function locatorConfidence(source) {
+  const confidence = Number(source?.locatorConfidence)
+  return Number.isFinite(confidence) ? Math.max(0, Math.min(100, Math.round(confidence))) : 0
+}
+
+function averageFieldConfidence(field) {
+  const sources = field?.sources || []
+  if (!sources.length) return 0
+  const total = sources.reduce((sum, source) => sum + sourceConfidence(source), 0)
+  return Math.round(total / sources.length)
+}
+
+function bboxStyle(row, page) {
+  const [left, top, right, bottom] = row.bbox
+  const maxCoord = Math.max(Math.abs(left), Math.abs(top), Math.abs(right), Math.abs(bottom))
+  if (maxCoord <= 1) {
+    return {
+      left: `${left * 100}%`,
+      top: `${top * 100}%`,
+      width: `${(right - left) * 100}%`,
+      height: `${(bottom - top) * 100}%`
+    }
+  }
+  const width = page.imageWidth || 1
+  const height = page.imageHeight || 1
+  return {
+    left: `${(left / width) * 100}%`,
+    top: `${(top / height) * 100}%`,
+    width: `${((right - left) / width) * 100}%`,
+    height: `${((bottom - top) / height) * 100}%`
+  }
+}
+
+function sourceDomId(key) {
+  return `field-source-${safeDomId(key)}`
+}
+
+function pageDomId(key) {
+  return `review-page-${safeDomId(key)}`
+}
+
+function safeDomId(value) {
+  return String(value || 'empty').replace(/[^a-zA-Z0-9_-]+/g, '-')
+}
+
+function selectFieldSource(field, source, index) {
+  const key = fieldSourceKey(field, source, index)
+  const row = fieldSourceRows.value.find((item) => item.key === key) || {
+    key,
+    field,
+    source,
+    pageKey: sourcePageKey(source),
+    bbox: sourceBbox(source)
+  }
+  selectFieldSourceRow(row)
+}
+
+function selectFieldSourceRow(row) {
+  selectedFieldSourceKey.value = row.key
+  nextTick(() => {
+    const sourceEl = document.getElementById(sourceDomId(row.key))
+    if (sourceEl) {
+      sourceEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      return
+    }
+    const pageKey = row.pageKey || sourcePageKey(row.source)
+    if (pageKey) {
+      document.getElementById(pageDomId(pageKey))?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  })
+}
+
+function selectFieldDefaultSource(field) {
+  const source = field?.sources?.[0]
+  if (source) {
+    selectFieldSource(field, source, 0)
+  }
+}
+
+function scrollToReviewPage(pageKey) {
+  nextTick(() => {
+    document.getElementById(pageDomId(pageKey))?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  })
+}
+
 const reviewJsonPayload = computed(() => {
   const result = displayReviewResult.value
   if (!result) return {}
@@ -214,6 +537,16 @@ const reviewJsonPayload = computed(() => {
     decisionText: result.decisionText,
     generatedAt: result.generatedAt,
     stats: result.stats,
+    reviewPages: (result.reviewPages || []).map((page) => ({
+      materialId: page.materialId,
+      documentName: page.documentName,
+      filename: page.filename,
+      pageNo: page.pageNo,
+      title: page.title,
+      imageWidth: page.imageWidth,
+      imageHeight: page.imageHeight,
+      hasImage: Boolean(page.imageDataUrl)
+    })),
     documentFieldGroups: result.documentFieldGroups || [],
     materialCompleteness: result.materials.map((material) => ({
       no: material.no,
@@ -252,6 +585,12 @@ const reviewJsonPayload = computed(() => {
         fieldName: source.fieldName,
         value: source.value,
         confidence: source.confidence,
+        materialId: source.materialId || '',
+        pageNo: source.pageNo || 0,
+        imageWidth: source.imageWidth || 0,
+        imageHeight: source.imageHeight || 0,
+        bbox: source.bbox || [],
+        locatorConfidence: source.locatorConfidence || 0,
         hasSnapshot: Boolean(source.snapshotDataUrl)
       }))
     }))
@@ -1020,59 +1359,103 @@ function verificationLineStatus(line) {
       </div>
 
       <div v-if="resultView === 'recognition'" class="review-workspace">
-        <aside class="review-sidebar">
-          <section class="decision-card" :class="`decision-${displayReviewResult.decision.toLowerCase()}`">
-            <span>整体结论</span>
-            <strong>{{ displayReviewResult.decision }}</strong>
-            <p>{{ displayReviewResult.decisionText }}</p>
-          </section>
+        <section class="recognized-materials-panel">
+          <div class="recognized-materials-heading">
+            <h2>已识别材料</h2>
+            <p>{{ recognizedMaterials.length }} 份材料参与当前识别结果</p>
+          </div>
+          <div class="recognized-material-list">
+            <article
+              v-for="material in recognizedMaterials"
+              :key="material.id"
+              class="recognized-material-card"
+              :class="[`status-${material.status}`, { uploaded: material.uploaded }]"
+            >
+              <strong>{{ material.shortName }}</strong>
+              <span>{{ material.templateId || material.scopeText }}</span>
+              <small>{{ material.pages ? `${material.pages} 页` : '页数待识别' }} · {{ material.statusText }}</small>
+            </article>
+          </div>
+        </section>
 
-          <section class="side-panel">
-            <div class="panel-heading">
-              <h2>材料完整性</h2>
-              <p>{{ isFdhMode ? '1-3 为最终判定范围；4-12 为展示项。' : '标记“Demo审批”的材料参与当前结论，其余官方应交材料作为提示展示。' }}</p>
+        <section class="source-review-panel">
+          <div class="panel-heading source-review-heading">
+            <div>
+              <h2>材料原文</h2>
+              <p>按材料和页码展示参与识别的原始页面；点击右侧字段来源后自动定位。</p>
             </div>
-            <div class="compact-material-list">
-              <article
-                v-for="material in reviewResult.materials"
-                :key="material.id"
-                class="compact-material"
-                :class="[`status-${material.status}`, { core: material.core }]"
+            <span class="locator-summary">{{ selectedLocatorText }}</span>
+          </div>
+          <div class="source-review-body">
+            <nav class="source-page-thumbs" aria-label="材料页缩略图">
+              <button
+                v-for="page in reviewSourcePages"
+                :key="page.key"
+                type="button"
+                class="source-page-thumb"
+                :class="{ active: selectedFieldSource?.pageKey === page.key }"
+                @click="scrollToReviewPage(page.key)"
               >
-                <div>
-                  <strong>{{ material.no }}. {{ material.shortName }}</strong>
-                  <span>{{ material.scopeText }}</span>
+                <strong>{{ page.documentName }}</strong>
+                <span>第 {{ page.pageNo }} 页</span>
+              </button>
+            </nav>
+            <div class="source-page-scroll">
+              <article
+                v-for="page in reviewSourcePages"
+                :id="pageDomId(page.key)"
+                :key="page.key"
+                class="source-page-sheet"
+                :class="{ active: selectedFieldSource?.pageKey === page.key }"
+              >
+                <header>
+                  <strong>{{ page.documentName }}</strong>
+                  <span>{{ page.filename || page.title }} · 第 {{ page.pageNo }} 页</span>
+                </header>
+                <div v-if="page.imageDataUrl" class="source-page-image">
+                  <img :src="page.imageDataUrl" :alt="`${page.documentName} 第 ${page.pageNo} 页`">
+                  <button
+                    v-for="row in pageSourceRows(page)"
+                    :id="sourceDomId(row.key)"
+                    :key="row.key"
+                    type="button"
+                    class="source-highlight"
+                    :class="[row.status, { active: selectedFieldSourceKey === row.key }]"
+                    :style="bboxStyle(row, page)"
+                    :title="`${row.field.label}：${row.source.value}`"
+                    @click="selectedFieldSourceKey = row.key"
+                  />
                 </div>
-                <span class="status-badge" :class="material.status">{{ material.statusText }}</span>
+                <div v-else class="source-page-fallback">
+                  <div
+                    v-for="item in page.fields"
+                    :key="`${page.key}:${item.label}`"
+                    class="source-page-field-row"
+                    :class="item.status"
+                  >
+                    <span>{{ item.label }}</span>
+                    <strong>{{ item.value || '未识别' }}</strong>
+                  </div>
+                </div>
               </article>
+              <div v-if="!reviewSourcePages.length" class="source-page-empty">
+                暂未取得原文页面。请先上传并完成材料识别。
+              </div>
             </div>
-          </section>
-
-          <section class="side-panel">
-            <div class="panel-heading">
-              <h2>上传文件</h2>
-              <p>{{ isFdhMode ? '当前场景生成的模拟材料包。' : 'IANG 应届毕业生在港首次申请的演示材料包。' }}</p>
-            </div>
-            <div class="sidebar-file-list">
-              <article v-for="file in reviewResult.uploadedFiles" :key="file.filename">
-                <strong>{{ file.documentName }}</strong>
-                <span>{{ file.filename }}</span>
-              </article>
-            </div>
-          </section>
-        </aside>
+          </div>
+        </section>
 
         <section class="review-main">
-          <section v-if="reviewResult.documentFieldGroups?.length" class="document-fields-panel">
+          <section v-if="displayReviewResult.documentFieldGroups?.length" class="document-fields-panel locator-document-fields">
             <div class="panel-heading">
               <div>
                 <h2>材料逐页字段识别</h2>
-                <p>按材料和页码顺序展示可填写字段；ID 990A 当前仅识别前 5 页。</p>
+                <p>按材料和页码展示参与识别的原始字段；点击字段行后，左侧原文自动定位并只高亮当前字段。</p>
               </div>
             </div>
             <div class="document-group-list">
               <article
-                v-for="group in reviewResult.documentFieldGroups"
+                v-for="group in displayReviewResult.documentFieldGroups"
                 :key="group.materialId"
                 class="document-group-card"
               >
@@ -1091,15 +1474,21 @@ function verificationLineStatus(line) {
                         <span>填写内容 / 识别值</span>
                         <span>状态</span>
                       </div>
-                      <div
+                      <button
                         v-for="item in page.fields"
-                        :key="`${group.materialId}:${page.pageNo}:${item.label}`"
-                        class="document-field-row"
+                        :key="documentFieldKey(group, page, item)"
+                        type="button"
+                        class="document-field-row locator-document-field-row"
+                        :class="[item.status, { active: documentFieldIsActive(group, page, item) }]"
+                        @click="selectDocumentField(group, page, item)"
                       >
                         <span>{{ item.label }}</span>
                         <strong>{{ item.value || '未识别' }}</strong>
-                        <span class="status-badge" :class="item.status">{{ statusLabel(item.status) }}</span>
-                      </div>
+                        <span class="document-field-status">
+                          <small v-if="sourceConfidence(item)">值 {{ sourceConfidence(item) }}%</small>
+                          <span class="status-badge" :class="item.status">{{ statusLabel(item.status) }}</span>
+                        </span>
+                      </button>
                     </div>
                   </section>
                 </div>
@@ -1107,39 +1496,11 @@ function verificationLineStatus(line) {
             </div>
           </section>
 
-          <section class="findings-panel">
-            <div class="panel-heading">
-              <h2>逐条结论与出处</h2>
-              <p>先列阻断或待复核问题；出处精确到材料名称、章节和字段名称。</p>
-            </div>
-
-            <div v-if="blockingFindings.length" class="finding-list">
-              <article v-for="finding in blockingFindings" :key="finding.id" class="finding-item" :class="finding.status">
-                <span class="status-badge" :class="finding.status">{{ statusLabel(finding.status) }}</span>
-                <div>
-                  <strong>{{ finding.title }}</strong>
-                  <p>{{ finding.text }}</p>
-                  <small>出处：{{ finding.source }}</small>
-                </div>
-              </article>
-            </div>
-            <div v-else class="finding-pass">
-              核心材料和关键字段未发现阻断或待人工复核问题。
-            </div>
-
-            <div v-if="nonBlockingMaterialHints.length" class="nonblocking-box">
-              <strong>非阻断提示</strong>
-              <span>
-                {{ nonBlockingMaterialHints.map((item) => `${item.shortName}：${item.statusText}`).join('；') }}
-              </span>
-            </div>
-          </section>
-
           <section class="fields-panel">
             <div class="panel-heading fields-heading">
               <div>
                 <h2>标准化字段核验</h2>
-                <p>字段按统一 key 聚合；同一字段可展示多份材料的局部快照证据。</p>
+                <p>字段按统一 key 聚合；点击字段或来源可定位左侧原文证据。</p>
               </div>
               <div class="field-metrics" aria-label="字段统计">
                 <span><strong>{{ displayFieldStats.total }}</strong>全部字段</span>
@@ -1158,69 +1519,62 @@ function verificationLineStatus(line) {
 
             <div class="field-card-list">
               <template v-for="field in nonEmploymentFields" :key="field.key">
-                <article class="standard-field-card" :class="field.status">
-                <header class="field-card-header">
-                  <div>
-                    <span>{{ field.category }}</span>
-                    <h3>{{ field.label }}</h3>
-                    <code>{{ field.key }}</code>
-                  </div>
-                  <div class="field-card-actions">
-                    <span v-if="field.required" class="required-pill">必填</span>
-                    <span class="status-badge" :class="field.status">{{ statusLabel(field.status) }}</span>
-                  </div>
-                </header>
+                <article
+                  class="standard-field-card locator-field-card"
+                  :class="[field.status, { active: selectedFieldSource?.field?.key === field.key }]"
+                >
+                  <header class="field-card-header locator-field-header" @click="selectFieldDefaultSource(field)">
+                    <div>
+                      <span>{{ field.category }}</span>
+                      <h3>{{ field.label }}</h3>
+                      <code>{{ field.key }}</code>
+                      <small class="field-confidence">综合置信度 {{ averageFieldConfidence(field) || '-' }}% · {{ field.sources.length }} 条来源</small>
+                    </div>
+                    <div class="field-card-actions">
+                      <span v-if="field.required" class="required-pill">必填</span>
+                      <span class="status-badge" :class="field.status">{{ statusLabel(field.status) }}</span>
+                    </div>
+                  </header>
 
-                <div class="field-card-body">
-                  <div class="evidence-column">
-                    <article
-                      v-for="source in field.sources"
-                      :key="`${field.key}:${source.documentName}:${source.fieldName}`"
-                      class="evidence-card"
-                      :class="{ 'without-crop': !isFdhMode || !source.snapshotDataUrl }"
+                  <div class="source-evidence-list">
+                    <button
+                      v-for="(source, index) in field.sources"
+                      :key="fieldSourceKey(field, source, index)"
+                      type="button"
+                      class="source-evidence-row"
+                      :class="{ active: selectedFieldSourceKey === fieldSourceKey(field, source, index) }"
+                      @click="selectFieldSource(field, source, index)"
                     >
-                      <div v-if="isFdhMode && source.snapshotDataUrl" class="snapshot-card">
-                        <img :src="source.snapshotDataUrl" :alt="`${source.documentName} ${source.fieldName}`">
-                      </div>
-                      <div class="evidence-meta">
-                        <strong>{{ source.documentName }}</strong>
-                        <span>{{ source.section }}</span>
-                        <span>{{ source.fieldName }}</span>
-                        <small v-if="isFdhMode && !source.snapshotDataUrl" class="evidence-crop-missing">未取得原始裁剪</small>
-                        <div class="evidence-value-block">
-                          <span class="evidence-value-label">识别值</span>
-                          <strong class="evidence-value">
-                            <template
-                              v-for="(segment, index) in sourceValueSegments(field, source)"
-                              :key="`${index}:${segment.text}:${segment.diff}`"
-                            >
-                              <mark v-if="segment.diff" class="value-diff-char">{{ segment.text }}</mark>
-                              <span v-else>{{ segment.text }}</span>
-                            </template>
-                          </strong>
-                        </div>
-                        <small>置信度 {{ source.confidence }}%</small>
-                      </div>
-                    </article>
-                    <article v-if="!field.sources.length" class="evidence-card without-crop">
-                      <div class="evidence-meta">
-                        <strong>未取得材料证据</strong>
-                        <span>材料未上传或模板无法识别</span>
-                      </div>
-                    </article>
+                      <span class="source-evidence-name">
+                        <strong>{{ source.documentName }} · {{ source.section }}</strong>
+                        <small>{{ source.fieldName }}</small>
+                      </span>
+                      <strong class="source-evidence-value">
+                        <template
+                          v-for="(segment, segmentIndex) in sourceValueSegments(field, source)"
+                          :key="`${segmentIndex}:${segment.text}:${segment.diff}`"
+                        >
+                          <mark v-if="segment.diff" class="value-diff-char">{{ segment.text }}</mark>
+                          <span v-else>{{ segment.text }}</span>
+                        </template>
+                      </strong>
+                      <span class="source-confidence-pill">值 {{ sourceConfidence(source) }}%</span>
+                      <span class="source-confidence-pill" :class="{ muted: !locatorConfidence(source) }">
+                        {{ locatorConfidence(source) ? `定位 ${locatorConfidence(source)}%` : '未定位' }}
+                      </span>
+                    </button>
+                    <div v-if="!field.sources.length" class="source-evidence-empty">
+                      未取得材料证据
+                    </div>
                   </div>
 
-                  <div class="field-value-panel">
+                  <div class="field-value-panel compact">
                     <div>
                       <span>{{ field.correctionApplied ? '建议采用值' : '归一化结果' }}</span>
                       <strong>{{ field.suggestedValue || field.normalizedValue }}</strong>
                       <small v-if="field.correctionApplied" class="field-original-value">
                         原始归一结果：{{ field.rawNormalizedValue }}
                       </small>
-                    </div>
-                    <div>
-                      <span>核查标准</span>
-                      <p>{{ field.rule }}</p>
                     </div>
                     <div v-if="field.correctionApplied" class="issue-box review">
                       {{ field.suggestionReason }}
@@ -1229,30 +1583,55 @@ function verificationLineStatus(line) {
                       {{ field.issue }}
                     </div>
                   </div>
+                </article>
+
+                <section v-if="isEmploymentPeriodAnchorField(field) && employmentPeriods.length" class="employment-period-group">
+                  <h3 class="employment-period-title">家庭佣工的工作经验</h3>
+                  <article v-for="period in employmentPeriods" :key="period.n" class="employment-period-card">
+                    <div class="employment-period-header">雇主{{ period.n }}</div>
+                    <dl class="employment-period-body">
+                      <div v-if="period.nameField" class="employment-period-row">
+                        <dt>雇主{{ period.n }}名称</dt>
+                        <dd>{{ employmentValue(period.nameField) }}</dd>
+                      </div>
+                      <div v-if="period.addressField" class="employment-period-row">
+                        <dt>地址</dt>
+                        <dd>{{ employmentValue(period.addressField) }}</dd>
+                      </div>
+                      <div v-if="period.periodFromField || period.periodToField" class="employment-period-row">
+                        <dt>任职日期</dt>
+                        <dd>由 {{ employmentValue(period.periodFromField) }} 至 {{ employmentValue(period.periodToField) }}</dd>
+                      </div>
+                    </dl>
+                  </article>
+                </section>
+              </template>
+            </div>
+          </section>
+
+          <section class="findings-panel compact-findings">
+            <div class="panel-heading">
+              <h2>逐条结论与出处</h2>
+              <p>先列阻断或待复核问题；出处精确到材料名称、章节和字段名称。</p>
+            </div>
+            <div v-if="blockingFindings.length" class="finding-list">
+              <article v-for="finding in blockingFindings" :key="finding.id" class="finding-item" :class="finding.status">
+                <span class="status-badge" :class="finding.status">{{ statusLabel(finding.status) }}</span>
+                <div>
+                  <strong>{{ finding.title }}</strong>
+                  <p>{{ finding.text }}</p>
+                  <small>出处：{{ finding.source }}</small>
                 </div>
               </article>
-
-              <section v-if="isEmploymentPeriodAnchorField(field) && employmentPeriods.length" class="employment-period-group">
-                <h3 class="employment-period-title">家庭佣工的工作经验</h3>
-                <article v-for="period in employmentPeriods" :key="period.n" class="employment-period-card">
-                  <div class="employment-period-header">雇主{{ period.n }}</div>
-                  <dl class="employment-period-body">
-                    <div v-if="period.nameField" class="employment-period-row">
-                      <dt>雇主{{ period.n }}名称</dt>
-                      <dd>{{ employmentValue(period.nameField) }}</dd>
-                    </div>
-                    <div v-if="period.addressField" class="employment-period-row">
-                      <dt>地址</dt>
-                      <dd>{{ employmentValue(period.addressField) }}</dd>
-                    </div>
-                    <div v-if="period.periodFromField || period.periodToField" class="employment-period-row">
-                      <dt>任职日期</dt>
-                      <dd>由 {{ employmentValue(period.periodFromField) }} 至 {{ employmentValue(period.periodToField) }}</dd>
-                    </div>
-                  </dl>
-                </article>
-              </section>
-              </template>
+            </div>
+            <div v-else class="finding-pass">
+              核心材料和关键字段未发现阻断或待人工复核问题。
+            </div>
+            <div v-if="nonBlockingMaterialHints.length" class="nonblocking-box">
+              <strong>非阻断提示</strong>
+              <span>
+                {{ nonBlockingMaterialHints.map((item) => `${item.shortName}：${item.statusText}`).join('；') }}
+              </span>
             </div>
           </section>
         </section>

@@ -54,11 +54,35 @@ public class StudentIangReviewAssembler {
         materialRows,
         fields,
         documentFieldGroups(safeDocuments),
+        reviewPages(safeDocuments),
         decision,
         decisionText(decision, materialRows, fields),
         stats(fields),
         LocalDateTime.now(clock).format(GENERATED_AT_FORMAT)
     );
+  }
+
+  private List<FdhReviewResult.ReviewPage> reviewPages(List<FdhReviewDocument> documents) {
+    List<FdhReviewResult.ReviewPage> pages = new ArrayList<>();
+    for (FdhReviewDocument document : documents) {
+      OcrDemoResponse response = document.ocrResult();
+      if (response == null || response.pages() == null) {
+        continue;
+      }
+      for (OcrPage page : response.pages()) {
+        pages.add(new FdhReviewResult.ReviewPage(
+            document.materialId(),
+            materialName(document.materialId()),
+            document.filename(),
+            page.page(),
+            pageTitle(document.materialId(), page.page()),
+            page.sourceImageDataUrl(),
+            page.imageWidth(),
+            page.imageHeight()
+        ));
+      }
+    }
+    return pages;
   }
 
   private List<FdhReviewResult.UploadedFile> uploadedFiles(List<FdhReviewDocument> documents) {
@@ -437,7 +461,13 @@ public class StudentIangReviewAssembler {
             extracted.value(),
             extracted.confidence(),
             extracted.value(),
-            ""
+            "",
+            document.materialId(),
+            extracted.page(),
+            extracted.imageWidth(),
+            extracted.imageHeight(),
+            extracted.bbox(),
+            locatorConfidence(extracted)
         ));
       }
     }
@@ -464,7 +494,13 @@ public class StudentIangReviewAssembler {
           combined,
           Math.min(left.confidence(), right.confidence()),
           combined,
-          ""
+          "",
+          document.materialId(),
+          page,
+          left.imageWidth() > 0 ? left.imageWidth() : right.imageWidth(),
+          left.imageHeight() > 0 ? left.imageHeight() : right.imageHeight(),
+          left.bbox().isEmpty() ? right.bbox() : left.bbox(),
+          Math.min(locatorConfidence(left), locatorConfidence(right))
       ));
     }
     return sources;
@@ -496,7 +532,13 @@ public class StudentIangReviewAssembler {
               canonicalIncompletePaymentTitle(),
               value.confidence(),
               canonicalIncompletePaymentTitle(),
-              ""
+              "",
+              document.materialId(),
+              value.page(),
+              value.imageWidth(),
+              value.imageHeight(),
+              value.bbox(),
+              locatorConfidence(value)
           ));
       if (structured.isPresent()) {
         sources.add(structured.get());
@@ -643,6 +685,7 @@ public class StudentIangReviewAssembler {
       return;
     }
     StructuredFieldDetail detail = detailsByPath.get(path);
+    OcrPage sourcePage = pageByNo(document.ocrResult(), detail == null || detail.page() <= 0 ? Math.max(1, page) : detail.page());
     values.add(new ExtractedValue(
         document,
         path,
@@ -650,8 +693,25 @@ public class StudentIangReviewAssembler {
         value,
         detail == null || detail.page() <= 0 ? Math.max(1, page) : detail.page(),
         detail == null ? 88 : detail.confidence(),
-        detail == null ? "" : detail.snapshotDataUrl()
+        detail == null ? "" : detail.snapshotDataUrl(),
+        sourcePage == null ? 0 : sourcePage.imageWidth(),
+        sourcePage == null ? 0 : sourcePage.imageHeight(),
+        detail == null ? List.of() : detail.bbox()
     ));
+  }
+
+  private OcrPage pageByNo(OcrDemoResponse response, int pageNo) {
+    if (response == null || response.pages() == null) {
+      return null;
+    }
+    return response.pages().stream()
+        .filter(page -> page.page() == pageNo)
+        .findFirst()
+        .orElse(null);
+  }
+
+  private double locatorConfidence(ExtractedValue value) {
+    return value.bbox().isEmpty() ? 0 : value.confidence();
   }
 
   private Map<String, StructuredFieldDetail> detailsByPath(OcrDemoResponse response) {
@@ -717,11 +777,7 @@ public class StudentIangReviewAssembler {
     }
     return values.stream()
         .filter(this::hasDisplayableFilledValue)
-        .map(value -> new FdhReviewResult.DocumentField(
-            prettyLabel(value.label()),
-            value.value(),
-            documentFieldStatus(materialId, value)
-        ))
+        .map(value -> documentFieldFromExtracted(prettyLabel(value.label()), materialId, value))
         .toList();
   }
 
@@ -845,7 +901,10 @@ public class StudentIangReviewAssembler {
         programme,
         value.page(),
         value.confidence(),
-        value.snapshotDataUrl()
+        value.snapshotDataUrl(),
+        value.imageWidth(),
+        value.imageHeight(),
+        value.bbox()
     ));
   }
 
@@ -882,8 +941,22 @@ public class StudentIangReviewAssembler {
 
   private FdhReviewResult.DocumentField conciseField(String label, Optional<ExtractedValue> value) {
     return value
-        .map(extracted -> new FdhReviewResult.DocumentField(label, extracted.value(), documentFieldStatus(extracted.document().materialId(), extracted)))
+        .map(extracted -> documentFieldFromExtracted(label, extracted.document().materialId(), extracted))
         .orElseGet(() -> new FdhReviewResult.DocumentField(label, "", "review"));
+  }
+
+  private FdhReviewResult.DocumentField documentFieldFromExtracted(String label, String materialId, ExtractedValue value) {
+    return new FdhReviewResult.DocumentField(
+        label,
+        value.value(),
+        documentFieldStatus(materialId, value),
+        value.confidence(),
+        value.page(),
+        value.imageWidth(),
+        value.imageHeight(),
+        value.bbox(),
+        value.bbox().isEmpty() ? 0 : value.confidence()
+    );
   }
 
   private String documentFieldStatus(String materialId, ExtractedValue value) {
@@ -1185,7 +1258,22 @@ public class StudentIangReviewAssembler {
       String value,
       int page,
       double confidence,
-      String snapshotDataUrl
-  ) {}
+      String snapshotDataUrl,
+      int imageWidth,
+      int imageHeight,
+      List<Integer> bbox
+  ) {
+    private ExtractedValue(
+        FdhReviewDocument document,
+        String path,
+        String label,
+        String value,
+        int page,
+        double confidence,
+        String snapshotDataUrl
+    ) {
+      this(document, path, label, value, page, confidence, snapshotDataUrl, 0, 0, List.of());
+    }
+  }
 }
 

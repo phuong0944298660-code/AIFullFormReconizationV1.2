@@ -8,6 +8,7 @@ public record FdhReviewResult(
     List<MaterialRow> materials,
     List<StandardField> fields,
     List<DocumentFieldGroup> documentFieldGroups,
+    List<ReviewPage> reviewPages,
     String decision,
     String decisionText,
     FieldStats stats,
@@ -22,6 +23,7 @@ public record FdhReviewResult(
     materials = materials == null ? List.of() : List.copyOf(materials);
     fields = fields == null ? List.of() : List.copyOf(fields);
     documentFieldGroups = documentFieldGroups == null ? List.of() : List.copyOf(documentFieldGroups);
+    reviewPages = reviewPages == null ? List.of() : List.copyOf(reviewPages);
     decision = decision == null || decision.isBlank() ? "REVIEW" : decision;
     decisionText = decisionText == null ? "" : decisionText;
     generatedAt = generatedAt == null ? "" : generatedAt;
@@ -37,7 +39,21 @@ public record FdhReviewResult(
       FieldStats stats,
       String generatedAt
   ) {
-    this(applicationTypeId, uploadedFiles, materials, fields, List.of(), decision, decisionText, stats, generatedAt);
+    this(applicationTypeId, uploadedFiles, materials, fields, List.of(), List.of(), decision, decisionText, stats, generatedAt);
+  }
+
+  public FdhReviewResult(
+      String applicationTypeId,
+      List<UploadedFile> uploadedFiles,
+      List<MaterialRow> materials,
+      List<StandardField> fields,
+      List<DocumentFieldGroup> documentFieldGroups,
+      String decision,
+      String decisionText,
+      FieldStats stats,
+      String generatedAt
+  ) {
+    this(applicationTypeId, uploadedFiles, materials, fields, documentFieldGroups, List.of(), decision, decisionText, stats, generatedAt);
   }
 
   public record UploadedFile(
@@ -126,8 +142,27 @@ public record FdhReviewResult(
       String value,
       double confidence,
       String snapshotText,
-      String snapshotDataUrl
+      String snapshotDataUrl,
+      String materialId,
+      int pageNo,
+      int imageWidth,
+      int imageHeight,
+      List<Integer> bbox,
+      double locatorConfidence
   ) {
+
+    public FieldSource(
+        String documentName,
+        String filename,
+        String section,
+        String fieldName,
+        String value,
+        double confidence,
+        String snapshotText,
+        String snapshotDataUrl
+    ) {
+      this(documentName, filename, section, fieldName, value, confidence, snapshotText, snapshotDataUrl, "", 0, 0, 0, List.of(), 0);
+    }
 
     public FieldSource {
       documentName = documentName == null ? "" : documentName;
@@ -138,6 +173,35 @@ public record FdhReviewResult(
       confidence = Math.max(0, Math.min(100, confidence));
       snapshotText = snapshotText == null || snapshotText.isBlank() ? value : snapshotText;
       snapshotDataUrl = snapshotDataUrl == null ? "" : snapshotDataUrl;
+      materialId = materialId == null ? "" : materialId;
+      pageNo = Math.max(0, pageNo);
+      imageWidth = Math.max(0, imageWidth);
+      imageHeight = Math.max(0, imageHeight);
+      bbox = bbox == null ? List.of() : List.copyOf(bbox);
+      locatorConfidence = Math.max(0, Math.min(100, locatorConfidence));
+    }
+  }
+
+  public record ReviewPage(
+      String materialId,
+      String documentName,
+      String filename,
+      int pageNo,
+      String title,
+      String imageDataUrl,
+      int imageWidth,
+      int imageHeight
+  ) {
+
+    public ReviewPage {
+      materialId = materialId == null ? "" : materialId;
+      documentName = documentName == null || documentName.isBlank() ? materialId : documentName;
+      filename = filename == null || filename.isBlank() ? "uploaded-document" : filename;
+      pageNo = Math.max(1, pageNo);
+      title = title == null || title.isBlank() ? "第 " + pageNo + " 页" : title;
+      imageDataUrl = imageDataUrl == null ? "" : imageDataUrl;
+      imageWidth = Math.max(0, imageWidth);
+      imageHeight = Math.max(0, imageHeight);
     }
   }
 
@@ -182,13 +246,33 @@ public record FdhReviewResult(
   public record DocumentField(
       String label,
       String value,
-      String status
+      String status,
+      double confidence,
+      int pageNo,
+      int imageWidth,
+      int imageHeight,
+      List<Integer> bbox,
+      double locatorConfidence
   ) {
+
+    public DocumentField(
+        String label,
+        String value,
+        String status
+    ) {
+      this(label, value, status, 0, 0, 0, 0, List.of(), 0);
+    }
 
     public DocumentField {
       label = label == null || label.isBlank() ? "未命名字段" : label;
       value = value == null ? "" : value;
       status = status == null || status.isBlank() ? "pass" : status;
+      confidence = Math.max(0, Math.min(100, confidence));
+      pageNo = Math.max(0, pageNo);
+      imageWidth = Math.max(0, imageWidth);
+      imageHeight = Math.max(0, imageHeight);
+      bbox = bbox == null ? List.of() : List.copyOf(bbox);
+      locatorConfidence = Math.max(0, Math.min(100, locatorConfidence));
     }
   }
 }
