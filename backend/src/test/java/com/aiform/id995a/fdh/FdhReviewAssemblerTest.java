@@ -337,6 +337,51 @@ class FdhReviewAssemblerTest {
   }
 
   @Test
+  void fdhUnknownDocumentsExposeAllRecognizedFieldsWithoutChangingCatalogMaterials() throws Exception {
+    FdhReviewDocument unknown = document(
+        "sample-bank-statement.pdf",
+        "unknown",
+        2,
+        "unknown_2p_bank",
+        "",
+        """
+            {
+              "page_1": {
+                "bank_name": "YourBank",
+                "account_number": "99988877",
+                "statement_period": "1 February to 1 March, 2019"
+              },
+              "page_2": {
+                "closing_balance": "HKD 88,000.00",
+                "declaration_confirmed": true
+              }
+            }
+            """
+    );
+
+    FdhReviewResult result = assembler.assemble("entry_visa", List.of(id988a(), unknown));
+
+    FdhReviewResult.DocumentFieldGroup unknownGroup = result.documentFieldGroups().stream()
+        .filter(item -> "unknown".equals(item.materialId()))
+        .findFirst()
+        .orElseThrow();
+    assertThat(unknownGroup.materialName()).isEqualTo("未识别材料");
+    assertThat(unknownGroup.templateId()).isEqualTo("unknown_2p_bank");
+    assertThat(unknownGroup.pages()).hasSize(2);
+    assertThat(unknownGroup.pages().get(0).fields()).extracting(FdhReviewResult.DocumentField::label)
+        .contains("bank name", "account number", "statement period");
+    assertThat(unknownGroup.pages().get(1).fields()).extracting(FdhReviewResult.DocumentField::label)
+        .contains("closing balance", "declaration confirmed");
+
+    FdhReviewResult.DocumentFieldGroup id988aGroup = result.documentFieldGroups().stream()
+        .filter(item -> "id988a".equals(item.materialId()))
+        .findFirst()
+        .orElseThrow();
+    assertThat(id988aGroup.materialName()).isEqualTo(FdhMaterialCatalog.displayName("id988a"));
+    assertThat(id988aGroup.templateId()).isEqualTo("id988a_2024_06");
+  }
+
+  @Test
   void hkIdentityCardNoYesWithNumberPasses() throws Exception {
     FdhReviewResult result = assembler.assemble(
         "entry_visa",
