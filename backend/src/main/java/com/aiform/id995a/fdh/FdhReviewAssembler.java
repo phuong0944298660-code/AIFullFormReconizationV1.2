@@ -109,23 +109,12 @@ public class FdhReviewAssembler {
     return documents.stream()
         .map(document -> new FdhReviewResult.DocumentFieldGroup(
             document.materialId(),
-            documentMaterialName(document),
-            documentTemplateId(document),
+            FdhMaterialCatalog.displayName(document.materialId()),
+            document.template() == null ? "" : document.template().templateId(),
             document.filename() + " · " + Math.max(0, document.pageCount()) + " 页",
             documentFieldPages(document)
         ))
         .toList();
-  }
-
-  private String documentMaterialName(FdhReviewDocument document) {
-    return FdhMaterialCatalog.find(document.materialId())
-        .map(FdhMaterialDefinition::shortName)
-        .orElse("未识别材料");
-  }
-
-  private String documentTemplateId(FdhReviewDocument document) {
-    DocumentTemplate template = document.template();
-    return template == null ? "" : template.templateId();
   }
 
   private List<FdhReviewResult.DocumentFieldPage> documentFieldPages(FdhReviewDocument document) {
@@ -172,7 +161,7 @@ public class FdhReviewAssembler {
   }
 
   private String documentFieldPageTitle(FdhReviewDocument document, int pageNo) {
-    return documentMaterialName(document) + " 第 " + pageNo + " 页";
+    return FdhMaterialCatalog.displayName(document.materialId()) + " 第 " + pageNo + " 页";
   }
 
   private FdhReviewResult.DocumentField documentFieldFromExtracted(ExtractedValue value) {
@@ -199,7 +188,7 @@ public class FdhReviewAssembler {
       for (OcrPage page : response.pages()) {
         pages.add(new FdhReviewResult.ReviewPage(
             document.materialId(),
-            documentMaterialName(document),
+            FdhMaterialCatalog.displayName(document.materialId()),
             document.filename(),
             page.page(),
             "第 " + page.page() + " 页",
@@ -218,7 +207,7 @@ public class FdhReviewAssembler {
           DocumentTemplate template = document.template();
           return new FdhReviewResult.UploadedFile(
               document.materialId(),
-              documentMaterialName(document),
+              FdhMaterialCatalog.displayName(document.materialId()),
               document.filename(),
               document.pageCount(),
               template == null ? "" : template.footerId(),
