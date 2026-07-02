@@ -858,16 +858,24 @@ public class StructuredExtractionClient implements
   }
 
   private ExtractionResponse sendExtractionRequest(JsonNode payload, LlmModelProfile profile) throws IOException, InterruptedException {
+    String requestBody = objectMapper.writeValueAsString(payload);
     HttpRequest request = HttpRequest.newBuilder()
         .uri(URI.create(trimTrailingSlash(profile.baseUrl()) + "/chat/completions"))
         .version(HttpClient.Version.HTTP_1_1)
         .timeout(Duration.ofSeconds(Math.max(10, properties.timeoutSeconds())))
         .header("Authorization", "Bearer " + profile.apiKey())
         .header("Content-Type", "application/json")
-        .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(payload), StandardCharsets.UTF_8))
+        .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
         .build();
 
     HttpResponse<String> response = sendWithTransientTransportRetry(request);
+    LlmRawExchangeRecorder.record(
+        "structured-extraction",
+        request.uri(),
+        requestBody,
+        response.statusCode(),
+        response.body()
+    );
     if (response.statusCode() < 200 || response.statusCode() >= 300) {
       throw new IOException("LLM HTTP " + response.statusCode() + ": " + truncate(response.body(), 600));
     }
@@ -965,7 +973,7 @@ public class StructuredExtractionClient implements
     builder.append("- Group page content under page_1, page_2, etc.\n");
     builder.append("- Also include a top-level _official_page object keyed by page_N. For each attached page, visually read the official printed form footer and return {form_id, version, official_page_no, confidence, evidence}. If no official footer page number is visible, set official_page_no to null and confidence below 60. Do not infer this from upload order.\n");
     builder.append("- Keep page field values as plain applicant-filled values or null. Also include a top-level _confidence object mirroring page/field paths with integer confidence scores from 0 to 100.\n");
-    builder.append("- Also include a top-level _field_evidence object mirroring page/field paths. MANDATORY: for EVERY non-null field value under page_N, you MUST provide a matching _field_evidence.page_N.<exact_field_path> entry with label and value_bbox as normalized {x,y,width,height} coordinates of that filled area on the page image. A non-null field without a value_bbox cannot produce a field screenshot and is treated as an incomplete extraction; do not omit it.\n");
+    builder.append("- Also include a top-level _field_evidence object mirroring page/field paths. MANDATORY: when you recognize any field value under page_N, you MUST recognize and return that field's matching _field_evidence.page_N.<exact_field_path> entry at the same time, with label and value_bbox as normalized {x,y,width,height} coordinates of that filled area on the page image. A non-null field without a value_bbox is incomplete; do not output a field value unless you also output its field bbox.\n");
     builder.append("- Before returning, self-check: for every non-null field value you output under each page_N, verify a matching _field_evidence.page_N.<exact_field_path>.value_bbox exists; if any is missing, add it before finalizing.\n");
     builder.append("- _field_evidence.page_N must be keyed by exact page_N field paths. Never put label/value_bbox directly under _field_evidence.page_N as one whole-page evidence object.\n");
     builder.append("- Example: {\"page_2\":{\"present_address\":\"Flat 7\"},\"_field_evidence\":{\"page_2\":{\"present_address\":{\"label\":\"Present address\",\"value_bbox\":{\"x\":0.20,\"y\":0.10,\"width\":0.55,\"height\":0.09}}}}}.\n");

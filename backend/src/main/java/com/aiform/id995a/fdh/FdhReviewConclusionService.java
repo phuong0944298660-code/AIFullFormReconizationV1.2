@@ -1,6 +1,7 @@
 package com.aiform.id995a.fdh;
 
 import com.aiform.id995a.llm.LlmProperties;
+import com.aiform.id995a.llm.LlmRawExchangeRecorder;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
@@ -134,16 +135,24 @@ public class FdhReviewConclusionService {
         )
     );
 
+    String requestBody = objectMapper.writeValueAsString(payload);
     HttpRequest request = HttpRequest.newBuilder()
         .uri(URI.create(trimTrailingSlash(properties.baseUrl()) + "/chat/completions"))
         .version(HttpClient.Version.HTTP_1_1)
         .timeout(Duration.ofSeconds(Math.max(5, properties.timeoutSeconds())))
         .header("Authorization", "Bearer " + properties.apiKey())
         .header("Content-Type", "application/json")
-        .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(payload), StandardCharsets.UTF_8))
+        .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
         .build();
 
     HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+    LlmRawExchangeRecorder.record(
+        "review-conclusion",
+        request.uri(),
+        requestBody,
+        response.statusCode(),
+        response.body()
+    );
     if (response.statusCode() < 200 || response.statusCode() >= 300) {
       throw new IOException("LLM HTTP " + response.statusCode());
     }

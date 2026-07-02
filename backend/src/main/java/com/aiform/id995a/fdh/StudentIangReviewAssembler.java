@@ -730,15 +730,20 @@ public class StudentIangReviewAssembler {
 
   private List<FdhReviewResult.DocumentFieldGroup> documentFieldGroups(List<FdhReviewDocument> documents) {
     return documents.stream()
-        .filter(document -> !"unknown".equals(document.materialId()))
         .map(document -> new FdhReviewResult.DocumentFieldGroup(
             document.materialId(),
             materialName(document.materialId()),
-            StudentIangMaterialCatalog.find(document.materialId()).map(StudentIangMaterialDefinition::templateId).orElse(""),
+            documentTemplateId(document),
             "id990a".equals(document.materialId()) ? "仅识别前 5 页" : "",
             documentFieldPages(document)
         ))
         .toList();
+  }
+
+  private String documentTemplateId(FdhReviewDocument document) {
+    return StudentIangMaterialCatalog.find(document.materialId())
+        .map(StudentIangMaterialDefinition::templateId)
+        .orElseGet(() -> document.template() == null ? "" : document.template().templateId());
   }
 
   private List<FdhReviewResult.DocumentFieldPage> documentFieldPages(FdhReviewDocument document) {
@@ -769,6 +774,11 @@ public class StudentIangReviewAssembler {
   }
 
   private List<FdhReviewResult.DocumentField> documentFields(String materialId, List<ExtractedValue> values) {
+    if (isUnknownMaterial(materialId)) {
+      return values.stream()
+          .map(value -> documentFieldFromExtracted(prettyLabel(value.label()), materialId, value))
+          .toList();
+    }
     if ("educationProof".equals(materialId)) {
       return conciseEducationProofFields(values);
     }
@@ -779,6 +789,10 @@ public class StudentIangReviewAssembler {
         .filter(this::hasDisplayableFilledValue)
         .map(value -> documentFieldFromExtracted(prettyLabel(value.label()), materialId, value))
         .toList();
+  }
+
+  private boolean isUnknownMaterial(String materialId) {
+    return !StudentIangMaterialCatalog.find(materialId).isPresent();
   }
 
   private boolean hasDisplayableFilledValue(ExtractedValue value) {

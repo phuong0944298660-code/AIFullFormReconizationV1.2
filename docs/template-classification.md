@@ -2,9 +2,9 @@
 
 | Filename | Template ID | Footer ID | Pages | Match Source | Confidence | First Seen | Last Seen |
 |---|---|---|---:|---|---:|---|---|
-| 陈丽萍-407.pdf | id407_2016_11 | ID 407 (11/2016) | 4 | visual_layout_footer | 90 | 2026-05-25 15:14:07 | 2026-06-22 11:55:49 |
-| 陈丽萍-A.pdf | id988a_2024_06 | ID 988A (06/2024) | 5 | visual_layout_footer | 92 | 2026-05-25 15:14:18 | 2026-06-22 14:59:45 |
-| 陈丽萍-B.pdf | id988b_2024_06 | ID 988B (06/2024) | 4 | visual_layout_footer | 90 | 2026-05-25 15:14:28 | 2026-06-18 22:18:34 |
+| 陈丽萍-407.pdf | id407_2016_11 | ID 407 (11/2016) | 4 | visual_layout_footer | 90 | 2026-05-25 15:14:07 | 2026-07-02 10:28:24 |
+| 陈丽萍-A.pdf | id988a_2024_06 | ID 988A (06/2024) | 5 | visual_layout_footer | 92 | 2026-05-25 15:14:18 | 2026-07-02 20:12:19 |
+| 陈丽萍-B.pdf | id988b_2024_06 | ID 988B (06/2024) | 4 | visual_layout_footer | 90 | 2026-05-25 15:14:28 | 2026-07-02 20:11:12 |
 | 陈志萍-B.pdf | id988b_2024_06 | ID 988B (06/2024) | 4 | visual_layout_footer | 90 | 2026-05-25 15:14:37 | 2026-06-18 13:37:38 |
 | 何嘉萱-A测试.pdf | id988a_2024_06 | ID 988A (06/2024) | 5 | visual_layout_footer | 92 | 2026-05-25 15:14:49 | 2026-06-18 10:29:46 |
 | 何嘉萱-B.pdf | id988b_2024_06 | ID 988B (06/2024) | 3 | visual_layout_footer | 90 | 2026-05-25 15:14:56 | 2026-06-18 10:20:06 |
@@ -22,13 +22,15 @@
 | ID988A_06-2024.pdf | id988a_2024_06 | ID 988A (06/2024) | 5 | pdf_text_footer | 98 | 2026-05-28 11:26:55 | 2026-05-28 11:26:55 |
 | 何嘉萱-B(缺页).pdf | id988b_2024_06 | ID 988B (06/2024) | 3 | visual_layout_footer | 90 | 2026-06-18 10:24:08 | 2026-06-18 15:39:27 |
 | 何嘉萱-A(受雇为外籍家佣).pdf | id988a_2024_06 | ID 988A (06/2024) | 5 | visual_layout_footer | 92 | 2026-06-18 10:39:23 | 2026-06-22 13:50:06 |
-| 付款证明.png | unknown_1p_92037278 |  | 1 | structure_hash | 65 | 2026-06-23 11:11:06 | 2026-06-29 17:30:27 |
-| 毕业证明.pdf | unknown_1p_923d4a81 |  | 1 | structure_hash | 65 | 2026-06-23 11:11:21 | 2026-06-29 17:31:24 |
+| 付款证明.png | unknown_1p_92037278 |  | 1 | structure_hash | 65 | 2026-06-23 11:11:06 | 2026-07-02 20:08:55 |
+| 毕业证明.pdf | unknown_1p_923d4a81 |  | 1 | structure_hash | 65 | 2026-06-23 11:11:21 | 2026-07-02 20:07:58 |
 | ID990A_employment_professionals_applicant_iang.pdf | id990a_2025_01 | ID 990A (01/2025) | 9 | pdf_text_footer | 98 | 2026-06-23 11:11:54 | 2026-06-23 11:36:59 |
-| 港澳通行证_正面样证_译图OCR.jpg | unknown_1p_6d570660 |  | 1 | structure_hash | 65 | 2026-06-23 11:12:06 | 2026-06-29 17:30:41 |
-| ID 990A-赵航宇.pdf | unknown_9p_d6e30a3e |  | 9 | structure_hash | 65 | 2026-06-23 16:29:46 | 2026-06-29 15:02:20 |
+| 港澳通行证_正面样证_译图OCR.jpg | unknown_1p_6d570660 |  | 1 | structure_hash | 65 | 2026-06-23 11:12:06 | 2026-07-02 20:10:12 |
+| ID 990A-赵航宇.pdf | unknown_9p_d6e30a3e |  | 9 | structure_hash | 65 | 2026-06-23 16:29:46 | 2026-07-02 20:13:39 |
 | ��ҵ֤��.pdf | unknown_1p_923d4a81 |  | 1 | structure_hash | 65 | 2026-06-24 14:11:06 | 2026-06-24 17:53:29 |
 | ����֤��.png | unknown_1p_92037278 |  | 1 | structure_hash | 65 | 2026-06-24 14:12:06 | 2026-06-24 17:54:03 |
 | �۰�ͨ��֤_������֤_��ͼOCR.jpg | unknown_1p_6d570660 |  | 1 | structure_hash | 65 | 2026-06-24 14:13:36 | 2026-06-24 17:54:57 |
 | ID 990A-�Ժ���.pdf | unknown_9p_d6e30a3e |  | 9 | structure_hash | 65 | 2026-06-24 14:15:23 | 2026-06-24 17:54:57 |
-| ID 990A-林陨.pdf | unknown_9p_9bea4227 |  | 9 | structure_hash | 65 | 2026-06-29 17:33:33 | 2026-06-29 17:33:33 |
+| ID 990A-林陨.pdf | unknown_9p_9bea4227 |  | 9 | structure_hash | 65 | 2026-06-29 17:33:33 | 2026-06-30 15:17:51 |
+| sample-ImpactBank-dummy-statement.pdf | unknown_2p_0f42fa93 |  | 2 | structure_hash | 65 | 2026-07-02 16:55:46 | 2026-07-02 20:09:11 |
+| sample-YourBank-bank-statement-example.pdf | unknown_1p_1c2d0dff |  | 1 | structure_hash | 65 | 2026-07-02 16:59:45 | 2026-07-02 20:02:36 |

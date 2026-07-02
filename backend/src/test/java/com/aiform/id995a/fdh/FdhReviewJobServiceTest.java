@@ -346,6 +346,44 @@ class FdhReviewJobServiceTest {
   }
 
   @Test
+  void iangRecentGraduateUnknownDocumentsStillExposeAllRecognizedFields() throws Exception {
+    StudentIangReviewAssembler assembler = new StudentIangReviewAssembler(
+        Clock.fixed(Instant.parse("2026-06-22T08:30:00Z"), ZoneOffset.UTC)
+    );
+
+    FdhReviewResult result = assembler.assemble(
+        "iang_recent_in_hk",
+        List.of(
+            studentDocument("sample-ImpactBank-dummy-statement.pdf", "unknown", 2, """
+                {
+                  "page_1": {
+                    "bank_name": "ImpactBank",
+                    "account_number": "123-456-789",
+                    "statement_period": "01 Jun 2026 - 30 Jun 2026"
+                  },
+                  "page_2": {
+                    "closing_balance": "HKD 88,000.00",
+                    "declaration_confirmed": true
+                  }
+                }
+                """)
+        )
+    );
+
+    FdhReviewResult.DocumentFieldGroup group = result.documentFieldGroups().stream()
+        .filter(item -> "unknown".equals(item.materialId()))
+        .findFirst()
+        .orElseThrow();
+
+    assertThat(group.materialName()).isEqualTo("未识别材料");
+    assertThat(group.pages()).hasSize(2);
+    assertThat(group.pages().get(0).fields()).extracting(FdhReviewResult.DocumentField::label)
+        .contains("Bank name", "Account number", "Statement period");
+    assertThat(group.pages().get(1).fields()).extracting(FdhReviewResult.DocumentField::label)
+        .contains("Closing balance", "Declaration confirmed");
+  }
+
+  @Test
   void iangRecentGraduateJobFailsId990aWhenOfficialPageNumberIsMissing() throws Exception {
     BaiduOcrPageRenderer renderer = mock(BaiduOcrPageRenderer.class);
     TemplateDetectionService templateDetectionService = mock(TemplateDetectionService.class);
