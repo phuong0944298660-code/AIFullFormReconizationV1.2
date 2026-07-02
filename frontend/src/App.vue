@@ -617,6 +617,17 @@ const verificationTemplate = computed(() => {
 
 const templateStatusLegend = TEMPLATE_STATUS_LEGEND
 
+function scrollMainPageToTop() {
+  nextTick(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+  })
+}
+
+function setResultView(view) {
+  resultView.value = view
+  scrollMainPageToTop()
+}
+
 watch([selectedDemoModeId, selectedApplicationTypeId, selectedScenarioId], () => {
   fieldFilter.value = 'all'
   apiError.value = ''
@@ -730,7 +741,7 @@ async function startRecognition() {
   window.setTimeout(() => {
     const result = buildActiveReviewResult()
     reviewResult.value = result
-    resultView.value = 'recognition'
+    setResultView('recognition')
     verificationConclusion.value = null
     verificationError.value = ''
     startVerificationConclusion(result)
@@ -773,13 +784,14 @@ async function startBackendRecognition() {
     }
     const result = completed.result
     reviewResult.value = result
-    resultView.value = 'recognition'
+    setResultView('recognition')
     verificationConclusion.value = null
     verificationError.value = ''
     uploadedFiles.value = result?.uploadedFiles || uploadedFiles.value
     startVerificationConclusion(result)
   } catch (error) {
     apiError.value = error?.message || '后端识别失败。'
+    jobStatus.value = null
   } finally {
     processing.value = false
   }
@@ -824,7 +836,7 @@ function fileSizeLabel(size) {
 
 function uploadedFileProgressLabel() {
   const progress = Number(jobStatus.value?.progress)
-  if (processing.value && Number.isFinite(progress)) {
+  if (processing.value && Number.isFinite(progress) && !['failed', 'canceled'].includes(jobStatus.value?.status)) {
     return `${Math.max(0, Math.min(100, Math.round(progress)))}%`
   }
   return '待识别'
@@ -958,7 +970,7 @@ function materialRequirementLabel(material) {
 
 async function openVerificationPage() {
   if (!reviewResult.value) return
-  resultView.value = 'verification'
+  setResultView('verification')
   startVerificationConclusion(reviewResult.value)
 }
 
@@ -1308,8 +1320,8 @@ function verificationLineStatus(line) {
             {{ apiError }}
           </div>
 
-          <button v-else class="primary-action" type="button" @click="startRecognition">
-            开始识别
+          <button v-else class="primary-action" type="button" :disabled="processing" @click="startRecognition">
+            {{ processing ? '识别中...' : '开始识别' }}
           </button>
         </section>
       </div>
@@ -1327,14 +1339,14 @@ function verificationLineStatus(line) {
             <button
               type="button"
               :class="{ active: resultView === 'recognition' }"
-              @click="resultView = 'recognition'"
+              @click="setResultView('recognition')"
             >
               识别结果
             </button>
             <button
               type="button"
               :class="{ active: resultView === 'json' }"
-              @click="resultView = 'json'"
+              @click="setResultView('json')"
             >
               JSON
             </button>
@@ -1352,7 +1364,7 @@ function verificationLineStatus(line) {
             >
               进入核验结果页
             </button>
-            <button v-else class="secondary-action" type="button" @click="resultView = 'recognition'">返回识别结果</button>
+            <button v-else class="secondary-action" type="button" @click="setResultView('recognition')">返回识别结果</button>
             <button class="secondary-action" type="button" @click="resetDemo">重新上传</button>
           </div>
         </div>

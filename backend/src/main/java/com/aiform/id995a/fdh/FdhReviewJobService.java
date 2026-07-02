@@ -7,6 +7,8 @@ import com.aiform.id995a.ocr.OcrDemoResponse;
 import com.aiform.id995a.ocr.OcrDemoService;
 import com.aiform.id995a.ocr.RenderedOcrPage;
 import com.aiform.id995a.ocr.TemplateDetectionService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.MissingNode;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -242,8 +244,7 @@ public class FdhReviewJobService {
     List<RenderedOcrPage> pages = pageRenderer.render(upload.filename(), upload.contentType(), upload.bytes());
     DocumentTemplate template = templateDetectionService.detect(upload.filename(), upload.contentType(), upload.bytes(), pages);
     String materialId = classifyMaterial(state.applicationTypeId(), template, upload.filename());
-    state.markActive(upload.filename(), "正在识别官方页码/缺页情况");
-    List<Integer> officialPageNumbers = detectOfficialPageNumbers(state, upload, template, pages, modelId);
+    state.markActive(upload.filename(), "正在准备字段提取范围");
     log.info(
         "FDH review job {} rendered and classified {} as {} (template={}, pages={}, source={}) in {} ms",
         state.jobId,
@@ -262,8 +263,7 @@ public class FdhReviewJobService {
         state.applicationTypeId(),
         materialId,
         template,
-        pages,
-        officialPageNumbers
+        pages
     );
     state.markActive(upload.filename(), "正在按已识别模板执行字段提取");
     OcrDemoResponse response;
@@ -290,6 +290,15 @@ public class FdhReviewJobService {
         state.jobId,
         upload.filename(),
         elapsedMillisSince(extractionStartedAt)
+    );
+    List<Integer> officialPageNumbers = officialPageNumbersFromStructuredData(
+        state,
+        upload,
+        template,
+        pages,
+        extractionPages,
+        response,
+        modelId
     );
     state.markProcessedFile(upload.filename());
     return new IndexedReviewDocument(
@@ -324,60 +333,242 @@ public class FdhReviewJobService {
       String applicationTypeId,
       String materialId,
       DocumentTemplate template,
-      List<RenderedOcrPage> pages,
-      List<Integer> officialPageNumbers
+      List<RenderedOcrPage> pages
   ) {
     List<RenderedOcrPage> safePages = pages == null ? List.of() : pages;
     if (StudentIangMaterialCatalog.supports(applicationTypeId) && "id990a".equals(materialId)) {
-      return id990aExtractionPages(safePages, officialPageNumbers);
+      return safePages.stream().limit(5).toList();
     }
     if (template == null) {
       return safePages;
     }
     String templateId = template.templateId();
-    int skippedOfficialPage = nonFillableOfficialPage(templateId);
-    if (skippedOfficialPage <= 0) {
-      return safePages;
-    }
-    if (officialPageNumbers != null && officialPageNumbers.size() == safePages.size()) {
-      List<RenderedOcrPage> filtered = new ArrayList<>();
-      for (int index = 0; index < safePages.size(); index += 1) {
-        if (officialPageNumbers.get(index) != skippedOfficialPage) {
-          filtered.add(safePages.get(index));
-        }
-      }
-      return List.copyOf(filtered);
-    }
-    return safePages.stream().filter(page -> page.page() != skippedOfficialPage).toList();
+    int pageLimit = extractionPageLimit(templateId);
+    return pageLimit <= 0 ? safePages : safePages.stream().limit(pageLimit).toList();
   }
 
-  private List<RenderedOcrPage> id990aExtractionPages(
-      List<RenderedOcrPage> pages,
-      List<Integer> officialPageNumbers
-  ) {
-    if (officialPageNumbers != null && officialPageNumbers.size() == pages.size()) {
-      List<RenderedOcrPage> selected = new ArrayList<>();
-      for (int targetPage = 1; targetPage <= 5; targetPage += 1) {
-        for (int index = 0; index < pages.size(); index += 1) {
-          if (officialPageNumbers.get(index) == targetPage) {
-            selected.add(pages.get(index));
-            break;
-          }
-        }
-      }
-      if (!selected.isEmpty()) {
-        return List.copyOf(selected);
-      }
-    }
-    return pages.stream().limit(5).toList();
-  }
-
-  private int nonFillableOfficialPage(String templateId) {
+  private int extractionPageLimit(String templateId) {
     return switch (templateId) {
+      case "id988a_2024_06" -> 4;
+      case "id988b_2024_06" -> 3;
+      default -> 0;
+    };
+  }
+
+  private List<Integer> officialPageNumbersFromStructuredData(
+      JobState state,
+      ReviewUpload upload,
+      DocumentTemplate template,
+      List<RenderedOcrPage> allPages,
+      List<RenderedOcrPage> extractionPages,
+      OcrDemoResponse response,
+      String modelId
+  ) throws IOException {
+    List<Integer> recognized = structuredOfficialPageNumbers(template, allPages, extractionPages, response);
+    if (!recognized.isEmpty()) {
+      return recognized;
+    }
+    return detectOfficialPageNumbers(state, upload, template, allPages, modelId);
+  }
+
+  private List<Integer> structuredOfficialPageNumbers(
+      DocumentTemplate template,
+      List<RenderedOcrPage> allPages,
+      List<RenderedOcrPage> extractionPages,
+      OcrDemoResponse response
+  ) {
+    if (response == null || response.structuredData() == null || extractionPages == null || extractionPages.isEmpty()) {
+      return List.of();
+    }
+    int maxOfficialPage = expectedOfficialPageCount(template);
+    if (maxOfficialPage <= 0) {
+      return List.of();
+    }
+    String expectedForm = expectedFormId(template);
+    String expectedVersion = expectedVersion(template);
+    List<Integer> pageNumbers = new ArrayList<>();
+    for (RenderedOcrPage page : extractionPages) {
+      JsonNode metadata = officialPageMetadata(response.structuredData(), page.page());
+      int officialPage = firstExistingInt(
+          metadata,
+          0,
+          "official_page_no",
+          "officialPageNo",
+          "page_no",
+          "pageNo",
+          "official_page",
+          "officialPage",
+          "page_number"
+      );
+      double confidence = firstExistingDouble(metadata, 0, "confidence", "score");
+      String formId = firstExistingText(metadata, "form_id", "formId", "document_id", "documentId");
+      String version = firstExistingText(metadata, "version", "revision", "form_version", "formVersion");
+      if (officialPage < 1 || officialPage > maxOfficialPage) {
+        return List.of();
+      }
+      if (confidence > 0 && confidence < 60) {
+        return List.of();
+      }
+      if (!expectedForm.isBlank() && !matchesNormalized(formId, expectedForm)) {
+        return List.of();
+      }
+      if (!expectedVersion.isBlank() && !version.isBlank() && !normalize(version).equals(normalize(expectedVersion))) {
+        return List.of();
+      }
+      pageNumbers.add(officialPage);
+    }
+    return withSkippedNonFillablePage(template, allPages, pageNumbers);
+  }
+
+  private JsonNode officialPageMetadata(JsonNode structuredData, int page) {
+    String pageKey = "page_" + page;
+    for (String rootKey : List.of("_official_page", "_official_pages", "official_page", "official_pages")) {
+      JsonNode root = structuredData.path(rootKey);
+      if (root.isObject()) {
+        JsonNode value = root.path(pageKey);
+        if (!value.isMissingNode() && !value.isNull()) {
+          return value;
+        }
+        value = root.path(String.valueOf(page));
+        if (!value.isMissingNode() && !value.isNull()) {
+          return value;
+        }
+      }
+    }
+    return MissingNode.getInstance();
+  }
+
+  private List<Integer> withSkippedNonFillablePage(
+      DocumentTemplate template,
+      List<RenderedOcrPage> allPages,
+      List<Integer> pageNumbers
+  ) {
+    int skippedPage = skippedNonFillableOfficialPage(template);
+    if (skippedPage <= 0 || allPages == null || allPages.size() < skippedPage || pageNumbers.contains(skippedPage)) {
+      return List.copyOf(pageNumbers);
+    }
+    List<Integer> copy = new ArrayList<>(pageNumbers);
+    copy.add(skippedPage);
+    return List.copyOf(copy);
+  }
+
+  private int skippedNonFillableOfficialPage(DocumentTemplate template) {
+    if (template == null) {
+      return 0;
+    }
+    return switch (template.templateId()) {
       case "id988a_2024_06" -> 5;
       case "id988b_2024_06" -> 4;
       default -> 0;
     };
+  }
+
+  private int expectedOfficialPageCount(DocumentTemplate template) {
+    if (template == null) {
+      return 0;
+    }
+    String templateId = template.templateId() == null ? "" : template.templateId().toLowerCase(Locale.ROOT);
+    if (templateId.startsWith("id990a_")) {
+      return 5;
+    }
+    return switch (template.templateId()) {
+      case "id988a_2024_06" -> 5;
+      case "id988b_2024_06", "id407_2016_11" -> 4;
+      default -> 0;
+    };
+  }
+
+  private String expectedFormId(DocumentTemplate template) {
+    if (template == null) {
+      return "";
+    }
+    String templateId = template.templateId() == null ? "" : template.templateId().toLowerCase(Locale.ROOT);
+    if (templateId.startsWith("id990a_")) {
+      return "ID 990A";
+    }
+    return switch (template.templateId()) {
+      case "id988a_2024_06" -> "ID 988A";
+      case "id988b_2024_06" -> "ID 988B";
+      case "id407_2016_11" -> "ID 407";
+      default -> "";
+    };
+  }
+
+  private String expectedVersion(DocumentTemplate template) {
+    if (template == null) {
+      return "";
+    }
+    return switch (template.templateId()) {
+      case "id988a_2024_06", "id988b_2024_06" -> "06/2024";
+      case "id407_2016_11" -> "11/2016";
+      default -> "";
+    };
+  }
+
+  private boolean matchesNormalized(String actual, String expected) {
+    String normalizedActual = normalize(actual).replace("ID", "");
+    String normalizedExpected = normalize(expected).replace("ID", "");
+    return !normalizedActual.isBlank() && normalizedActual.equals(normalizedExpected);
+  }
+
+  private String normalize(String value) {
+    return value == null
+        ? ""
+        : value.toUpperCase(Locale.ROOT).replaceAll("[^A-Z0-9/]", "");
+  }
+
+  private String firstExistingText(JsonNode node, String... keys) {
+    if (node == null || node.isMissingNode() || node.isNull()) {
+      return "";
+    }
+    for (String key : keys) {
+      JsonNode value = node.path(key);
+      if (!value.isMissingNode() && !value.isNull()) {
+        return value.asText("");
+      }
+    }
+    return "";
+  }
+
+  private int firstExistingInt(JsonNode node, int fallback, String... keys) {
+    if (node == null || node.isMissingNode() || node.isNull()) {
+      return fallback;
+    }
+    for (String key : keys) {
+      JsonNode value = node.path(key);
+      if (value.isInt() || value.isLong()) {
+        return value.asInt(fallback);
+      }
+      if (value.isTextual()) {
+        String text = value.asText("").trim();
+        if (text.matches("[0-9]+")) {
+          return Integer.parseInt(text);
+        }
+      }
+    }
+    return fallback;
+  }
+
+  private double firstExistingDouble(JsonNode node, double fallback, String... keys) {
+    if (node == null || node.isMissingNode() || node.isNull()) {
+      return fallback;
+    }
+    for (String key : keys) {
+      JsonNode value = node.path(key);
+      if (value.isNumber()) {
+        double number = value.asDouble(fallback);
+        return number <= 1 ? number * 100 : number;
+      }
+      if (value.isTextual()) {
+        try {
+          double number = Double.parseDouble(value.asText("").trim());
+          return number <= 1 ? number * 100 : number;
+        } catch (NumberFormatException ignored) {
+          // Try the next candidate key.
+        }
+      }
+    }
+    return fallback;
   }
 
   private void runJob(JobState state, List<ReviewUpload> uploads, String modelId) {

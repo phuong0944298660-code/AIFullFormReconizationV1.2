@@ -62,6 +62,8 @@ class StructuredExtractionClientTest {
     assertThat(payload.toString()).contains("Do not return present for signatures");
     assertThat(payload.toString()).contains("top-level _confidence object");
     assertThat(payload.toString()).contains("top-level _field_evidence object");
+    assertThat(payload.toString()).contains("top-level _official_page object");
+    assertThat(payload.toString()).contains("official_page_no");
     assertThat(payload.toString()).contains("MANDATORY: for EVERY non-null field value");
     assertThat(payload.toString()).contains("self-check");
     assertThat(payload.toString()).contains("char_confidences");

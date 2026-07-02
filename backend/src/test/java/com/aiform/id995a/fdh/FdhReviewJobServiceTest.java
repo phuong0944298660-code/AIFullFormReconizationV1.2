@@ -786,8 +786,6 @@ class FdhReviewJobServiceTest {
     when(renderer.render(anyString(), anyString(), any())).thenReturn(renderedPages(3));
     when(templateDetectionService.detect(anyString(), anyString(), any(), anyList()))
         .thenReturn(template("id988b_2024_06", "ID 988B (06/2024)", 4));
-    when(officialPageNumberDetector.detect(anyString(), any(DocumentTemplate.class), anyList(), any()))
-        .thenReturn(List.of(1, 3, 4));
     when(ocrDemoService.recognizeRenderedForFdhReview(
         anyString(),
         anyList(),
@@ -798,7 +796,38 @@ class FdhReviewJobServiceTest {
       String filename = invocation.getArgument(0);
       List<RenderedOcrPage> pages = invocation.getArgument(1);
       extractedPagesByFilename.put(filename, pages.stream().map(RenderedOcrPage::page).toList());
-      return response(filename, invocation.getArgument(4), pages.size());
+      return new OcrDemoResponse(
+          filename,
+          "test",
+          pages.size(),
+          pages.stream()
+              .map(page -> new OcrPage(
+                  page.page(),
+                  "data:image/png;base64,AAA=",
+                  100,
+                  100,
+                  "",
+                  List.of(),
+                  List.of(),
+                  List.of(),
+                  List.of()
+              ))
+              .toList(),
+          List.of(),
+          new EngineStatus("test", false, List.of()),
+          objectMapper.readTree("""
+              {
+                "page_1": {"employer_particulars": {"employer_name": "CHAN TAI MAN"}},
+                "page_3": {"employment_contract_no": "FH-CON-IDN2026-0612"},
+                "_official_page": {
+                  "page_1": {"form_id": "ID 988B", "version": "06/2024", "official_page_no": 1, "confidence": 98},
+                  "page_2": {"form_id": "ID 988B", "version": "06/2024", "official_page_no": 3, "confidence": 98},
+                  "page_3": {"form_id": "ID 988B", "version": "06/2024", "official_page_no": 4, "confidence": 98}
+                }
+              }
+              """),
+          ""
+      );
     });
 
     FdhReviewJobStatusResponse started = service.start("entry_visa", List.of(file("ID988B.pdf")), null);
@@ -806,14 +835,15 @@ class FdhReviewJobServiceTest {
 
     FdhReviewResult.MaterialRow id988b = material(completed.result(), "id988b");
     assertThat(completed.status()).isEqualTo("completed");
-    assertThat(extractedPagesByFilename.get("ID988B.pdf")).containsExactly(1, 2);
+    assertThat(extractedPagesByFilename.get("ID988B.pdf")).containsExactly(1, 2, 3);
     assertThat(uploadedFile(completed.result(), "id988b").pages()).isEqualTo(3);
     assertThat(id988b.status()).isEqualTo("fail");
     assertThat(id988b.issue()).contains("\u7f3a\u7b2c 2 \u9875").doesNotContain("\u7f3a\u7b2c 4 \u9875");
+    verify(officialPageNumberDetector, times(0)).detect(anyString(), any(DocumentTemplate.class), anyList(), any());
   }
 
   @Test
-  void reportsOfficialPageNumberRecognitionProgressBeforeExtraction() throws Exception {
+  void startsExtractionWithoutSeparateOfficialPageNumberRecognition() throws Exception {
     BaiduOcrPageRenderer renderer = mock(BaiduOcrPageRenderer.class);
     TemplateDetectionService templateDetectionService = mock(TemplateDetectionService.class);
     OcrDemoService ocrDemoService = mock(OcrDemoService.class);
@@ -826,34 +856,32 @@ class FdhReviewJobServiceTest {
         officialPageNumberDetector,
         1
     );
-    CountDownLatch pageNumberRecognitionStarted = new CountDownLatch(1);
-    CountDownLatch allowPageNumberRecognitionToFinish = new CountDownLatch(1);
+    CountDownLatch extractionStarted = new CountDownLatch(1);
+    CountDownLatch allowExtractionToFinish = new CountDownLatch(1);
 
     when(renderer.render(anyString(), anyString(), any())).thenReturn(renderedPages(5));
     when(templateDetectionService.detect(anyString(), anyString(), any(), anyList()))
         .thenReturn(template("id988a_2024_06", "ID 988A (06/2024)", 5));
-    when(officialPageNumberDetector.detect(anyString(), any(DocumentTemplate.class), anyList(), any()))
-        .thenAnswer(invocation -> {
-          pageNumberRecognitionStarted.countDown();
-          assertThat(allowPageNumberRecognitionToFinish.await(2, TimeUnit.SECONDS)).isTrue();
-          return List.of(1, 2, 3, 4, 5);
-        });
     when(ocrDemoService.recognizeRenderedForFdhReview(
         anyString(),
         anyList(),
         any(ExtractionProgressListener.class),
         any(),
         any(DocumentTemplate.class)
-    )).thenAnswer(invocation -> response(invocation.getArgument(0), invocation.getArgument(4)));
+    )).thenAnswer(invocation -> {
+      extractionStarted.countDown();
+      assertThat(allowExtractionToFinish.await(2, TimeUnit.SECONDS)).isTrue();
+      return response(invocation.getArgument(0), invocation.getArgument(4));
+    });
 
     FdhReviewJobStatusResponse started = service.start("entry_visa", List.of(file("ID988A.pdf")), null);
-    assertThat(pageNumberRecognitionStarted.await(2, TimeUnit.SECONDS)).isTrue();
+    assertThat(extractionStarted.await(2, TimeUnit.SECONDS)).isTrue();
 
     FdhReviewJobStatusResponse running = service.status(started.jobId());
-    allowPageNumberRecognitionToFinish.countDown();
+    allowExtractionToFinish.countDown();
 
     assertThat(running.status()).isEqualTo("running");
-    assertThat(running.message()).contains("官方页码");
+    verify(officialPageNumberDetector, times(0)).detect(anyString(), any(DocumentTemplate.class), anyList(), any());
     assertThat(waitForCompletion(service, started.jobId()).status()).isEqualTo("completed");
   }
 
@@ -980,14 +1008,25 @@ class FdhReviewJobServiceTest {
                 "signature_of_applicant": "signature detected"
               }
             },
-            "page_4": {"employment_contract_no": "%s"}
+            "page_4": {"employment_contract_no": "%s"},
+            "_official_page": {
+              "page_1": {"form_id": "ID 988A", "version": "06/2024", "official_page_no": 1, "confidence": 98},
+              "page_2": {"form_id": "ID 988A", "version": "06/2024", "official_page_no": 2, "confidence": 98},
+              "page_3": {"form_id": "ID 988A", "version": "06/2024", "official_page_no": 3, "confidence": 98},
+              "page_4": {"form_id": "ID 988A", "version": "06/2024", "official_page_no": 4, "confidence": 98}
+            }
           }
           """.formatted(CONTRACT_NO);
       case "id988b_2024_06" -> """
           {
             "page_1": {"employer_particulars": {"employer_name": "CHAN TAI MAN"}},
             "page_3": {"employment_contract_no": "%s"},
-            "page_4": {"declaration": {"signature_of_employer": "signature detected"}}
+            "page_4": {"declaration": {"signature_of_employer": "signature detected"}},
+            "_official_page": {
+              "page_1": {"form_id": "ID 988B", "version": "06/2024", "official_page_no": 1, "confidence": 98},
+              "page_2": {"form_id": "ID 988B", "version": "06/2024", "official_page_no": 2, "confidence": 98},
+              "page_3": {"form_id": "ID 988B", "version": "06/2024", "official_page_no": 3, "confidence": 98}
+            }
           }
           """.formatted(CONTRACT_NO);
       default -> """
@@ -1001,7 +1040,13 @@ class FdhReviewJobServiceTest {
               "monthly_wages": "HK$5,100",
               "food_allowance": "HK$1,236"
             },
-            "page_4": {"signature_of_employer": "signature detected"}
+            "page_4": {"signature_of_employer": "signature detected"},
+            "_official_page": {
+              "page_1": {"form_id": "ID 407", "version": "11/2016", "official_page_no": 1, "confidence": 98},
+              "page_2": {"form_id": "ID 407", "version": "11/2016", "official_page_no": 2, "confidence": 98},
+              "page_3": {"form_id": "ID 407", "version": "11/2016", "official_page_no": 3, "confidence": 98},
+              "page_4": {"form_id": "ID 407", "version": "11/2016", "official_page_no": 4, "confidence": 98}
+            }
           }
           """.formatted(CONTRACT_NO);
     };
@@ -1072,9 +1117,10 @@ class FdhReviewJobServiceTest {
             "page_5": {
               "signature_of_applicant": "signature detected",
               "declaration_date": "22 June 2026"
-            }
+            },
+            "_official_page": %s
           }
-          """;
+          """.formatted(iangOfficialPageMetadata(filename));
     } else if (filename.contains("专用字段")) {
       json = """
           {
@@ -1193,6 +1239,28 @@ class FdhReviewJobServiceTest {
         95,
         "data:image/jpeg;base64,EDU_INSTITUTION"
     ));
+  }
+
+  private String iangOfficialPageMetadata(String filename) {
+    if (filename.contains("missing_page_3")) {
+      return """
+          {
+            "page_1": {"form_id": "ID 990A", "official_page_no": 1, "confidence": 98},
+            "page_2": {"form_id": "ID 990A", "official_page_no": 2, "confidence": 98},
+            "page_3": {"form_id": "ID 990A", "official_page_no": 4, "confidence": 98},
+            "page_4": {"form_id": "ID 990A", "official_page_no": 5, "confidence": 98}
+          }
+          """;
+    }
+    return """
+        {
+          "page_1": {"form_id": "ID 990A", "official_page_no": 1, "confidence": 98},
+          "page_2": {"form_id": "ID 990A", "official_page_no": 2, "confidence": 98},
+          "page_3": {"form_id": "ID 990A", "official_page_no": 3, "confidence": 98},
+          "page_4": {"form_id": "ID 990A", "official_page_no": 4, "confidence": 98},
+          "page_5": {"form_id": "ID 990A", "official_page_no": 5, "confidence": 98}
+        }
+        """;
   }
 
   private StructuredFieldDetail structuredField(

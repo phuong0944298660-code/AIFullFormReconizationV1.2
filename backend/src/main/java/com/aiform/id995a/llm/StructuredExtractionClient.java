@@ -963,6 +963,7 @@ public class StructuredExtractionClient implements
     builder.append("Rules:\n");
     builder.append("- Include source_file and total_pages at the top level.\n");
     builder.append("- Group page content under page_1, page_2, etc.\n");
+    builder.append("- Also include a top-level _official_page object keyed by page_N. For each attached page, visually read the official printed form footer and return {form_id, version, official_page_no, confidence, evidence}. If no official footer page number is visible, set official_page_no to null and confidence below 60. Do not infer this from upload order.\n");
     builder.append("- Keep page field values as plain applicant-filled values or null. Also include a top-level _confidence object mirroring page/field paths with integer confidence scores from 0 to 100.\n");
     builder.append("- Also include a top-level _field_evidence object mirroring page/field paths. MANDATORY: for EVERY non-null field value under page_N, you MUST provide a matching _field_evidence.page_N.<exact_field_path> entry with label and value_bbox as normalized {x,y,width,height} coordinates of that filled area on the page image. A non-null field without a value_bbox cannot produce a field screenshot and is treated as an incomplete extraction; do not omit it.\n");
     builder.append("- Before returning, self-check: for every non-null field value you output under each page_N, verify a matching _field_evidence.page_N.<exact_field_path>.value_bbox exists; if any is missing, add it before finalizing.\n");
