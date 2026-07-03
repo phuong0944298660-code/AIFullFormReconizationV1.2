@@ -719,34 +719,15 @@ function handleDragLeave(event) {
   }
 }
 
-function simulateUpload() {
-  uploadedFileObjects.value = []
-  uploadBatchSequence = 0
-  uploadedFiles.value = buildActiveUploadedFiles()
-  reviewResult.value = null
-  jobStatus.value = null
-  apiError.value = ''
-  verificationSequence += 1
-}
-
 async function startRecognition() {
   if (processing.value) return
   if (uploadedFileObjects.value.length) {
     await startBackendRecognition()
     return
   }
-  if (!uploadedFiles.value.length) simulateUpload()
-  processing.value = true
+  apiError.value = '请先上传申请材料后再开始识别'
   reviewResult.value = null
-  window.setTimeout(() => {
-    const result = buildActiveReviewResult()
-    reviewResult.value = result
-    setResultView('recognition')
-    verificationConclusion.value = null
-    verificationError.value = ''
-    startVerificationConclusion(result)
-    processing.value = false
-  }, 700)
+  jobStatus.value = null
 }
 
 async function startBackendRecognition() {
@@ -1223,7 +1204,7 @@ function verificationLineStatus(line) {
           <div class="section-heading">
             <div>
               <h2 id="upload-title">上传申请材料包</h2>
-              <p>{{ isFdhMode ? '家庭佣工流程保持现有真实上传识别能力；未选择文件时使用内置演示数据。' : '上传真实学生材料时走后端识别；未选择文件时使用内置演示数据。' }}</p>
+              <p>{{ isFdhMode ? '上传家庭佣工申请材料后，系统将调用后端进行识别与核验。' : '上传真实学生申请材料后，系统将调用后端进行识别与核验。' }}</p>
             </div>
           </div>
 
@@ -1302,7 +1283,7 @@ function verificationLineStatus(line) {
                   </div>
                 </article>
               </div>
-              <div v-else class="empty-panel">尚未选择材料。可上传真实文件；如直接开始识别，将使用内置演示数据。</div>
+              <div v-else class="empty-panel">尚未选择材料。请先上传申请材料后再开始识别。</div>
             </div>
           </div>
 
@@ -1312,7 +1293,7 @@ function verificationLineStatus(line) {
             </div>
             <div class="progress-meta">
               <span>{{ jobStatus?.message || '正在识别页尾标识、页面结构和字段证据' }}</span>
-              <strong>{{ uploadedFileObjects.length ? `${jobStatus?.progress || 0}%` : '模拟中' }}</strong>
+              <strong>{{ `${jobStatus?.progress || 0}%` }}</strong>
             </div>
           </div>
 
@@ -1320,7 +1301,7 @@ function verificationLineStatus(line) {
             {{ apiError }}
           </div>
 
-          <button v-else class="primary-action" type="button" :disabled="processing" @click="startRecognition">
+          <button class="primary-action" type="button" :disabled="processing" @click="startRecognition">
             {{ processing ? '识别中...' : '开始识别' }}
           </button>
         </section>
