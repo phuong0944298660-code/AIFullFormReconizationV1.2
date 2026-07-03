@@ -22,18 +22,322 @@ import {
 } from './verificationTemplate.js'
 import { verificationNotice } from './verificationNotice.js'
 
+const LANGUAGES = [
+  { id: 'en', label: 'English' },
+  { id: 'zh', label: '繁體中文' }
+]
+
+const UI_TEXT = {
+  en: {
+    eyebrow: 'Immigration Department Document Review Demo',
+    title: 'Recognition and Verification of Hong Kong Immigration Application Documents',
+    demoFlowDescription: 'This demo covers application document upload, document recognition, structured field extraction and normalisation, cross-document intelligent checking, and automatic drafting of the assessment result.',
+    language: 'Language',
+    caseSwitch: 'Application stream switch',
+    caseTitleFdh: 'Select Application Type',
+    caseTitleStudent: 'Current Student Admission Scheme Scenario',
+    caseHintFdh: 'Select the application type only. Checklist items are read-only.',
+    caseHintStudent: 'Default: IANG application by a recent graduate staying in Hong Kong. The checklist marks official requirements and the current demo approval scope.',
+    checklistTitleFdh: 'Official Checklist for This Application Type',
+    checklistTitleStudent: 'Checklist for IANG Application by a Recent Graduate Staying in Hong Kong',
+    checklistDescriptionFdh: 'Items 1-3 affect the final demo decision. Items 4-12 show upload status only and do not block this demo result.',
+    checklistDescriptionStudent: 'Shows the official checklist for IANG application by a recent graduate staying in Hong Kong. Items marked "Demo approval" are included in the current decision.',
+    uploadTitle: 'Upload Application Documents',
+    uploadHintFdh: 'After the Foreign Domestic Helper application documents are uploaded, the backend recognition and verification flow will start.',
+    uploadHintStudent: 'After the student application documents are uploaded, the backend recognition and verification flow will start.',
+    dropzoneTitle: 'Select and upload multiple application documents',
+    uploadHelperFdh: 'PDF / PNG / JPG · Supports ID 988A, ID 988B, ID 407 and other supporting documents',
+    uploadHelperStudent: 'PDF / PNG / JPG · Supports ID 990A for IANG / Admission Scheme for Mainland Talents and Professionals, graduation proof, Exit-entry Permit / passport / HKID and payment screenshot',
+    selectedFiles: 'Selected Documents',
+    filesUnit: 'documents',
+    listScrollable: 'List scrolls',
+    clearAll: 'Clear all',
+    unknownSize: 'Size unknown',
+    pendingRecognition: 'Pending recognition',
+    emptyUpload: 'No documents selected. Upload application documents before starting recognition.',
+    progressFallback: 'Recognising footer identifiers, page structure and field evidence',
+    startRecognition: 'Start Recognition',
+    recognizing: 'Recognising...',
+    uploadedMaterials: 'uploaded documents',
+    resultTabs: 'Result view switch',
+    recognitionResult: 'Recognition Result',
+    jsonDescription: 'Includes material completeness, recognised field list, and field review conclusion. Image snapshots only indicate whether an image exists; base64 is not exported.',
+    openVerification: 'Open Assessment Result',
+    backToRecognition: 'Back to Recognition Result',
+    reupload: 'Upload Again',
+    recognizedMaterials: 'Recognised Documents',
+    recognizedMaterialsCount: 'documents included in the current recognition result',
+    sourcePagesTitle: 'Source Documents',
+    sourcePagesHint: 'Shows original pages by document and page number. Click a field source on the right to locate it.',
+    sourceThumbs: 'Document page thumbnails',
+    page: 'Page',
+    pagesPending: 'Pages pending recognition',
+    noSourcePages: 'No source pages are available. Upload documents and finish recognition first.',
+    documentFieldsTitle: 'Per-page Field Recognition',
+    documentFieldsHint: 'Shows original fields by document and page number. Click a field row to locate and highlight that field on the source page.',
+    field: 'Field',
+    filledOrRecognisedValue: 'Completed content / recognised value',
+    status: 'Status',
+    valueConfidence: 'Value',
+    normalizedFieldsTitle: 'Standardised Field Verification',
+    normalizedFieldsHint: 'Fields are grouped by standard key. Click a field or source to locate the source evidence on the left.',
+    fieldStats: 'Field statistics',
+    allFields: 'All fields',
+    passed: 'Passed',
+    issues: 'Issues',
+    pendingReview: 'Pending review',
+    fieldFilter: 'Field filter',
+    onlyIssues: 'Issues only',
+    onlyReview: 'Manual review only',
+    onlyRequired: 'Required fields only',
+    required: 'Required',
+    overallConfidence: 'Overall confidence',
+    sources: 'sources',
+    locatorConfidence: 'Location',
+    notLocated: 'Not located',
+    noEvidence: 'No document evidence available',
+    recommendedValue: 'Recommended value',
+    normalizedResult: 'Normalised result',
+    originalNormalizedResult: 'Original normalised result',
+    employmentExperience: 'Foreign Domestic Helper Employment Experience',
+    employer: 'Employer',
+    employerName: 'Employer name',
+    address: 'Address',
+    employmentPeriod: 'Employment period',
+    from: 'From',
+    to: 'to',
+    findingsTitle: 'Itemised Findings and Sources',
+    findingsHint: 'Blocking or review findings are listed first. Sources identify the document, section and field.',
+    source: 'Source',
+    noBlockingFindings: 'No blocking or manual-review issues were found in the core documents and key fields.',
+    nonBlockingHint: 'Non-blocking notes',
+    verificationPage: 'Assessment Result',
+    generatingMinutes: 'Drafting assessment notes...',
+    overallConclusion: 'Overall Conclusion',
+    fieldStatusLegend: 'Field status legend',
+    materialVerification: 'Document-level Verification',
+    materialVerificationHint: 'Missing documents, missing pages and template mismatch are document-level issues. Documents not required for the current type are hidden.',
+    material: 'Document',
+    templateOrFooter: 'Template / footer identifier',
+    verificationStatus: 'Verification status',
+    remarks: 'Remarks',
+    includedInCompleteness: 'Included in the material completeness check.',
+    sectionHint: 'Filled in according to the Immigration Department document field order. Fields pending review keep the recommended value and conflict sources.',
+    fillValue: 'Fill-in value',
+    sourcesAndDraftRemarks: 'Sources and draft remarks',
+    normalized: 'Normalised',
+    cropMissing: 'Original crop not available',
+    recognisedValue: 'Recognised value',
+    confidence: 'Confidence',
+    noUsableEvidence: 'No usable field evidence available',
+    workflowFdh: 'Foreign Domestic Helper Entry Visa Review',
+    workflowStudent: 'IANG Application by a Recent Graduate Staying in Hong Kong',
+    applicationType: 'Application type',
+    detailType: 'Sub-type',
+    expectedUploadedMaterials: 'Required/uploaded documents',
+    fieldCompletion: 'Field completion',
+    uploadFirstError: 'Upload application documents before starting recognition.',
+    jobUploadMessage: 'Uploading documents and creating a recognition job.',
+    jobIncomplete: 'The recognition job has not completed.',
+    backendFailed: 'Backend recognition failed.',
+    requestTimeout: 'Request timed out. Check the backend service and try again.',
+    jobStillProcessing: 'The recognition job is still processing. Refresh later or check backend logs.',
+    failMissingCore: 'Missing core document',
+    materialNeedsReview: 'Document requires review',
+    noFieldEvidence: 'No usable field evidence available',
+    currentLocatorEmpty: 'Click a field source on the right to locate the corresponding source document page on the left.',
+    currentLocator: 'Current location',
+    documentFallback: 'Document',
+    unrecognised: 'Not recognised',
+    statusPass: 'Pass',
+    statusFail: 'Fail',
+    statusReview: 'Pending review',
+    statusWarn: 'Note',
+    statusMuted: 'N/A',
+    decisionPass: 'May approve',
+    decisionReview: 'Manual review required',
+    decisionFail: 'Do not approve',
+    notApplicable: 'Not applicable',
+    coreRequired: 'Core required',
+    conditionallyRequired: 'Conditionally required',
+    officialRequired: 'Officially required',
+    demoApproval: 'Demo approval',
+    subsequentStage: 'Subsequent stage',
+    affectsFinalDecision: 'Affects final decision',
+    officialChecklistNonBlocking: 'Official checklist item; non-blocking in this demo',
+    notApplicableCurrentType: 'Not applicable to the current type'
+  },
+  zh: {
+    eyebrow: 'Immigration Document Review Demo',
+    title: '香港出入境申请材料识别与核验Demo',
+    demoFlowDescription: '本Demo主要演示「申请材料上传→文档解析识别→字段结构化提取与归一→跨档智能校验→自动生成审核结论」端到端全流程',
+    language: '语言',
+    caseSwitch: '申请场景切换',
+    caseTitleFdh: '选择申请类别',
+    caseTitleStudent: '当前学生出入境场景',
+    caseHintFdh: '用户只能选择所属类别；材料清单中的勾选状态不可交互。',
+    caseHintStudent: '默认展示 IANG 应届毕业生在港首次申请，材料清单标明官方要求和 Demo 审批范围。',
+    checklistTitleFdh: '该类别官方材料清单',
+    checklistTitleStudent: 'IANG 应届毕业生在港首次申请材料清单',
+    checklistDescriptionFdh: '材料 1-3 纳入最终判定；材料 4-12 只展示是否上传，不阻断本 demo 结论。',
+    checklistDescriptionStudent: '展示 IANG 应届毕业生在港首次申请官方材料清单；标记“Demo审批”的材料参与当前结论。',
+    uploadTitle: '上传申请材料包',
+    uploadHintFdh: '上传家庭佣工申请材料后，系统将调用后端进行识别与核验。',
+    uploadHintStudent: '上传真实学生申请材料后，系统将调用后端进行识别与核验。',
+    dropzoneTitle: '选择并上传多份申请材料',
+    uploadHelperFdh: 'PDF / PNG / JPG · 支持 ID 988A、ID 988B、ID 407 与其他证明材料',
+    uploadHelperStudent: 'PDF / PNG / JPG · 支持 ID 990A、毕业证明、港澳通行证 / 护照 / HKID、付款截图',
+    selectedFiles: '已选择材料',
+    filesUnit: '份',
+    listScrollable: '列表可滚动',
+    clearAll: '清空全部',
+    unknownSize: '大小未知',
+    pendingRecognition: '待识别',
+    emptyUpload: '尚未选择材料。请先上传申请材料后再开始识别。',
+    progressFallback: '正在识别页尾标识、页面结构和字段证据',
+    startRecognition: '开始识别',
+    recognizing: '识别中...',
+    uploadedMaterials: '份上传材料',
+    resultTabs: '结果视图切换',
+    recognitionResult: '识别结果',
+    jsonDescription: '包含材料完整性、字段清单识别结果，以及字段审核结论；图片快照仅保留是否存在，不输出 base64。',
+    openVerification: '进入核验结果页',
+    backToRecognition: '返回识别结果',
+    reupload: '重新上传',
+    recognizedMaterials: '已识别材料',
+    recognizedMaterialsCount: '份材料参与当前识别结果',
+    sourcePagesTitle: '材料原文',
+    sourcePagesHint: '按材料和页码展示参与识别的原始页面；点击右侧字段来源后自动定位。',
+    sourceThumbs: '材料页缩略图',
+    page: '第 {page} 页',
+    pagesPending: '页数待识别',
+    noSourcePages: '暂未取得原文页面。请先上传并完成材料识别。',
+    documentFieldsTitle: '材料逐页字段识别',
+    documentFieldsHint: '按材料和页码展示参与识别的原始字段；点击字段行后，左侧原文自动定位并只高亮当前字段。',
+    field: '字段',
+    filledOrRecognisedValue: '填写内容 / 识别值',
+    status: '状态',
+    valueConfidence: '值',
+    normalizedFieldsTitle: '标准化字段核验',
+    normalizedFieldsHint: '字段按统一 key 聚合；点击字段或来源可定位左侧原文证据。',
+    fieldStats: '字段统计',
+    allFields: '全部字段',
+    passed: '通过',
+    issues: '问题',
+    pendingReview: '待复核',
+    fieldFilter: '字段筛选',
+    onlyIssues: '仅看问题',
+    onlyReview: '仅看待人工审核',
+    onlyRequired: '仅看必填字段',
+    required: '必填',
+    overallConfidence: '综合置信度',
+    sources: '条来源',
+    locatorConfidence: '定位',
+    notLocated: '未定位',
+    noEvidence: '未取得材料证据',
+    recommendedValue: '建议采用值',
+    normalizedResult: '归一化结果',
+    originalNormalizedResult: '原始归一结果',
+    employmentExperience: '家庭佣工的工作经验',
+    employer: '雇主',
+    employerName: '雇主名称',
+    address: '地址',
+    employmentPeriod: '任职日期',
+    from: '由',
+    to: '至',
+    findingsTitle: '逐条结论与出处',
+    findingsHint: '先列阻断或待复核问题；出处精确到材料名称、章节和字段名称。',
+    source: '出处',
+    noBlockingFindings: '核心材料和关键字段未发现阻断或待人工复核问题。',
+    nonBlockingHint: '非阻断提示',
+    verificationPage: '核验结果页',
+    generatingMinutes: '正在生成 Minutes 草拟建议...',
+    overallConclusion: '整体结论',
+    fieldStatusLegend: '字段状态图例',
+    materialVerification: '材料层核验',
+    materialVerificationHint: '材料缺失、缺页、模板错误属于材料层面；不展示当前类别不要求的材料。',
+    material: '材料',
+    templateOrFooter: '模板 / 页尾标识',
+    verificationStatus: '核验状态',
+    remarks: '备注',
+    includedInCompleteness: '已纳入材料完整性判断。',
+    sectionHint: '按香港入境处材料字段清单顺序回填；待复核字段保留建议值和冲突来源。',
+    fillValue: '回填值',
+    sourcesAndDraftRemarks: '出处与草拟备注',
+    normalized: '归一结果',
+    cropMissing: '未取得原始裁剪',
+    recognisedValue: '识别值',
+    confidence: '置信度',
+    noUsableEvidence: '未取得可用字段证据',
+    workflowFdh: '外籍家庭佣工入境审核',
+    workflowStudent: 'IANG 应届毕业生在港首次申请',
+    applicationType: '申请类别',
+    detailType: '细分类别',
+    expectedUploadedMaterials: '应上传/已上传材料',
+    fieldCompletion: '字段填写情况',
+    uploadFirstError: '请先上传申请材料后再开始识别',
+    jobUploadMessage: '正在上传材料并创建识别任务。',
+    jobIncomplete: '识别任务未完成。',
+    backendFailed: '后端识别失败。',
+    requestTimeout: '请求超时，请检查后端服务后重试。',
+    jobStillProcessing: '识别任务仍在处理中，请稍后刷新任务状态或检查后端日志。',
+    failMissingCore: '缺少核心材料',
+    materialNeedsReview: '材料需复核',
+    noFieldEvidence: '未取得可用字段证据',
+    currentLocatorEmpty: '点击右侧字段来源后，左侧将定位到对应材料页面。',
+    currentLocator: '当前定位',
+    documentFallback: '材料',
+    unrecognised: '未识别',
+    statusPass: '通过',
+    statusFail: '不通过',
+    statusReview: '待复核',
+    statusWarn: '提示',
+    statusMuted: '不适用',
+    decisionPass: '允许通过',
+    decisionReview: '需人工复核',
+    decisionFail: '不允许通过',
+    notApplicable: '不适用',
+    coreRequired: '核心必交',
+    conditionallyRequired: '条件应交',
+    officialRequired: '官方应交',
+    demoApproval: 'Demo审批',
+    subsequentStage: '后续阶段',
+    affectsFinalDecision: '影响最终结论',
+    officialChecklistNonBlocking: '官方清单项，本 demo 不阻断',
+    notApplicableCurrentType: '当前类别不适用'
+  }
+}
+
 const demoModes = [
   {
     id: 'student_iang',
-    label: 'IANG 应届毕业生在港首次申请',
-    shortLabel: '学生 / IANG',
-    description: '默认演示学生出入境 IANG 应届毕业生在港首次申请材料识别。'
+    label: {
+      en: 'Immigration Arrangements for Non-local Graduates (IANG)',
+      zh: 'IANG 应届毕业生在港首次申请'
+    },
+    shortLabel: {
+      en: 'IANG',
+      zh: '学生 / IANG'
+    },
+    description: {
+      en: 'Default stream: IANG application by a recent graduate staying in Hong Kong.',
+      zh: '默认演示学生出入境 IANG 应届毕业生在港首次申请材料识别。'
+    }
   },
   {
     id: 'fdh',
-    label: '家庭佣工',
-    shortLabel: '家庭佣工',
-    description: '保留当前外籍家庭佣工材料核验流程。'
+    label: {
+      en: 'Foreign Domestic Helper',
+      zh: '家庭佣工'
+    },
+    shortLabel: {
+      en: 'FDH',
+      zh: '家庭佣工'
+    },
+    description: {
+      en: 'Keeps the current Foreign Domestic Helper document review flow.',
+      zh: '保留当前外籍家庭佣工材料核验流程。'
+    }
   }
 ]
 
@@ -54,22 +358,803 @@ const fileInput = ref(null)
 const jobStatus = ref(null)
 const apiError = ref('')
 const dragActive = ref(false)
+const currentLanguage = ref('en')
 let uploadSequence = 0
 let uploadBatchSequence = 0
 let verificationSequence = 0
 const FDH_JOB_POLL_INTERVAL_MS = 1000
 const FDH_JOB_POLL_LIMIT = 1500
 const REVIEW_JOB_START_TIMEOUT_MS = 60000
-const demoFlowDescription = '本Demo主要演示「申请材料上传→文档解析识别→字段结构化提取与归一→跨档智能校验→自动生成审核结论」端到端全流程'
+
+const APPLICATION_TYPE_TEXT = {
+  iang_recent_in_hk: {
+    en: {
+      label: 'IANG application by a recent graduate staying in Hong Kong',
+      shortLabel: 'IANG recent graduate',
+      description: 'Non-local graduates who obtained an undergraduate or higher qualification in Hong Kong apply under IANG within six months after graduation.',
+      checklistKey: 'IANG application by a recent graduate staying in Hong Kong'
+    }
+  },
+  entry_visa: {
+    en: {
+      label: 'Entry Visa',
+      shortLabel: 'Entry Visa',
+      description: 'Visa application for a Foreign Domestic Helper coming to Hong Kong from abroad.',
+      checklistKey: 'Entry Visa'
+    }
+  },
+  renewal: {
+    en: {
+      label: 'Renewal upon expiry of a two-year contract',
+      shortLabel: 'Renewal',
+      description: 'Renewal with the same employer after expiry of the two-year contract.',
+      checklistKey: 'Renewal upon expiry of a two-year contract'
+    }
+  },
+  remaining_period: {
+    en: {
+      label: 'Completion of the remaining period of current contract',
+      shortLabel: 'Remaining period',
+      description: 'Application to complete the remaining period of an existing contract.',
+      checklistKey: 'Completion of the remaining period of current contract'
+    }
+  },
+  change_employer: {
+    en: {
+      label: 'Change of employer',
+      shortLabel: 'Change employer',
+      description: 'Application related to renewal with the same employer or change of employer.',
+      checklistKey: 'Change of employer'
+    }
+  }
+}
+
+const MATERIAL_TEXT = {
+  id988a: {
+    en: {
+      name: 'Application for Visa / Application for Extension of Stay for Foreign Domestic Helper',
+      shortName: 'ID 988A'
+    }
+  },
+  id988b: {
+    en: {
+      name: 'Application for Employment of Domestic Helper from Abroad',
+      shortName: 'ID 988B'
+    }
+  },
+  id407: {
+    en: {
+      name: 'Original copy of the Standard Employment Contract',
+      shortName: 'ID 407'
+    }
+  },
+  helperTravelOriginal: {
+    en: {
+      name: "Helper's travel document (original)",
+      shortName: 'Travel document (original)'
+    }
+  },
+  helperTravelCopy: {
+    en: {
+      name: "Helper's travel document (copy)",
+      shortName: 'Travel document copy'
+    }
+  },
+  helperHkid: {
+    en: {
+      name: "Helper's Hong Kong identity card copy, if applicable",
+      shortName: "Helper's HKID"
+    }
+  },
+  employerId: {
+    en: {
+      name: "Employer's Hong Kong permanent identity card / Hong Kong identity card / passport copy",
+      shortName: "Employer's identity document"
+    }
+  },
+  financialProof: {
+    en: {
+      name: "Employer's proof of financial position (copy)",
+      shortName: 'Proof of financial position'
+    }
+  },
+  addressProof: {
+    en: {
+      name: "Employer's proof of residential address (copy)",
+      shortName: 'Proof of address'
+    }
+  },
+  referenceLetter: {
+    en: {
+      name: "Helper's reference letter",
+      shortName: 'Reference letter'
+    }
+  },
+  releaseLetter: {
+    en: {
+      name: 'Release letter from the current employer showing the contract expiry / termination date',
+      shortName: 'Release letter'
+    }
+  },
+  continueEmploymentLetter: {
+    en: {
+      name: "Employer's confirmation letter for continued employment",
+      shortName: 'Continued employment confirmation'
+    }
+  },
+  id990a: {
+    en: {
+      name: 'Application for Entry for Employment as Professionals in Hong Kong',
+      shortName: 'ID 990A',
+      expectedPages: 'First 5 pages',
+      statusText: 'First 5 pages recognised',
+      requirementLabel: 'Demo approval',
+      scopeText: 'Demo approval; recognises the first 5 pages of ID 990A by footer page number'
+    }
+  },
+  educationProof: {
+    en: {
+      name: 'Proof of academic qualification / graduation eligibility',
+      shortName: 'Graduation proof',
+      expectedPages: 'As evidenced',
+      statusText: 'Graduation eligibility can be verified',
+      requirementLabel: 'Demo approval',
+      scopeText: 'Demo approval; checks qualification level and six-month recent graduate window'
+    }
+  },
+  identityDocs: {
+    en: {
+      name: 'Exit-entry Permit / passport / Hong Kong identity card',
+      shortName: 'Identity and travel document',
+      expectedPages: 'Bio-data page and HKID',
+      statusText: 'Identity fields can be verified',
+      requirementLabel: 'Demo approval',
+      scopeText: 'Demo approval; cross-checks the application form, graduation proof and payment record'
+    }
+  },
+  paymentStatus: {
+    en: {
+      name: 'Payment Status / application fee payment screenshot',
+      shortName: 'Payment Status',
+      expectedPages: '1 page',
+      statusText: 'Payment is not yet complete',
+      issue: 'The payment page shows "NOT YET COMPLETE". Payment completion must be confirmed before approval.',
+      requirementLabel: 'Demo approval',
+      scopeText: 'Demo approval; keep REVIEW when payment is not complete'
+    }
+  },
+  photo: {
+    en: {
+      name: 'Recent photograph of applicant',
+      shortName: 'Applicant photo',
+      expectedPages: '1 photo',
+      statusText: 'Not uploaded',
+      requirementLabel: 'Officially required',
+      scopeText: 'Not blocking in the current demo'
+    }
+  },
+  currentStayEvidence: {
+    en: {
+      name: 'Latest arrival record / landing slip / e-Visa',
+      shortName: 'Current stay record',
+      expectedPages: 'As recorded',
+      statusText: 'Not uploaded',
+      requirementLabel: 'Officially required',
+      scopeText: 'Confirms current stay in Hong Kong and stay limit; non-blocking in the current demo'
+    }
+  },
+  mainlandConsent: {
+    en: {
+      name: 'Consent letter for Mainland Chinese residents taking up employment in Hong Kong',
+      shortName: 'Mainland consent letter',
+      expectedPages: '1 page',
+      statusText: 'Conditionally required for Mainland residents',
+      requirementLabel: 'Conditionally required',
+      scopeText: 'Applies to Mainland residents; shown as conditionally required and non-blocking in the current demo'
+    }
+  },
+  visaIssueFee: {
+    en: {
+      name: 'Payment proof for visa issue fee / downloaded e-Visa after approval',
+      shortName: 'Post-approval result document',
+      expectedPages: 'Generated after approval',
+      statusText: 'Post-approval stage document',
+      requirementLabel: 'Subsequent stage',
+      scopeText: 'Used for result filing after approval; outside the blocking scope of the current first-round review'
+    }
+  }
+}
+
+const FIELD_TEXT = {
+  'case.application_type': { en: { category: 'Case and document', label: 'Application type' } },
+  'document.footer_id': { en: { category: 'Case and document', label: 'Footer template identifier' } },
+  'helper.name.full_en': { en: { category: 'Helper fields', label: "Helper's full name in English" } },
+  'helper.travel_doc.number': { en: { category: 'Helper fields', label: "Helper's travel document number" } },
+  'helper.date_of_birth': { en: { category: 'Helper fields', label: "Helper's date of birth" } },
+  'helper.nationality': { en: { category: 'Helper fields', label: "Helper's nationality" } },
+  'helper.signature.present': { en: { category: 'Helper fields', label: "Helper's signature" } },
+  'employer.name.full_en': { en: { category: 'Employer fields', label: "Employer's full name in English" } },
+  'employer.signature.present': { en: { category: 'Employer fields', label: "Employer's signature" } },
+  'contract.dh_contract_no': { en: { category: 'Contract fields', label: 'Standard Employment Contract number' } },
+  'contract.monthly_wage_hkd': { en: { category: 'Contract fields', label: 'Monthly wages' } },
+  'contract.food.allowance_hkd': { en: { category: 'Contract fields', label: 'Food allowance' } },
+  'applicant.name.full_en': { en: { category: 'Applicant identity', label: "Applicant's name in English" } },
+  'applicant.hkid.number': { en: { category: 'Applicant identity', label: 'Hong Kong identity card number' } },
+  'applicant.travel_doc.number': { en: { category: 'Applicant identity', label: 'Exit-entry Permit / passport number' } },
+  'applicant.date_of_birth': { en: { category: 'Applicant identity', label: 'Date of birth' } },
+  'education.institution': { en: { category: 'Academic qualification and graduation eligibility', label: 'Institution' } },
+  'education.program': { en: { category: 'Academic qualification and graduation eligibility', label: 'Programme / major' } },
+  'education.graduation_date': { en: { category: 'Academic qualification and graduation eligibility', label: 'Graduation / programme completion date' } },
+  'education.recent_graduate_window': { en: { category: 'Academic qualification and graduation eligibility', label: 'Six-month recent graduate window' } },
+  'payment.application_fee.status': { en: { category: 'Payment Status', label: 'Application fee payment status' } },
+  'applicant.declaration.signature.present': { en: { category: 'IANG / professionals application form', label: "Applicant's declaration and signature" } }
+}
+
+const TEMPLATE_TEXT = {
+  pass: { en: { label: 'Passed', text: 'Recognised and passed field rules.' } },
+  unrecognized: { en: { label: 'Not recognised', text: 'No reliable field result was obtained.' } },
+  required_missing: { en: { label: 'Required field blank', text: 'The required field is blank or no completion mark was detected.' } },
+  review: { en: { label: 'Pending review', text: 'Low confidence or cross-document inconsistency; manual confirmation is required.' } }
+}
+
+function t(key, replacements = {}) {
+  const template = UI_TEXT[currentLanguage.value]?.[key] || UI_TEXT.en[key] || key
+  const rendered = Object.entries(replacements).reduce(
+    (text, [name, value]) => text.replaceAll(`{${name}}`, String(value)),
+    template
+  )
+  return currentLanguage.value === 'zh' ? toTraditional(rendered) : rendered
+}
+
+function localizedText(value) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const text = value[currentLanguage.value] || value.en || value.zh || ''
+    return currentLanguage.value === 'zh' ? toTraditional(text) : text
+  }
+  return currentLanguage.value === 'zh' ? toTraditional(value) : value
+}
+
+function localizedDemoMode(mode) {
+  return {
+    ...mode,
+    label: localizedText(mode.label),
+    shortLabel: localizedText(mode.shortLabel),
+    description: localizedText(mode.description)
+  }
+}
+
+function withLocalizedFields(item, dictionary) {
+  if (currentLanguage.value === 'zh') return toTraditionalObject(item)
+  return {
+    ...item,
+    ...(dictionary[item?.id]?.[currentLanguage.value] || {})
+  }
+}
+
+function localizedApplicationType(applicationType) {
+  return withLocalizedFields(applicationType, APPLICATION_TYPE_TEXT)
+}
+
+function localizedMaterial(material) {
+  return withLocalizedFields(material, MATERIAL_TEXT)
+}
+
+function localizedField(field) {
+  if (currentLanguage.value === 'zh') return toTraditionalObject(field)
+  const text = FIELD_TEXT[field?.key]?.en || {}
+  return {
+    ...field,
+    ...text,
+    sources: (field?.sources || []).map(localizedSource)
+  }
+}
+
+function localizedSource(source) {
+  if (currentLanguage.value === 'zh') return toTraditionalObject(source)
+  return {
+    ...source,
+    documentName: localizedDocumentName(source.documentName, source.materialId),
+    section: localizedSection(source.section),
+    fieldName: localizedFieldName(source.fieldName)
+  }
+}
+
+function localizedDocumentName(name, materialId = '') {
+  if (currentLanguage.value === 'zh') return toTraditional(name)
+  if (materialId && MATERIAL_TEXT[materialId]?.en?.shortName) return MATERIAL_TEXT[materialId].en.shortName
+  const matched = Object.values(MATERIAL_TEXT).find((item) => item.en?.shortName === name || item.en?.name === name)
+  return matched?.en?.shortName || COMMON_TEXT_TRANSLATIONS[name]?.en || name
+}
+
+function localizedFieldName(name) {
+  if (currentLanguage.value === 'zh') return toTraditional(name)
+  const matched = Object.values(FIELD_TEXT).find((item) => item.en?.label === name)
+  return matched?.en?.label || COMMON_TEXT_TRANSLATIONS[name]?.en || name
+}
+
+function localizedSection(section) {
+  if (currentLanguage.value === 'zh') return toTraditional(section)
+  return String(section || '')
+    .replace(/第\s*(\d+)\s*页/g, (_, page) => `Page ${page}`)
+    .replaceAll('基础资料', 'Basic information')
+    .replaceAll('身份资料', 'Identity information')
+    .replaceAll('学历证明', 'Academic qualification proof')
+    .replaceAll('付款截图', 'Payment screenshot')
+}
+
+function localizeReviewResult(result) {
+  if (!result) return result
+  return {
+    ...result,
+    decisionText: localizedDecisionText(result.decisionText),
+    uploadedFiles: (result.uploadedFiles || []).map(localizedUploadedFile),
+    materials: (result.materials || []).map(localizedMaterial),
+    fields: (result.fields || []).map(localizedField),
+    reviewPages: (result.reviewPages || []).map(localizedReviewPage),
+    documentFieldGroups: (result.documentFieldGroups || []).map(localizedDocumentFieldGroup)
+  }
+}
+
+function localizedUploadedFile(file) {
+  if (currentLanguage.value === 'zh') return toTraditionalObject(file)
+  return {
+    ...file,
+    documentName: localizedDocumentName(file.documentName, file.materialId),
+    footerId: localizedTextValue(file.footerId)
+  }
+}
+
+function localizedReviewPage(page) {
+  if (currentLanguage.value === 'zh') return toTraditionalObject(page)
+  return {
+    ...page,
+    documentName: localizedDocumentName(page.documentName, page.materialId),
+    title: localizedSection(page.title)
+  }
+}
+
+function localizedDocumentFieldGroup(group) {
+  if (currentLanguage.value === 'zh') return toTraditionalObject(group)
+  return {
+    ...group,
+    materialName: localizedDocumentName(group.materialName, group.materialId),
+    pages: (group.pages || []).map((page) => ({
+      ...page,
+      title: localizedSection(page.title),
+      fields: (page.fields || []).map((item) => ({
+        ...item,
+        label: localizedFieldName(item.label)
+      }))
+    }))
+  }
+}
+
+function localizedTextValue(value) {
+  if (currentLanguage.value === 'zh') return toTraditional(value)
+  return COMMON_TEXT_TRANSLATIONS[value]?.en || value
+}
+
+function localizedDecisionText(value) {
+  if (currentLanguage.value === 'zh') return toTraditional(value)
+  if (!value) return value
+  if (String(value).includes('NOT YET COMPLETE')) {
+    return 'The Payment Status shows that the application process is not yet complete. Confirm payment completion before final approval.'
+  }
+  return value
+}
+
+function localizedFindings(findings) {
+  if (currentLanguage.value === 'zh') return toTraditionalObject(findings)
+  return findings.map((finding) => ({
+    ...finding,
+    title: localizedTextValue(finding.title),
+    text: localizedTextValue(finding.text),
+    source: localizedSection(localizedTextValue(finding.source))
+  }))
+}
+
+function localizedTemplate(template) {
+  if (!template) return template
+  if (currentLanguage.value === 'zh') return toTraditionalObject(template)
+  return {
+    ...template,
+    summaryText: `Missing core documents: ${template.summary.missingCoreMaterials}; required fields: ${template.summary.requiredFields}; required fields blank: ${template.summary.requiredMissingFields}; not recognised: ${template.summary.unrecognizedFields}; pending review: ${template.summary.reviewFields}.`,
+    overallBullets: (template.overallBullets || []).map((item) => ({
+      ...item,
+      label: localizedTextValue(item.label),
+      value: localizedTextValue(item.value)
+    })),
+    materialRows: (template.materialRows || []).map(localizedTemplateMaterialRow),
+    sections: (template.sections || []).map((section) => ({
+      ...section,
+      title: localizedTextValue(section.title),
+      rows: (section.rows || []).map(localizedTemplateFieldRow)
+    }))
+  }
+}
+
+function localizedTemplateMaterialRow(row) {
+  return {
+    ...row,
+    ...((MATERIAL_TEXT[row.id] || {}).en || {}),
+    statusLabel: localizedMaterialStatusLabel(row.status),
+    issue: localizedTextValue(row.issue)
+  }
+}
+
+function localizedTemplateFieldRow(row) {
+  const fieldText = FIELD_TEXT[row.key]?.en || {}
+  return {
+    ...row,
+    ...fieldText,
+    statusLabel: TEMPLATE_TEXT[row.status]?.en?.label || row.statusLabel,
+    displayValue: localizedTextValue(row.displayValue),
+    note: localizedTextValue(row.note),
+    sources: (row.sources || []).map(localizedSource),
+    conflicts: (row.conflicts || []).map((conflict) => ({
+      ...conflict,
+      sources: (conflict.sources || []).map(localizedSection)
+    }))
+  }
+}
+
+function localizedMaterialStatusLabel(status) {
+  return {
+    pass: 'Recognised',
+    fail: 'Missing document',
+    review: 'Pending review',
+    warn: 'Recorded'
+  }[status] || status
+}
+
+function localizedTemplateStatusLegend() {
+  if (currentLanguage.value === 'zh') return toTraditionalObject(TEMPLATE_STATUS_LEGEND)
+  return TEMPLATE_STATUS_LEGEND.map((item) => ({
+    ...item,
+    ...(TEMPLATE_TEXT[item.status]?.en || {})
+  }))
+}
+
+function setLanguage(languageId) {
+  if (LANGUAGES.some((language) => language.id === languageId)) {
+    currentLanguage.value = languageId
+  }
+}
+
+const COMMON_TEXT_TRANSLATIONS = {
+  '未识别': { en: 'Not recognised' },
+  '未填写': { en: 'Blank' },
+  '已识别并通过。': { en: 'Recognised and passed.' },
+  '必填字段未填写，需退回补正。': { en: 'Required field is blank; follow-up is required.' },
+  '未取得可靠识别结果，需要人工查看原件。': { en: 'No reliable recognition result was obtained. Manual inspection of the original is required.' },
+  '置信度偏低，需人工复核。': { en: 'Confidence is low. Manual review is required.' },
+  '案件信息': { en: 'Case information' },
+  '雇工信息': { en: 'Helper information' },
+  '雇主信息': { en: 'Employer information' },
+  '合约信息': { en: 'Contract information' },
+  '申请类别': { en: 'Application type' },
+  '细分类别': { en: 'Sub-type' },
+  '应上传/已上传材料': { en: 'Required/uploaded documents' },
+  '字段填写情况': { en: 'Field completion' },
+  '允许通过': { en: 'May approve' },
+  '需人工复核': { en: 'Manual review required' },
+  '不允许通过': { en: 'Do not approve' },
+  '付款状态显示申请流程尚未完成，需确认付款完成后再进入最终通过。': {
+    en: 'The Payment Status shows that the application process is not yet complete. Confirm payment completion before final approval.'
+  },
+  '付款页显示 “NOT YET COMPLETE”，需要补缴或确认付款完成状态。': {
+    en: 'The payment page shows "NOT YET COMPLETE". Payment completion must be confirmed before approval.'
+  },
+  '材料需复核：付款状态': { en: 'Document requires review: Payment Status' },
+  '付款状态 · Online payment page': { en: 'Payment Status · Online payment page' },
+  '缺少核心材料': { en: 'Missing core document' },
+  '材料需复核': { en: 'Document requires review' },
+  '毕业证明': { en: 'Graduation proof' },
+  '身份及旅行证件': { en: 'Identity and travel document' },
+  '付款状态': { en: 'Payment Status' }
+}
+
+const TRADITIONAL_PHRASES = [
+  ['香港出入境', '香港入境事務處'],
+  ['香港入境处', '香港入境事務處'],
+  ['入境处', '入境事務處'],
+  ['出入境', '入境事務'],
+  ['港澳通行证', '往來港澳通行證'],
+  ['香港身份证', '香港身份證'],
+  ['应届毕业生', '應屆畢業生'],
+  ['家庭佣工', '家庭傭工'],
+  ['外籍家庭佣工', '外籍家庭傭工'],
+  ['申请材料', '申請材料'],
+  ['申请类别', '申請類別'],
+  ['材料清单', '材料清單'],
+  ['付款状态', '付款狀態'],
+  ['识别结果', '識別結果'],
+  ['核验结果', '核驗結果'],
+  ['待复核', '待覆核'],
+  ['人工复核', '人工覆核'],
+  ['核验', '核驗'],
+  ['识别', '識別'],
+  ['申请', '申請'],
+  ['材料', '材料']
+]
+
+const TRADITIONAL_CHARS = {
+  认: '認',
+  识: '識',
+  证: '證',
+  验: '驗',
+  处: '處',
+  务: '務',
+  资: '資',
+  料: '料',
+  申: '申',
+  请: '請',
+  类: '類',
+  别: '別',
+  场: '場',
+  景: '景',
+  切: '切',
+  换: '換',
+  语: '語',
+  言: '言',
+  默: '默',
+  认: '認',
+  演: '演',
+  示: '示',
+  学: '學',
+  生: '生',
+  应: '應',
+  届: '屆',
+  毕: '畢',
+  业: '業',
+  首: '首',
+  次: '次',
+  后: '後',
+  留: '留',
+  工: '工',
+  作: '作',
+  逗: '逗',
+  毕: '畢',
+  内: '內',
+  地: '地',
+  非: '非',
+  本: '本',
+  科: '科',
+  或: '或',
+  以: '以',
+  上: '上',
+  课: '課',
+  程: '程',
+  个: '個',
+  月: '月',
+  选: '選',
+  择: '擇',
+  所: '所',
+  属: '屬',
+  勾: '勾',
+  交: '交',
+  互: '互',
+  官: '官',
+  方: '方',
+  清: '清',
+  单: '單',
+  标: '標',
+  明: '明',
+  审: '審',
+  批: '批',
+  范: '範',
+  围: '圍',
+  包: '包',
+  真: '真',
+  实: '實',
+  调: '調',
+  用: '用',
+  后: '後',
+  端: '端',
+  进: '進',
+  行: '行',
+  与: '與',
+  多: '多',
+  份: '份',
+  支: '支',
+  持: '持',
+  毕: '畢',
+  证: '證',
+  护: '護',
+  照: '照',
+  截: '截',
+  图: '圖',
+  已: '已',
+  列: '列',
+  表: '表',
+  滚: '滾',
+  动: '動',
+  空: '空',
+  全: '全',
+  大: '大',
+  小: '小',
+  未: '未',
+  页: '頁',
+  尾: '尾',
+  结: '結',
+  构: '構',
+  字: '字',
+  段: '段',
+  据: '據',
+  开: '開',
+  始: '始',
+  上传: '上傳',
+  选: '選',
+  份: '份',
+  视: '視',
+  图: '圖',
+  完: '完',
+  整: '整',
+  性: '性',
+  论: '論',
+  仅: '僅',
+  存: '存',
+  在: '在',
+  输: '輸',
+  出: '出',
+  进: '進',
+  入: '入',
+  返: '返',
+  回: '回',
+  重: '重',
+  新: '新',
+  原: '原',
+  文: '文',
+  按: '按',
+  码: '碼',
+  参: '參',
+  加: '加',
+  点: '點',
+  击: '擊',
+  右: '右',
+  侧: '側',
+  来: '來',
+  源: '源',
+  自: '自',
+  定: '定',
+  位: '位',
+  缩: '縮',
+  略: '略',
+  逐: '逐',
+  填: '填',
+  写: '寫',
+  状: '狀',
+  态: '態',
+  值: '值',
+  准: '準',
+  统: '統',
+  一: '一',
+  聚: '聚',
+  合: '合',
+  证: '證',
+  统: '統',
+  计: '計',
+  过: '過',
+  问: '問',
+  题: '題',
+  筛: '篩',
+  须: '須',
+  条: '條',
+  建: '建',
+  议: '議',
+  采: '採',
+  纳: '納',
+  归: '歸',
+  化: '化',
+  果: '果',
+  历: '歷',
+  经: '經',
+  雇: '僱',
+  主: '主',
+  名: '名',
+  称: '稱',
+  址: '址',
+  任: '任',
+  职: '職',
+  由: '由',
+  至: '至',
+  逐: '逐',
+  条: '條',
+  出: '出',
+  先: '先',
+  阻: '阻',
+  断: '斷',
+  精: '精',
+  确: '確',
+  关: '關',
+  键: '鍵',
+  发: '發',
+  现: '現',
+  提: '提',
+  示: '示',
+  整: '整',
+  体: '體',
+  草: '草',
+  拟: '擬',
+  层: '層',
+  缺: '缺',
+  错: '錯',
+  误: '誤',
+  于: '於',
+  义: '義',
+  渲: '渲',
+  染: '染',
+  顺: '順',
+  序: '序',
+  冲: '衝',
+  突: '突',
+  备: '備',
+  注: '註',
+  裁: '裁',
+  剪: '剪',
+  可: '可',
+  置: '置',
+  信: '信',
+  度: '度',
+  个: '個',
+  错: '錯',
+  检: '檢',
+  查: '查',
+  稍: '稍',
+  刷: '刷',
+  迟: '遲',
+  状: '狀',
+  费: '費',
+  录: '錄',
+  离: '離',
+  书: '書',
+  续: '續',
+  约: '約',
+  转: '轉',
+  副: '副',
+  份: '份',
+  复: '覆',
+  户: '戶',
+  资: '資',
+  济: '濟',
+  况: '況',
+  码: '碼',
+  数: '數',
+  评: '評',
+  临: '臨',
+  顾: '顧',
+  拥: '擁'
+}
+
+function toTraditional(value) {
+  if (typeof value !== 'string') return value
+  let text = value
+  for (const [source, target] of TRADITIONAL_PHRASES) {
+    text = text.replaceAll(source, target)
+  }
+  return Array.from(text).map((char) => TRADITIONAL_CHARS[char] || char).join('')
+}
+
+function toTraditionalObject(value) {
+  if (Array.isArray(value)) return value.map(toTraditionalObject)
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, toTraditionalObject(item)]))
+  }
+  return toTraditional(value)
+}
+
+const localizedDemoModes = computed(() => demoModes.map(localizedDemoMode))
+const demoFlowDescription = computed(() => t('demoFlowDescription'))
 
 const selectedDemoMode = computed(() => {
-  return demoModes.find((item) => item.id === selectedDemoModeId.value) || demoModes[0]
+  return localizedDemoModes.value.find((item) => item.id === selectedDemoModeId.value) || localizedDemoModes.value[0]
 })
 
 const isFdhMode = computed(() => selectedDemoModeId.value === 'fdh')
 
 const activeApplicationTypes = computed(() => {
-  return isFdhMode.value ? fdhApplicationTypes : studentApplicationTypes
+  const types = isFdhMode.value ? fdhApplicationTypes : studentApplicationTypes
+  return types.map(localizedApplicationType)
 })
 
 const activeScenarios = computed(() => {
@@ -77,19 +1162,15 @@ const activeScenarios = computed(() => {
 })
 
 const activeWorkflowLabel = computed(() => {
-  return isFdhMode.value ? '外籍家庭佣工入境审核' : 'IANG 应届毕业生在港首次申请'
+  return isFdhMode.value ? t('workflowFdh') : t('workflowStudent')
 })
 
 const uploadHelperText = computed(() => {
-  return isFdhMode.value
-    ? 'PDF / PNG / JPG · 支持 ID 988A、ID 988B、ID 407 与其他证明材料'
-    : 'PDF / PNG / JPG · 支持 ID 990A、毕业证明、港澳通行证 / 护照 / HKID、付款截图'
+  return isFdhMode.value ? t('uploadHelperFdh') : t('uploadHelperStudent')
 })
 
 const checklistDescription = computed(() => {
-  return isFdhMode.value
-    ? '材料 1-3 纳入最终判定；材料 4-12 只展示是否上传，不阻断本 demo 结论。'
-    : '展示 IANG 应届毕业生在港首次申请官方材料清单；标记“Demo审批”的材料参与当前结论。'
+  return isFdhMode.value ? t('checklistDescriptionFdh') : t('checklistDescriptionStudent')
 })
 
 const selectedApplicationType = computed(() => {
@@ -101,7 +1182,7 @@ const selectedScenario = computed(() => {
 })
 
 const checklistPreview = computed(() => {
-  return buildActiveReviewResult().materials
+  return buildActiveReviewResult().materials.map(localizedMaterial)
 })
 
 function buildActiveUploadedFiles() {
@@ -134,10 +1215,11 @@ const fieldRows = computed(() => {
 })
 
 const reviewableFieldRows = computed(() => reviewableFields(fieldRows.value))
+const localizedReviewableFieldRows = computed(() => reviewableFieldRows.value.map(localizedField))
 
 const displayReviewResult = computed(() => {
   if (!reviewResult.value) return null
-  return withDerivedDecision(reviewResult.value, reviewableFieldRows.value)
+  return localizeReviewResult(withDerivedDecision(reviewResult.value, reviewableFieldRows.value))
 })
 
 const displayFieldStats = computed(() => {
@@ -145,7 +1227,7 @@ const displayFieldStats = computed(() => {
 })
 
 const filteredFields = computed(() => {
-  const rows = reviewableFieldRows.value
+  const rows = localizedReviewableFieldRows.value
   if (fieldFilter.value === 'issues') return rows.filter((field) => field.status === 'fail')
   if (fieldFilter.value === 'review') return rows.filter((field) => field.status === 'review')
   if (fieldFilter.value === 'required') return rows.filter((field) => field.required)
@@ -167,23 +1249,26 @@ const nonEmploymentFields = computed(() => filteredFields.value)
 const employmentPeriods = computed(() => employmentPeriodsFromFields(filteredAllFields.value))
 
 function employmentValue(field) {
-  if (!field) return '未识别'
-  return field.suggestedValue || field.normalizedValue || '未识别'
+  if (!field) return t('unrecognised')
+  return localizedTextValue(field.suggestedValue || field.normalizedValue || t('unrecognised'))
 }
 
 const blockingFindings = computed(() => {
-  if (!reviewResult.value) return []
-  const materialFindings = reviewResult.value.materials
+  const result = displayReviewResult.value
+  if (!result) return []
+  const materialFindings = result.materials
     .filter((item) => item.blocking && (item.status === 'fail' || item.status === 'review'))
     .map((item) => ({
       id: `material:${item.id}`,
       status: item.status,
-      title: item.status === 'fail' ? `缺少核心材料：${item.shortName}` : `材料需复核：${item.shortName}`,
+      title: item.status === 'fail'
+        ? `${t('failMissingCore')}: ${item.shortName}`
+        : `${t('materialNeedsReview')}: ${item.shortName}`,
       text: item.statusText,
       source: `${item.shortName} · ${item.templateId}`
     }))
 
-  const fieldFindings = reviewableFieldRows.value
+  const fieldFindings = localizedReviewableFieldRows.value
     .filter((field) => field.blocking && (field.status === 'fail' || field.status === 'review'))
     .map((field) => ({
       id: `field:${field.key}`,
@@ -192,15 +1277,16 @@ const blockingFindings = computed(() => {
       text: field.issue || field.rule,
       source: field.sources.length
         ? field.sources.map((source) => `${source.documentName} · ${source.section} · ${source.fieldName}`).join('；')
-        : '未取得可用字段证据'
+        : t('noFieldEvidence')
     }))
 
-  return [...materialFindings, ...fieldFindings]
+  return localizedFindings([...materialFindings, ...fieldFindings])
 })
 
 const nonBlockingMaterialHints = computed(() => {
-  if (!reviewResult.value) return []
-  return reviewResult.value.materials.filter((item) => !item.blocking && item.status === 'warn')
+  const result = displayReviewResult.value
+  if (!result) return []
+  return result.materials.filter((item) => !item.blocking && item.status === 'warn')
 })
 
 const recognizedMaterials = computed(() => {
@@ -232,10 +1318,10 @@ const reviewSourcePages = computed(() => {
     return backendPages.map((page) => ({
       key: reviewPageKey(page),
       materialId: page.materialId || '',
-      documentName: page.documentName || page.materialId || '材料',
+      documentName: page.documentName || page.materialId || t('documentFallback'),
       filename: page.filename || '',
       pageNo: Number(page.pageNo) || 1,
-      title: page.title || `第 ${Number(page.pageNo) || 1} 页`,
+      title: page.title || pageLabel(Number(page.pageNo) || 1),
       imageDataUrl: page.imageDataUrl || '',
       imageWidth: Number(page.imageWidth) || 0,
       imageHeight: Number(page.imageHeight) || 0,
@@ -320,8 +1406,9 @@ const selectedFieldSource = computed(() => {
 
 const selectedLocatorText = computed(() => {
   const selected = selectedFieldSource.value
-  if (!selected) return '点击右侧字段来源后，左侧将定位到对应材料页面。'
-  return `当前定位：${selected.field.label} · ${selected.source.documentName || '材料'} ${selected.source.pageNo ? `第 ${selected.source.pageNo} 页` : ''}`
+  if (!selected) return t('currentLocatorEmpty')
+  const pageText = selected.source.pageNo ? pageLabel(selected.source.pageNo) : ''
+  return `${t('currentLocator')}: ${selected.field.label} · ${selected.source.documentName || t('documentFallback')} ${pageText}`
 })
 
 function fallbackReviewPages(result) {
@@ -329,10 +1416,10 @@ function fallbackReviewPages(result) {
   return groups.flatMap((group) => (group.pages || []).map((page) => ({
     key: `${group.materialId || group.materialName}:mock:${page.pageNo}`,
     materialId: group.materialId || '',
-    documentName: group.materialName || group.materialId || '材料',
+    documentName: group.materialName || group.materialId || t('documentFallback'),
     filename: '',
     pageNo: Number(page.pageNo) || 1,
-    title: page.title || `第 ${Number(page.pageNo) || 1} 页`,
+    title: page.title || pageLabel(Number(page.pageNo) || 1),
     imageDataUrl: '',
     imageWidth: 0,
     imageHeight: 0,
@@ -370,6 +1457,10 @@ function sourcePageNo(source) {
   const section = String(source?.section || '')
   const match = section.match(/第\s*(\d+)\s*页|page[_\s-]*(\d+)/i)
   return match ? Number(match[1] || match[2]) || 0 : 0
+}
+
+function pageLabel(pageNo) {
+  return currentLanguage.value === 'zh' ? t('page', { page: pageNo }) : `${t('page')} ${pageNo}`
 }
 
 function fieldSourceKey(field, source, index) {
@@ -526,7 +1617,8 @@ function scrollToReviewPage(pageKey) {
 }
 
 const reviewJsonPayload = computed(() => {
-  const result = displayReviewResult.value
+  if (!reviewResult.value) return {}
+  const result = withDerivedDecision(reviewResult.value, reviewableFieldRows.value)
   if (!result) return {}
   return {
     applicationType: {
@@ -606,21 +1698,73 @@ const verificationView = computed(() => {
 const verificationTemplate = computed(() => {
   const result = displayReviewResult.value
   if (!result) return null
-  return buildVerificationTemplate({
+  return localizedTemplate(buildVerificationTemplate({
     ...result,
-    fields: reviewableFieldRows.value
+    fields: localizedReviewableFieldRows.value
   }, {
     applicationTypeLabel: selectedApplicationType.value.label,
     workflowLabel: activeWorkflowLabel.value
-  })
+  }))
 })
 
-const templateStatusLegend = TEMPLATE_STATUS_LEGEND
+const templateStatusLegend = computed(() => localizedTemplateStatusLegend())
+const progressMessage = computed(() => localizedJobStatusMessage(jobStatus.value?.message) || t('progressFallback'))
 
 function scrollMainPageToTop() {
   nextTick(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
   })
+}
+
+function localizedJobStatusMessage(message) {
+  const text = String(message || '').trim()
+  if (!text) return ''
+  if (currentLanguage.value === 'zh') return toTraditional(text)
+  return translateJobStatusMessage(text)
+}
+
+function translateJobStatusMessage(message) {
+  const dynamicRules = [
+    {
+      pattern: /^正在渲染并识别材料类型：(.+)$/,
+      render: ([filename]) => `Rendering and recognising document type: ${filename}`
+    },
+    {
+      pattern: /^正在准备字段提取范围：(.+)$/,
+      render: ([filename]) => `Preparing field extraction scope: ${filename}`
+    },
+    {
+      pattern: /^正在按已识别模板执行字段提取：(.+)$/,
+      render: ([filename]) => `Extracting fields using recognised template: ${filename}`
+    },
+    {
+      pattern: /^正在调用本地 LLM 做结构化提取：(.+)$/,
+      render: ([filename]) => `Calling local LLM for structured extraction: ${filename}`
+    },
+    {
+      pattern: /^正在识别第 (\d+) 页：(.+)$/,
+      render: ([page, filename]) => `Recognising page ${page}: ${filename}`
+    },
+    {
+      pattern: /^正在识别第 (\d+) 页第 (\d+) 次请求：(.+)$/,
+      render: ([page, attempt, filename]) => `Recognising page ${page}, request ${attempt}: ${filename}`
+    },
+    {
+      pattern: /^已完成 (\d+) \/ (\d+) 份材料识别。$/,
+      render: ([processed, total]) => `Completed recognition for ${processed} / ${total} documents.`
+    }
+  ]
+  for (const rule of dynamicRules) {
+    const match = message.match(rule.pattern)
+    if (match) return rule.render(match.slice(1))
+  }
+  return {
+    '材料审批任务已创建，等待开始处理。': 'The document review task has been created and is waiting to start.',
+    '正在汇总材料清单、标准化字段和跨文件规则结论。': 'Summarising the document checklist, standardised fields and cross-document rule findings.',
+    '材料审批识别完成。': 'Document review recognition completed.',
+    '材料审批任务已取消。': 'The document review task has been cancelled.',
+    '材料审批任务失败。': 'The document review task failed.'
+  }[message] || message
 }
 
 function setResultView(view) {
@@ -688,10 +1832,10 @@ function handleSelectedFiles(files) {
       uploadId: entry.uploadId,
       batchNo: entry.batchNo,
       materialId: 'pending',
-      documentName: '待识别',
+      documentName: t('pendingRecognition'),
       filename: entry.file.name,
-      pages: '待识别',
-      footerId: '等待开始识别',
+      pages: t('pendingRecognition'),
+      footerId: t('pendingRecognition'),
       size: entry.file.size
     }))
   ]
@@ -725,7 +1869,7 @@ async function startRecognition() {
     await startBackendRecognition()
     return
   }
-  apiError.value = '请先上传申请材料后再开始识别'
+  apiError.value = t('uploadFirstError')
   reviewResult.value = null
   jobStatus.value = null
 }
@@ -740,7 +1884,7 @@ async function startBackendRecognition() {
     processedFiles: 0,
     progress: 1,
     activeFilename: '',
-    message: '正在上传材料并创建识别任务。',
+    message: t('jobUploadMessage'),
     error: '',
     result: null
   }
@@ -761,7 +1905,7 @@ async function startBackendRecognition() {
     const completed = await pollFdhJob(started.jobId)
     jobStatus.value = completed
     if (completed.status !== 'completed') {
-      throw new Error(completed.error || completed.message || '识别任务未完成。')
+      throw new Error(completed.error || completed.message || t('jobIncomplete'))
     }
     const result = completed.result
     reviewResult.value = result
@@ -771,7 +1915,7 @@ async function startBackendRecognition() {
     uploadedFiles.value = result?.uploadedFiles || uploadedFiles.value
     startVerificationConclusion(result)
   } catch (error) {
-    apiError.value = error?.message || '后端识别失败。'
+    apiError.value = localizedTextValue(error?.message || t('backendFailed'))
     jobStatus.value = null
   } finally {
     processing.value = false
@@ -820,7 +1964,7 @@ function uploadedFileProgressLabel() {
   if (processing.value && Number.isFinite(progress) && !['failed', 'canceled'].includes(jobStatus.value?.status)) {
     return `${Math.max(0, Math.min(100, Math.round(progress)))}%`
   }
-  return '待识别'
+  return t('pendingRecognition')
 }
 
 async function pollFdhJob(jobId) {
@@ -834,7 +1978,7 @@ async function pollFdhJob(jobId) {
       return latest
     }
   }
-  throw new Error('识别任务仍在处理中，请稍后刷新任务状态或检查后端日志。')
+  throw new Error(t('jobStillProcessing'))
 }
 
 function mergeJobStatus(nextStatus) {
@@ -872,7 +2016,10 @@ async function requestJson(url, options = {}) {
     return response.json()
   } catch (error) {
     if (error?.name === 'AbortError') {
-      throw new Error('请求超时，请检查后端服务后重试。')
+      if (currentLanguage.value === 'zh') {
+        throw new Error('请求超时，请检查后端服务后重试。')
+      }
+      throw new Error(t('requestTimeout'))
     }
     throw error
   } finally {
@@ -906,11 +2053,11 @@ function resetDemo() {
 
 function statusLabel(status) {
   return {
-    pass: 'PASS',
-    fail: 'FAIL',
-    review: 'REVIEW',
-    warn: 'WARN',
-    muted: 'N/A'
+    pass: t('statusPass'),
+    fail: t('statusFail'),
+    review: t('statusReview'),
+    warn: t('statusWarn'),
+    muted: t('statusMuted')
   }[status] || status
 }
 
@@ -935,18 +2082,18 @@ function templateSourceConfidence(source) {
 
 function decisionLabel(decision) {
   return {
-    PASS: '允许通过',
-    REVIEW: '需人工复核',
-    FAIL: '不允许通过'
+    PASS: t('decisionPass'),
+    REVIEW: t('decisionReview'),
+    FAIL: t('decisionFail')
   }[decision] || decision
 }
 
 function materialRequirementLabel(material) {
   if (material.requirementLabel) return material.requirementLabel
-  if (!material.applicable) return '不适用'
-  if (material.core) return '核心必交'
-  if (material.conditional) return '条件应交'
-  return '官方应交'
+  if (!material.applicable) return t('notApplicable')
+  if (material.core) return t('coreRequired')
+  if (material.conditional) return t('conditionallyRequired')
+  return t('officialRequired')
 }
 
 async function openVerificationPage() {
@@ -1116,27 +2263,41 @@ function verificationLineStatus(line) {
   <main class="fdh-app">
     <header class="app-header">
       <div class="brand-block">
-        <p class="eyebrow">Immigration Document Review Demo</p>
-        <h1>香港出入境申请材料识别与核验Demo</h1>
+        <p class="eyebrow">{{ t('eyebrow') }}</p>
+        <h1>{{ t('title') }}</h1>
         <p class="header-copy">
           {{ demoFlowDescription }}
         </p>
       </div>
 
-      <div class="workflow-tabs" role="tablist" aria-label="申请场景切换">
-        <button
-          v-for="mode in demoModes"
-          :key="mode.id"
-          type="button"
-          role="tab"
-          :aria-selected="selectedDemoModeId === mode.id"
-          :class="{ active: selectedDemoModeId === mode.id }"
-          :disabled="processing"
-          @click="selectDemoMode(mode.id)"
-        >
-          <strong>{{ mode.label }}</strong>
-          <span>{{ mode.description }}</span>
-        </button>
+      <div class="header-controls">
+        <div class="language-switcher" role="group" :aria-label="t('language')">
+          <button
+            v-for="language in LANGUAGES"
+            :key="language.id"
+            type="button"
+            :class="{ active: currentLanguage === language.id }"
+            @click="setLanguage(language.id)"
+          >
+            {{ language.label }}
+          </button>
+        </div>
+
+        <div class="workflow-tabs" role="tablist" :aria-label="t('caseSwitch')">
+          <button
+            v-for="mode in localizedDemoModes"
+            :key="mode.id"
+            type="button"
+            role="tab"
+            :aria-selected="selectedDemoModeId === mode.id"
+            :class="{ active: selectedDemoModeId === mode.id }"
+            :disabled="processing"
+            @click="selectDemoMode(mode.id)"
+          >
+            <strong>{{ mode.label }}</strong>
+            <span>{{ mode.description }}</span>
+          </button>
+        </div>
       </div>
 
     </header>
@@ -1146,8 +2307,8 @@ function verificationLineStatus(line) {
         <section class="case-section" aria-labelledby="case-title">
           <div class="section-heading">
             <div>
-              <h2 id="case-title">{{ isFdhMode ? '选择申请类别' : '当前学生出入境场景' }}</h2>
-              <p>{{ isFdhMode ? '用户只能选择所属类别；材料清单中的勾选状态不可交互。' : '默认展示 IANG 应届毕业生在港首次申请，材料清单标明官方要求和 Demo 审批范围。' }}</p>
+              <h2 id="case-title">{{ isFdhMode ? t('caseTitleFdh') : t('caseTitleStudent') }}</h2>
+              <p>{{ isFdhMode ? t('caseHintFdh') : t('caseHintStudent') }}</p>
             </div>
             <span class="selected-case">{{ selectedApplicationType.checklistKey }}</span>
           </div>
@@ -1171,7 +2332,7 @@ function verificationLineStatus(line) {
         <section class="checklist-section" aria-labelledby="checklist-title">
           <div class="section-heading">
             <div>
-              <h2 id="checklist-title">{{ isFdhMode ? '该类别官方材料清单' : 'IANG 应届毕业生在港首次申请材料清单' }}</h2>
+              <h2 id="checklist-title">{{ isFdhMode ? t('checklistTitleFdh') : t('checklistTitleStudent') }}</h2>
               <p>{{ checklistDescription }}</p>
             </div>
           </div>
@@ -1203,8 +2364,8 @@ function verificationLineStatus(line) {
         <section class="upload-section" aria-labelledby="upload-title">
           <div class="section-heading">
             <div>
-              <h2 id="upload-title">上传申请材料包</h2>
-              <p>{{ isFdhMode ? '上传家庭佣工申请材料后，系统将调用后端进行识别与核验。' : '上传真实学生申请材料后，系统将调用后端进行识别与核验。' }}</p>
+              <h2 id="upload-title">{{ t('uploadTitle') }}</h2>
+              <p>{{ isFdhMode ? t('uploadHintFdh') : t('uploadHintStudent') }}</p>
             </div>
           </div>
 
@@ -1227,7 +2388,7 @@ function verificationLineStatus(line) {
                   <path d="M5 20h14" />
                 </svg>
               </span>
-              <strong>选择并上传多份申请材料</strong>
+              <strong>{{ t('dropzoneTitle') }}</strong>
               <small>{{ uploadHelperText }}</small>
             </button>
             <input
@@ -1242,8 +2403,8 @@ function verificationLineStatus(line) {
             <div class="uploaded-panel">
               <div class="uploaded-header">
                 <div>
-                  <strong>已选择材料</strong>
-                  <span>{{ uploadedFiles.length }} 份{{ uploadedFiles.length > 3 ? ' · 列表可滚动' : '' }}</span>
+                  <strong>{{ t('selectedFiles') }}</strong>
+                  <span>{{ uploadedFiles.length }} {{ t('filesUnit') }}{{ uploadedFiles.length > 3 ? ` · ${t('listScrollable')}` : '' }}</span>
                 </div>
                 <button
                   v-if="uploadedFiles.length"
@@ -1252,7 +2413,7 @@ function verificationLineStatus(line) {
                   :disabled="processing"
                   @click="clearUploadedFiles"
                 >
-                  清空全部
+                  {{ t('clearAll') }}
                 </button>
               </div>
 
@@ -1267,7 +2428,7 @@ function verificationLineStatus(line) {
                     class="remove-file-icon"
                     type="button"
                     :disabled="processing"
-                    :aria-label="`删除 ${file.filename}`"
+                    :aria-label="`${t('clearAll')} ${file.filename}`"
                     @click="removeUploadedFile(file.uploadId)"
                   >
                     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -1278,12 +2439,12 @@ function verificationLineStatus(line) {
                   <div>
                     <strong>{{ file.filename }}</strong>
                     <span>
-                      {{ fileSizeLabel(file.size) || '大小未知' }} · {{ uploadedFileProgressLabel() }}
+                      {{ fileSizeLabel(file.size) || t('unknownSize') }} · {{ uploadedFileProgressLabel() }}
                     </span>
                   </div>
                 </article>
               </div>
-              <div v-else class="empty-panel">尚未选择材料。请先上传申请材料后再开始识别。</div>
+              <div v-else class="empty-panel">{{ t('emptyUpload') }}</div>
             </div>
           </div>
 
@@ -1292,7 +2453,7 @@ function verificationLineStatus(line) {
               <div class="progress-fill" :style="{ width: uploadedFileObjects.length ? `${jobStatus?.progress || 8}%` : '72%' }"></div>
             </div>
             <div class="progress-meta">
-              <span>{{ jobStatus?.message || '正在识别页尾标识、页面结构和字段证据' }}</span>
+              <span>{{ progressMessage }}</span>
               <strong>{{ `${jobStatus?.progress || 0}%` }}</strong>
             </div>
           </div>
@@ -1302,7 +2463,7 @@ function verificationLineStatus(line) {
           </div>
 
           <button class="primary-action" type="button" :disabled="processing" @click="startRecognition">
-            {{ processing ? '识别中...' : '开始识别' }}
+            {{ processing ? t('recognizing') : t('startRecognition') }}
           </button>
         </section>
       </div>
@@ -1313,16 +2474,16 @@ function verificationLineStatus(line) {
         <div class="file-summary">
           <span class="file-label">{{ selectedDemoMode.shortLabel }}</span>
           <strong>{{ selectedApplicationType.label }}</strong>
-          <span>{{ reviewResult.uploadedFiles.length }} 份上传材料</span>
+          <span>{{ reviewResult.uploadedFiles.length }} {{ t('uploadedMaterials') }}</span>
         </div>
         <div class="result-view-controls">
-          <div class="result-tabs" role="tablist" aria-label="结果视图切换">
+          <div class="result-tabs" role="tablist" :aria-label="t('resultTabs')">
             <button
               type="button"
               :class="{ active: resultView === 'recognition' }"
               @click="setResultView('recognition')"
             >
-              识别结果
+              {{ t('recognitionResult') }}
             </button>
             <button
               type="button"
@@ -1343,10 +2504,10 @@ function verificationLineStatus(line) {
               :disabled="verificationLoading"
               @click="openVerificationPage"
             >
-              进入核验结果页
+              {{ t('openVerification') }}
             </button>
-            <button v-else class="secondary-action" type="button" @click="setResultView('recognition')">返回识别结果</button>
-            <button class="secondary-action" type="button" @click="resetDemo">重新上传</button>
+            <button v-else class="secondary-action" type="button" @click="setResultView('recognition')">{{ t('backToRecognition') }}</button>
+            <button class="secondary-action" type="button" @click="resetDemo">{{ t('reupload') }}</button>
           </div>
         </div>
       </div>
@@ -1354,8 +2515,8 @@ function verificationLineStatus(line) {
       <div v-if="resultView === 'recognition'" class="review-workspace">
         <section class="recognized-materials-panel">
           <div class="recognized-materials-heading">
-            <h2>已识别材料</h2>
-            <p>{{ recognizedMaterials.length }} 份材料参与当前识别结果</p>
+            <h2>{{ t('recognizedMaterials') }}</h2>
+            <p>{{ recognizedMaterials.length }} {{ t('recognizedMaterialsCount') }}</p>
           </div>
           <div class="recognized-material-list">
             <article
@@ -1366,7 +2527,7 @@ function verificationLineStatus(line) {
             >
               <strong>{{ material.shortName }}</strong>
               <span>{{ material.templateId || material.scopeText }}</span>
-              <small>{{ material.pages ? `${material.pages} 页` : '页数待识别' }} · {{ material.statusText }}</small>
+              <small>{{ material.pages ? `${material.pages} ${currentLanguage === 'zh' ? '頁' : 'pages'}` : t('pagesPending') }} · {{ material.statusText }}</small>
             </article>
           </div>
         </section>
@@ -1374,13 +2535,13 @@ function verificationLineStatus(line) {
         <section class="source-review-panel">
           <div class="panel-heading source-review-heading">
             <div>
-              <h2>材料原文</h2>
-              <p>按材料和页码展示参与识别的原始页面；点击右侧字段来源后自动定位。</p>
+              <h2>{{ t('sourcePagesTitle') }}</h2>
+              <p>{{ t('sourcePagesHint') }}</p>
             </div>
             <span class="locator-summary">{{ selectedLocatorText }}</span>
           </div>
           <div class="source-review-body">
-            <nav class="source-page-thumbs" aria-label="材料页缩略图">
+            <nav class="source-page-thumbs" :aria-label="t('sourceThumbs')">
               <button
                 v-for="page in reviewSourcePages"
                 :key="page.key"
@@ -1390,7 +2551,7 @@ function verificationLineStatus(line) {
                 @click="scrollToReviewPage(page.key)"
               >
                 <strong>{{ page.documentName }}</strong>
-                <span>第 {{ page.pageNo }} 页</span>
+                <span>{{ pageLabel(page.pageNo) }}</span>
               </button>
             </nav>
             <div class="source-page-scroll">
@@ -1403,10 +2564,10 @@ function verificationLineStatus(line) {
               >
                 <header>
                   <strong>{{ page.documentName }}</strong>
-                  <span>{{ page.filename || page.title }} · 第 {{ page.pageNo }} 页</span>
+                  <span>{{ page.filename || page.title }} · {{ pageLabel(page.pageNo) }}</span>
                 </header>
                 <div v-if="page.imageDataUrl" class="source-page-image">
-                  <img :src="page.imageDataUrl" :alt="`${page.documentName} 第 ${page.pageNo} 页`">
+                  <img :src="page.imageDataUrl" :alt="`${page.documentName} ${pageLabel(page.pageNo)}`">
                   <button
                     v-for="row in pageSourceRows(page)"
                     :id="sourceDomId(row.key)"
@@ -1427,12 +2588,12 @@ function verificationLineStatus(line) {
                     :class="item.status"
                   >
                     <span>{{ item.label }}</span>
-                    <strong>{{ item.value || '未识别' }}</strong>
+                    <strong>{{ item.value || t('unrecognised') }}</strong>
                   </div>
                 </div>
               </article>
               <div v-if="!reviewSourcePages.length" class="source-page-empty">
-                暂未取得原文页面。请先上传并完成材料识别。
+                {{ t('noSourcePages') }}
               </div>
             </div>
           </div>
@@ -1442,8 +2603,8 @@ function verificationLineStatus(line) {
           <section v-if="displayReviewResult.documentFieldGroups?.length" class="document-fields-panel locator-document-fields">
             <div class="panel-heading">
               <div>
-                <h2>材料逐页字段识别</h2>
-                <p>按材料和页码展示参与识别的原始字段；点击字段行后，左侧原文自动定位并只高亮当前字段。</p>
+                <h2>{{ t('documentFieldsTitle') }}</h2>
+                <p>{{ t('documentFieldsHint') }}</p>
               </div>
             </div>
             <div class="document-group-list">
@@ -1460,12 +2621,12 @@ function verificationLineStatus(line) {
                 </header>
                 <div class="document-page-list">
                   <section v-for="page in group.pages" :key="`${group.materialId}:${page.pageNo}`" class="document-page-card">
-                    <h3>第 {{ page.pageNo }} 页 · {{ page.title }}</h3>
+                    <h3>{{ pageLabel(page.pageNo) }} · {{ page.title }}</h3>
                     <div class="document-field-table">
                       <div class="document-field-row document-field-head">
-                        <span>字段</span>
-                        <span>填写内容 / 识别值</span>
-                        <span>状态</span>
+                        <span>{{ t('field') }}</span>
+                        <span>{{ t('filledOrRecognisedValue') }}</span>
+                        <span>{{ t('status') }}</span>
                       </div>
                       <button
                         v-for="item in page.fields"
@@ -1476,9 +2637,9 @@ function verificationLineStatus(line) {
                         @click="selectDocumentField(group, page, item)"
                       >
                         <span>{{ item.label }}</span>
-                        <strong>{{ item.value || '未识别' }}</strong>
+                        <strong>{{ item.value || t('unrecognised') }}</strong>
                         <span class="document-field-status">
-                          <small v-if="sourceConfidence(item)">值 {{ sourceConfidence(item) }}%</small>
+                          <small v-if="sourceConfidence(item)">{{ t('valueConfidence') }} {{ sourceConfidence(item) }}%</small>
                           <span class="status-badge" :class="item.status">{{ statusLabel(item.status) }}</span>
                         </span>
                       </button>
@@ -1492,22 +2653,22 @@ function verificationLineStatus(line) {
           <section class="fields-panel">
             <div class="panel-heading fields-heading">
               <div>
-                <h2>标准化字段核验</h2>
-                <p>字段按统一 key 聚合；点击字段或来源可定位左侧原文证据。</p>
+                <h2>{{ t('normalizedFieldsTitle') }}</h2>
+                <p>{{ t('normalizedFieldsHint') }}</p>
               </div>
-              <div class="field-metrics" aria-label="字段统计">
-                <span><strong>{{ displayFieldStats.total }}</strong>全部字段</span>
-                <span><strong>{{ displayFieldStats.pass }}</strong>通过</span>
-                <span><strong>{{ displayFieldStats.fail }}</strong>问题</span>
-                <span><strong>{{ displayFieldStats.review }}</strong>待复核</span>
+              <div class="field-metrics" :aria-label="t('fieldStats')">
+                <span><strong>{{ displayFieldStats.total }}</strong>{{ t('allFields') }}</span>
+                <span><strong>{{ displayFieldStats.pass }}</strong>{{ t('passed') }}</span>
+                <span><strong>{{ displayFieldStats.fail }}</strong>{{ t('issues') }}</span>
+                <span><strong>{{ displayFieldStats.review }}</strong>{{ t('pendingReview') }}</span>
               </div>
             </div>
 
-            <div class="filter-row" role="tablist" aria-label="字段筛选">
-              <button type="button" :class="{ active: fieldFilter === 'all' }" @click="fieldFilter = 'all'">全部字段</button>
-              <button type="button" :class="{ active: fieldFilter === 'issues' }" @click="fieldFilter = 'issues'">仅看问题</button>
-              <button type="button" :class="{ active: fieldFilter === 'review' }" @click="fieldFilter = 'review'">仅看待人工审核</button>
-              <button type="button" :class="{ active: fieldFilter === 'required' }" @click="fieldFilter = 'required'">仅看必填字段</button>
+            <div class="filter-row" role="tablist" :aria-label="t('fieldFilter')">
+              <button type="button" :class="{ active: fieldFilter === 'all' }" @click="fieldFilter = 'all'">{{ t('allFields') }}</button>
+              <button type="button" :class="{ active: fieldFilter === 'issues' }" @click="fieldFilter = 'issues'">{{ t('onlyIssues') }}</button>
+              <button type="button" :class="{ active: fieldFilter === 'review' }" @click="fieldFilter = 'review'">{{ t('onlyReview') }}</button>
+              <button type="button" :class="{ active: fieldFilter === 'required' }" @click="fieldFilter = 'required'">{{ t('onlyRequired') }}</button>
             </div>
 
             <div class="field-card-list">
@@ -1521,10 +2682,10 @@ function verificationLineStatus(line) {
                       <span>{{ field.category }}</span>
                       <h3>{{ field.label }}</h3>
                       <code>{{ field.key }}</code>
-                      <small class="field-confidence">综合置信度 {{ averageFieldConfidence(field) || '-' }}% · {{ field.sources.length }} 条来源</small>
+                      <small class="field-confidence">{{ t('overallConfidence') }} {{ averageFieldConfidence(field) || '-' }}% · {{ field.sources.length }} {{ t('sources') }}</small>
                     </div>
                     <div class="field-card-actions">
-                      <span v-if="field.required" class="required-pill">必填</span>
+                      <span v-if="field.required" class="required-pill">{{ t('required') }}</span>
                       <span class="status-badge" :class="field.status">{{ statusLabel(field.status) }}</span>
                     </div>
                   </header>
@@ -1551,22 +2712,22 @@ function verificationLineStatus(line) {
                           <span v-else>{{ segment.text }}</span>
                         </template>
                       </strong>
-                      <span class="source-confidence-pill">值 {{ sourceConfidence(source) }}%</span>
+                      <span class="source-confidence-pill">{{ t('valueConfidence') }} {{ sourceConfidence(source) }}%</span>
                       <span class="source-confidence-pill" :class="{ muted: !locatorConfidence(source) }">
-                        {{ locatorConfidence(source) ? `定位 ${locatorConfidence(source)}%` : '未定位' }}
+                        {{ locatorConfidence(source) ? `${t('locatorConfidence')} ${locatorConfidence(source)}%` : t('notLocated') }}
                       </span>
                     </button>
                     <div v-if="!field.sources.length" class="source-evidence-empty">
-                      未取得材料证据
+                      {{ t('noEvidence') }}
                     </div>
                   </div>
 
                   <div class="field-value-panel compact">
                     <div>
-                      <span>{{ field.correctionApplied ? '建议采用值' : '归一化结果' }}</span>
+                      <span>{{ field.correctionApplied ? t('recommendedValue') : t('normalizedResult') }}</span>
                       <strong>{{ field.suggestedValue || field.normalizedValue }}</strong>
                       <small v-if="field.correctionApplied" class="field-original-value">
-                        原始归一结果：{{ field.rawNormalizedValue }}
+                        {{ t('originalNormalizedResult') }}: {{ field.rawNormalizedValue }}
                       </small>
                     </div>
                     <div v-if="field.correctionApplied" class="issue-box review">
@@ -1579,21 +2740,21 @@ function verificationLineStatus(line) {
                 </article>
 
                 <section v-if="isEmploymentPeriodAnchorField(field) && employmentPeriods.length" class="employment-period-group">
-                  <h3 class="employment-period-title">家庭佣工的工作经验</h3>
+                  <h3 class="employment-period-title">{{ t('employmentExperience') }}</h3>
                   <article v-for="period in employmentPeriods" :key="period.n" class="employment-period-card">
-                    <div class="employment-period-header">雇主{{ period.n }}</div>
+                    <div class="employment-period-header">{{ t('employer') }} {{ period.n }}</div>
                     <dl class="employment-period-body">
                       <div v-if="period.nameField" class="employment-period-row">
-                        <dt>雇主{{ period.n }}名称</dt>
+                        <dt>{{ t('employer') }} {{ period.n }} {{ t('employerName') }}</dt>
                         <dd>{{ employmentValue(period.nameField) }}</dd>
                       </div>
                       <div v-if="period.addressField" class="employment-period-row">
-                        <dt>地址</dt>
+                        <dt>{{ t('address') }}</dt>
                         <dd>{{ employmentValue(period.addressField) }}</dd>
                       </div>
                       <div v-if="period.periodFromField || period.periodToField" class="employment-period-row">
-                        <dt>任职日期</dt>
-                        <dd>由 {{ employmentValue(period.periodFromField) }} 至 {{ employmentValue(period.periodToField) }}</dd>
+                        <dt>{{ t('employmentPeriod') }}</dt>
+                        <dd>{{ t('from') }} {{ employmentValue(period.periodFromField) }} {{ t('to') }} {{ employmentValue(period.periodToField) }}</dd>
                       </div>
                     </dl>
                   </article>
@@ -1604,8 +2765,8 @@ function verificationLineStatus(line) {
 
           <section class="findings-panel compact-findings">
             <div class="panel-heading">
-              <h2>逐条结论与出处</h2>
-              <p>先列阻断或待复核问题；出处精确到材料名称、章节和字段名称。</p>
+              <h2>{{ t('findingsTitle') }}</h2>
+              <p>{{ t('findingsHint') }}</p>
             </div>
             <div v-if="blockingFindings.length" class="finding-list">
               <article v-for="finding in blockingFindings" :key="finding.id" class="finding-item" :class="finding.status">
@@ -1613,17 +2774,17 @@ function verificationLineStatus(line) {
                 <div>
                   <strong>{{ finding.title }}</strong>
                   <p>{{ finding.text }}</p>
-                  <small>出处：{{ finding.source }}</small>
+                  <small>{{ t('source') }}: {{ finding.source }}</small>
                 </div>
               </article>
             </div>
             <div v-else class="finding-pass">
-              核心材料和关键字段未发现阻断或待人工复核问题。
+              {{ t('noBlockingFindings') }}
             </div>
             <div v-if="nonBlockingMaterialHints.length" class="nonblocking-box">
-              <strong>非阻断提示</strong>
+              <strong>{{ t('nonBlockingHint') }}</strong>
               <span>
-                {{ nonBlockingMaterialHints.map((item) => `${item.shortName}：${item.statusText}`).join('；') }}
+                {{ nonBlockingMaterialHints.map((item) => `${item.shortName}: ${item.statusText}`).join('；') }}
               </span>
             </div>
           </section>
@@ -1633,7 +2794,7 @@ function verificationLineStatus(line) {
         <div class="panel-heading">
           <div>
             <h2>JSON</h2>
-            <p>包含材料完整性、字段清单识别结果，以及字段审核结论；图片快照仅保留是否存在，不输出 base64。</p>
+            <p>{{ t('jsonDescription') }}</p>
           </div>
         </div>
         <pre class="json-preview">{{ reviewJsonPreview }}</pre>
@@ -1641,7 +2802,7 @@ function verificationLineStatus(line) {
       <section v-else class="verification-page">
         <div class="panel-heading">
           <div>
-            <h2>核验结果页</h2>
+            <h2>{{ t('verificationPage') }}</h2>
             <p>{{ demoFlowDescription }}</p>
           </div>
           <span class="status-chip" :class="`decision-${displayReviewResult.decision.toLowerCase()}`">
@@ -1650,14 +2811,14 @@ function verificationLineStatus(line) {
         </div>
 
         <div v-if="verificationLoading" class="verification-loading" aria-live="polite">
-          正在生成 Minutes 草拟建议...
+          {{ t('generatingMinutes') }}
         </div>
         <div v-if="verificationError" class="verification-note" role="status">
           {{ verificationError }}
         </div>
         <div v-if="verificationTemplate" class="verification-output">
           <div class="verification-summary-card" :class="`decision-${displayReviewResult.decision.toLowerCase()}`">
-            <span>整体结论</span>
+            <span>{{ t('overallConclusion') }}</span>
             <strong>{{ displayReviewResult.decision }} - {{ displayReviewResult.decisionText }}</strong>
             <p>{{ verificationTemplate.summaryText }}</p>
             <ul class="overall-bullet-list">
@@ -1668,7 +2829,7 @@ function verificationLineStatus(line) {
             </ul>
           </div>
 
-          <div class="template-status-legend" aria-label="字段状态图例">
+          <div class="template-status-legend" :aria-label="t('fieldStatusLegend')">
             <span v-for="item in templateStatusLegend" :key="item.status" class="template-status-pill" :class="item.status">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path :d="templateStatusIconPath(item.status)" />
@@ -1680,16 +2841,16 @@ function verificationLineStatus(line) {
 
           <section class="verification-section">
             <div class="panel-heading">
-              <h3>材料层核验</h3>
-              <p>材料缺失、缺页、模板错误属于材料层面；不展示当前类别不要求的材料。</p>
+              <h3>{{ t('materialVerification') }}</h3>
+              <p>{{ t('materialVerificationHint') }}</p>
             </div>
             <table class="material-template-table">
               <thead>
                 <tr>
-                  <th>材料</th>
-                  <th>模板 / 页尾标识</th>
-                  <th>核验状态</th>
-                  <th>备注</th>
+                  <th>{{ t('material') }}</th>
+                  <th>{{ t('templateOrFooter') }}</th>
+                  <th>{{ t('verificationStatus') }}</th>
+                  <th>{{ t('remarks') }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -1699,7 +2860,7 @@ function verificationLineStatus(line) {
                   <td>
                     <span class="status-badge" :class="material.status">{{ material.statusLabel }}</span>
                   </td>
-                  <td>{{ material.issue || '已纳入材料完整性判断。' }}</td>
+                  <td>{{ material.issue || t('includedInCompleteness') }}</td>
                 </tr>
               </tbody>
             </table>
@@ -1708,15 +2869,15 @@ function verificationLineStatus(line) {
           <section v-for="section in verificationTemplate.sections" :key="section.id" class="verification-section">
             <div class="panel-heading">
               <h3>{{ section.title }}</h3>
-              <p>按香港入境处材料字段清单顺序回填；待复核字段保留建议值和冲突来源。</p>
+              <p>{{ t('sectionHint') }}</p>
             </div>
             <table class="minutes-template-table">
               <thead>
                 <tr>
-                  <th>字段</th>
-                  <th>回填值</th>
-                  <th>状态</th>
-                  <th>出处与草拟备注</th>
+                  <th>{{ t('field') }}</th>
+                  <th>{{ t('fillValue') }}</th>
+                  <th>{{ t('status') }}</th>
+                  <th>{{ t('sourcesAndDraftRemarks') }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -1728,7 +2889,7 @@ function verificationLineStatus(line) {
                   <td>
                     <strong class="template-field-value">{{ fieldRow.displayValue }}</strong>
                     <small v-if="fieldRow.normalizedValue" class="template-normalized-result">
-                      归一结果：{{ fieldRow.normalizedValue }}
+                      {{ t('normalized') }}: {{ fieldRow.normalizedValue }}
                     </small>
                   </td>
                   <td>
@@ -1767,16 +2928,16 @@ function verificationLineStatus(line) {
                           <strong>{{ source.documentName }}</strong>
                           <span>{{ source.section }}</span>
                           <span>{{ source.fieldName }}</span>
-                          <small v-if="isFdhMode && !source.snapshotDataUrl" class="template-evidence-crop-missing">未取得原始裁剪</small>
+                          <small v-if="isFdhMode && !source.snapshotDataUrl" class="template-evidence-crop-missing">{{ t('cropMissing') }}</small>
                           <div class="template-evidence-value">
-                            <span>识别值</span>
+                            <span>{{ t('recognisedValue') }}</span>
                             <strong>{{ templateSourceValue(source) }}</strong>
                           </div>
-                          <small>置信度 {{ templateSourceConfidence(source) }}</small>
+                          <small>{{ t('confidence') }} {{ templateSourceConfidence(source) }}</small>
                         </div>
                       </article>
                     </div>
-                    <small v-else class="template-empty-evidence">未取得可用字段证据</small>
+                    <small v-else class="template-empty-evidence">{{ t('noUsableEvidence') }}</small>
                   </td>
                 </tr>
               </tbody>

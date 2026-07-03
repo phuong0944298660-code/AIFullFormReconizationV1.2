@@ -95,6 +95,39 @@ svg {
   gap: 4px;
 }
 
+.header-controls {
+  flex: 0 0 min(820px, 52vw);
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+}
+
+.language-switcher {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  display: inline-flex;
+  align-items: center;
+  padding: 3px;
+}
+
+.language-switcher button {
+  min-width: 72px;
+  min-height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.language-switcher button.active {
+  background: var(--teal);
+  color: #fff;
+}
+
 .eyebrow {
   color: var(--teal);
   font-size: 12px;
@@ -117,7 +150,7 @@ svg {
 }
 
 .workflow-tabs {
-  flex: 0 0 min(760px, 48vw);
+  width: 100%;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
@@ -2358,6 +2391,7 @@ svg {
   }
 
   .app-header,
+  .header-controls,
   .result-toolbar,
   .result-view-controls,
   .toolbar-actions,
@@ -2374,6 +2408,14 @@ svg {
     width: 100%;
     flex-basis: auto;
     grid-template-columns: 1fr;
+  }
+
+  .language-switcher {
+    width: 100%;
+  }
+
+  .language-switcher button {
+    flex: 1;
   }
 
   .scenario-pill,
