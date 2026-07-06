@@ -125,6 +125,7 @@ public class FdhReviewAssembler {
       }
       valuesByPage.computeIfAbsent(documentFieldPageNo(value), ignored -> new ArrayList<>()).add(value);
     }
+    boolean multipleApplicationTypeRows = hasMultipleApplicationTypeRows(document);
 
     Set<Integer> pageNumbers = new TreeSet<>();
     OcrDemoResponse response = document.ocrResult();
@@ -146,7 +147,7 @@ public class FdhReviewAssembler {
             pageNo,
             documentFieldPageTitle(document, pageNo),
             valuesByPage.getOrDefault(pageNo, List.of()).stream()
-                .map(this::documentFieldFromExtracted)
+                .map(value -> documentFieldFromExtracted(value, multipleApplicationTypeRows))
                 .toList()
         ))
         .toList();
@@ -164,11 +165,11 @@ public class FdhReviewAssembler {
     return FdhMaterialCatalog.displayName(document.materialId()) + " 第 " + pageNo + " 页";
   }
 
-  private FdhReviewResult.DocumentField documentFieldFromExtracted(ExtractedValue value) {
+  private FdhReviewResult.DocumentField documentFieldFromExtracted(ExtractedValue value, boolean multipleApplicationTypeRows) {
     return new FdhReviewResult.DocumentField(
-        value.fieldName(),
+        documentFieldLabel(value),
         value.value(),
-        value.value().isBlank() ? "review" : "pass",
+        documentFieldStatus(value, multipleApplicationTypeRows),
         value.confidence(),
         documentFieldPageNo(value),
         value.imageWidth(),
@@ -176,6 +177,32 @@ public class FdhReviewAssembler {
         value.bbox(),
         locatorConfidence(value)
     );
+  }
+
+  private String documentFieldLabel(ExtractedValue value) {
+    return applicationTypeCandidate(value)
+        .map(ApplicationTypeCandidate::label)
+        .orElse(value.fieldName());
+  }
+
+  private String documentFieldStatus(ExtractedValue value, boolean multipleApplicationTypeRows) {
+    if (value.value().isBlank()) {
+      return "review";
+    }
+    if (multipleApplicationTypeRows && applicationTypeCandidate(value).isPresent()) {
+      return "review";
+    }
+    return "pass";
+  }
+
+  private boolean hasMultipleApplicationTypeRows(FdhReviewDocument document) {
+    if (document == null || !"id988a".equalsIgnoreCase(document.materialId())) {
+      return false;
+    }
+    return applicationTypeExtractions(List.of(document)).stream()
+        .map(ApplicationTypeExtraction::applicationTypeKey)
+        .distinct()
+        .count() > 1;
   }
 
   private List<FdhReviewResult.ReviewPage> reviewPages(List<FdhReviewDocument> documents) {

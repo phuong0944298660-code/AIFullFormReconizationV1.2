@@ -474,6 +474,46 @@ class FdhReviewAssemblerTest {
   }
 
   @Test
+  void marksDocumentFieldRowsAsReviewWhenId988aSelectsMultipleApplicationTypeRows() throws Exception {
+    FdhReviewResult result = assembler.assemble(
+        "entry_visa",
+        List.of(
+            id988aApplicationTypes(List.of(
+                List.of(
+                    "entry_to_hong_kong_to_take_up_employment_as_a_domestic_helper_from_abroad",
+                    "entry visa"
+                ),
+                List.of(
+                    "contract_renewal_with_the_same_employer_or_change_of_employer",
+                    "entry visa"
+                )
+            )),
+            id988b(),
+            id407("SITI NURHALIZA", "HK$5,100", "HK$1,236")
+        )
+    );
+
+    List<FdhReviewResult.DocumentField> applicationTypeFields = result.documentFieldGroups().stream()
+        .filter(group -> group.materialId().equals("id988a"))
+        .flatMap(group -> group.pages().stream())
+        .filter(page -> page.pageNo() == 1)
+        .flatMap(page -> page.fields().stream())
+        .filter(field -> field.label().contains("Entry to Hong Kong")
+            || field.label().contains("Contract renewal with the same employer"))
+        .toList();
+
+    assertThat(applicationTypeFields)
+        .extracting(FdhReviewResult.DocumentField::label)
+        .containsExactlyInAnyOrder(
+            "Entry to Hong Kong to take up employment as a domestic helper from abroad",
+            "Contract renewal with the same employer or change of employer"
+        );
+    assertThat(applicationTypeFields)
+        .extracting(FdhReviewResult.DocumentField::status)
+        .containsOnly("review");
+  }
+
+  @Test
   void failsWhenHomepageApplicationTypeIsNotAmongMultipleId988aSelections() throws Exception {
     FdhReviewResult result = assembler.assemble(
         "remaining_period",
