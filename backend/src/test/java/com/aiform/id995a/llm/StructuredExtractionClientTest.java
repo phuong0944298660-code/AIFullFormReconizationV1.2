@@ -123,6 +123,35 @@ class StructuredExtractionClientTest {
   }
 
   @Test
+  void iangId990aPromptRequestsApplicationFieldsAndSelectedCheckboxValues() throws Exception {
+    StructuredExtractionClient client = new StructuredExtractionClient(
+        new LlmProperties(true, "https://apie.zhisuaninfo.com/v1", "test-key", "Qwen3.6-35B-A3B", 4096, 60, 4),
+        new StubHttpClient(jsonResponse("{\"page_1\":{\"surname_in_english\":\"Zhao\"}}")),
+        objectMapper
+    );
+
+    JsonNode payload = client.buildRequestPayload(
+        "ID 990A-赵航宇.pdf",
+        List.of(new RenderedOcrPage(1, new byte[] {1, 2, 3}, "data:image/png;base64,abc123", 1000, 1400))
+    );
+
+    assertThat(payload.toString()).contains("IANG ID 990A application form guidance");
+    assertThat(payload.toString()).contains("Personal Particulars");
+    assertThat(payload.toString()).contains("surname_in_english");
+    assertThat(payload.toString()).contains("given_names_in_english");
+    assertThat(payload.toString()).contains("travel_document_no");
+    assertThat(payload.toString()).contains("Page 2");
+    assertThat(payload.toString()).contains("domicile_address");
+    assertThat(payload.toString()).contains("address_of_current_employer");
+    assertThat(payload.toString()).contains("employer_1_address");
+    assertThat(payload.toString()).contains("Page 5");
+    assertThat(payload.toString()).contains("completed_undergraduate_or_higher_qualification");
+    assertThat(payload.toString()).contains("currently_staying_in_hong_kong");
+    assertThat(payload.toString()).contains("return sex as Male or Female");
+    assertThat(payload.toString()).contains("Do not return Not recognised");
+  }
+
+  @Test
   void locatesMissingFieldBboxesViaVisualReasoning() throws Exception {
     StubHttpClient httpClient = new StubHttpClient(jsonResponse("""
         {"fields":[{"path":"name_of_current_employer","value_bbox":{"x":0.32,"y":0.39,"width":0.55,"height":0.03}}]}

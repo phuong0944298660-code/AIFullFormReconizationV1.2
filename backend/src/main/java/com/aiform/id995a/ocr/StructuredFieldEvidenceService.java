@@ -36,10 +36,11 @@ public class StructuredFieldEvidenceService {
       JsonNode pageData = structuredData == null ? NullNode.getInstance() : structuredData.path(pageKey);
       JsonNode confidenceData = metadataPage(structuredData, "_confidence", pageKey);
       JsonNode evidenceData = metadataPage(structuredData, "_field_evidence", pageKey);
+      JsonNode parallelRecognitionData = metadataPage(structuredData, "_parallel_recognition", pageKey);
       List<FieldCandidate> candidates = new ArrayList<>();
       collectCandidates(pageData, List.of(), candidates);
       List<PreparedField> preparedFields = candidates.stream()
-          .map(candidate -> prepareField(page, candidate, confidenceData, evidenceData))
+          .map(candidate -> prepareField(page, candidate, confidenceData, evidenceData, parallelRecognitionData))
           .toList();
       List<StructuredFieldDetail> details = new ArrayList<>();
       for (PreparedField preparedField : preparedFields) {
@@ -54,7 +55,8 @@ public class StructuredFieldEvidenceService {
       RenderedOcrPage page,
       FieldCandidate candidate,
       JsonNode confidenceData,
-      JsonNode evidenceData
+      JsonNode evidenceData,
+      JsonNode parallelRecognitionData
   ) {
     String pageKey = "page_" + page.page();
     JsonNode evidence = lookupMetadata(evidenceData, candidate.path(), pageKey);
@@ -70,6 +72,7 @@ public class StructuredFieldEvidenceService {
         valueText,
         bbox
     );
+    JsonNode parallelRecognition = lookupMetadata(parallelRecognitionData, candidate.path(), pageKey);
     return new PreparedField(
         page.page(),
         candidate.path(),
@@ -80,7 +83,8 @@ public class StructuredFieldEvidenceService {
         bbox,
         crop,
         valueText,
-        characters
+        characters,
+        parallelRecognition
     );
   }
 
@@ -98,8 +102,29 @@ public class StructuredFieldEvidenceService {
         "",
         0,
         "not_run",
-        prepared.characters()
+        prepared.characters(),
+        firstExisting(prepared.parallelRecognition(), "suggested_value", "suggestedValue").asText(""),
+        firstExisting(prepared.parallelRecognition(), "issue", "suggestion_reason", "suggestionReason").asText(""),
+        firstExisting(prepared.parallelRecognition(), "model_agreement", "modelAgreement").asText(""),
+        firstExisting(prepared.parallelRecognition(), "conflict_type", "conflictType").asText(""),
+        modelOutputs(prepared.parallelRecognition())
     );
+  }
+
+  private List<ParallelRecognitionOutput> modelOutputs(JsonNode parallelRecognition) {
+    JsonNode outputs = firstExisting(parallelRecognition, "outputs", "model_outputs", "modelOutputs");
+    if (!outputs.isArray()) {
+      return List.of();
+    }
+    List<ParallelRecognitionOutput> result = new ArrayList<>();
+    for (JsonNode output : outputs) {
+      result.add(new ParallelRecognitionOutput(
+          firstExisting(output, "label", "name").asText(""),
+          firstExisting(output, "value", "text").asText(""),
+          normalizeConfidence(firstExisting(output, "confidence", "score").asDouble(0))
+      ));
+    }
+    return List.copyOf(result);
   }
 
   private void collectCandidates(JsonNode node, List<String> path, List<FieldCandidate> candidates) {
@@ -527,7 +552,8 @@ public class StructuredFieldEvidenceService {
       List<Integer> bbox,
       CropResult crop,
       String valueText,
-      List<FieldCharacterEvidence> characters
+      List<FieldCharacterEvidence> characters,
+      JsonNode parallelRecognition
   ) {}
 
   private record CropResult(byte[] bytes, String dataUrl) {}

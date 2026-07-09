@@ -149,6 +149,8 @@ function toTemplateFieldRow(field) {
     note: fieldNote(field, status, conflicts, recommendedValue),
     rule: field.rule || '',
     sources: field.sources || [],
+    modelOutputs: field.modelOutputs || [],
+    modelAgreement: field.modelAgreement || '',
     conflicts
   }
 }
@@ -163,6 +165,7 @@ function templateFieldStatus(field) {
   if (!hasSource) return 'unrecognized'
   if (field.required && hasBlankSource) return 'required_missing'
   if (!hasValue(normalizedValue)) return field.required ? 'required_missing' : 'unrecognized'
+  if (field.modelAgreement === 'disagree') return 'review'
   if (field.status === 'review') return 'review'
   if (field.status === 'fail') return 'review'
   return 'pass'
@@ -211,6 +214,9 @@ function fieldNote(field, status, conflicts, recommendedValue) {
   if (status === 'required_missing') return field.issue || '必填字段未填写，需退回补正。'
   if (status === 'unrecognized') return field.issue || '未取得可靠识别结果，需要人工查看原件。'
   if (field.correctionApplied) {
+    if (field.modelAgreement === 'disagree') {
+      return field.suggestionReason || `并行识别结果不一致，建议采用“${recommendedValue}”，该字段需人工复核确认。`
+    }
     return field.suggestionReason || `建议采用“${recommendedValue}”，该字段仍需人工复核。`
   }
   if (conflicts.length > 1) {

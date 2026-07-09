@@ -15,8 +15,48 @@ public record StructuredFieldDetail(
     String ocrText,
     double ocrConfidence,
     String ocrStatus,
-    List<FieldCharacterEvidence> characters
+    List<FieldCharacterEvidence> characters,
+    String suggestedValue,
+    String issue,
+    String modelAgreement,
+    String conflictType,
+    List<ParallelRecognitionOutput> modelOutputs
 ) {
+
+  public StructuredFieldDetail(
+      int page,
+      String path,
+      String label,
+      JsonNode value,
+      String displayValue,
+      double confidence,
+      List<Integer> bbox,
+      String snapshotDataUrl,
+      String ocrText,
+      double ocrConfidence,
+      String ocrStatus,
+      List<FieldCharacterEvidence> characters
+  ) {
+    this(
+        page,
+        path,
+        label,
+        value,
+        displayValue,
+        confidence,
+        bbox,
+        snapshotDataUrl,
+        ocrText,
+        ocrConfidence,
+        ocrStatus,
+        characters,
+        "",
+        "",
+        "",
+        "",
+        List.of()
+    );
+  }
 
   public StructuredFieldDetail {
     path = path == null ? "" : path;
@@ -29,5 +69,10 @@ public record StructuredFieldDetail(
     ocrConfidence = Math.max(0, Math.min(100, ocrConfidence));
     ocrStatus = ocrStatus == null || ocrStatus.isBlank() ? "not_run" : ocrStatus;
     characters = characters == null ? List.of() : List.copyOf(characters);
+    suggestedValue = suggestedValue == null ? "" : suggestedValue;
+    issue = issue == null ? "" : issue;
+    modelAgreement = modelAgreement == null ? "" : modelAgreement;
+    conflictType = conflictType == null ? "" : conflictType;
+    modelOutputs = modelOutputs == null ? List.of() : List.copyOf(modelOutputs);
   }
 }

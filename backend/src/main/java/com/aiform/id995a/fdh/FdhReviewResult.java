@@ -1,5 +1,6 @@
 package com.aiform.id995a.fdh;
 
+import com.aiform.id995a.ocr.ParallelRecognitionOutput;
 import java.util.List;
 
 public record FdhReviewResult(
@@ -252,7 +253,12 @@ public record FdhReviewResult(
       int imageWidth,
       int imageHeight,
       List<Integer> bbox,
-      double locatorConfidence
+      double locatorConfidence,
+      String suggestedValue,
+      String issue,
+      String modelAgreement,
+      String conflictType,
+      List<ParallelRecognitionOutput> modelOutputs
   ) {
 
     public DocumentField(
@@ -261,6 +267,20 @@ public record FdhReviewResult(
         String status
     ) {
       this(label, value, status, 0, 0, 0, 0, List.of(), 0);
+    }
+
+    public DocumentField(
+        String label,
+        String value,
+        String status,
+        double confidence,
+        int pageNo,
+        int imageWidth,
+        int imageHeight,
+        List<Integer> bbox,
+        double locatorConfidence
+    ) {
+      this(label, value, status, confidence, pageNo, imageWidth, imageHeight, bbox, locatorConfidence, "", "", "", "", List.of());
     }
 
     public DocumentField {
@@ -273,6 +293,11 @@ public record FdhReviewResult(
       imageHeight = Math.max(0, imageHeight);
       bbox = bbox == null ? List.of() : List.copyOf(bbox);
       locatorConfidence = Math.max(0, Math.min(100, locatorConfidence));
+      suggestedValue = suggestedValue == null ? "" : suggestedValue;
+      issue = issue == null ? "" : issue;
+      modelAgreement = modelAgreement == null ? "" : modelAgreement;
+      conflictType = conflictType == null ? "" : conflictType;
+      modelOutputs = modelOutputs == null ? List.of() : List.copyOf(modelOutputs);
     }
   }
 }

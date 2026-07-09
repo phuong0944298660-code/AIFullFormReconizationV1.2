@@ -74,6 +74,46 @@ class StructuredFieldEvidenceServiceTest {
   }
 
   @Test
+  void carriesParallelRecognitionConflictMetadataToFieldDetails() throws Exception {
+    StructuredFieldEvidenceService service = new StructuredFieldEvidenceService();
+    JsonNode structuredData = objectMapper.readTree("""
+        {
+          "page_2": {
+            "travel_document_no": "CA3273201"
+          },
+          "_parallel_recognition": {
+            "page_2": {
+              "travel_document_no": {
+                "model_agreement": "disagree",
+                "conflict_type": "parallel_llm_disagreement",
+                "suggested_value": "CA3273201",
+                "issue": "并行识别结果不一致，建议采用“CA3273201”，该字段需人工复核确认。",
+                "outputs": [
+                  {"label": "识别结果 A", "value": "CA3273201", "confidence": 91},
+                  {"label": "识别结果 B", "value": "CA3273207", "confidence": 86}
+                ]
+              }
+            }
+          }
+        }
+        """);
+
+    Map<Integer, List<StructuredFieldDetail>> details = service.buildFieldDetails(
+        structuredData,
+        List.of(new RenderedOcrPage(2, "", 200, 200))
+    );
+
+    StructuredFieldDetail detail = details.get(2).get(0);
+    assertThat(detail.modelAgreement()).isEqualTo("disagree");
+    assertThat(detail.conflictType()).isEqualTo("parallel_llm_disagreement");
+    assertThat(detail.suggestedValue()).isEqualTo("CA3273201");
+    assertThat(detail.issue()).contains("并行识别结果不一致");
+    assertThat(detail.modelOutputs()).hasSize(2);
+    assertThat(detail.modelOutputs().get(0).label()).isEqualTo("识别结果 A");
+    assertThat(detail.modelOutputs().get(1).value()).isEqualTo("CA3273207");
+  }
+
+  @Test
   void reportsNoSnapshotWhenLlmFieldEvidenceHasNoFieldBbox() throws Exception {
     FakeFieldRegionOcrGateway gateway = new FakeFieldRegionOcrGateway();
     StructuredFieldEvidenceService service = new StructuredFieldEvidenceService();

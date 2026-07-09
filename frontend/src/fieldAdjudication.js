@@ -33,9 +33,9 @@ export function applyFieldAdjudications(fields = [], adjudications = [], options
       return {
         ...field,
         rawNormalizedValue,
-        suggestedValue: rawNormalizedValue,
-        suggestionReason: '',
-        correctionApplied: false
+        suggestedValue: field.suggestedValue || rawNormalizedValue,
+        suggestionReason: field.suggestionReason || '',
+        correctionApplied: Boolean(field.correctionApplied)
       }
     }
 

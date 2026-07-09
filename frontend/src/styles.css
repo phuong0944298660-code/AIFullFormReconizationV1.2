@@ -1210,18 +1210,72 @@ svg {
 
 .document-field-table {
   display: grid;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.document-parallel-alert {
+  margin: 8px 10px 10px;
+  border: 1px solid #f5c26b;
+  border-radius: 8px;
+  background: #fffbeb;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.document-parallel-alert strong {
+  color: #78350f;
+  font-size: 13px;
+}
+
+.document-parallel-alert p {
+  margin-top: 2px;
+  color: #92400e;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.document-parallel-alert-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.document-parallel-alert-list span {
+  min-width: 0;
+  max-width: 100%;
+  border: 1px solid #f59e0b;
+  border-radius: 999px;
+  background: #fff;
+  color: #78350f;
+  padding: 5px 8px;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .document-field-row {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   min-height: 42px;
   border-bottom: 1px solid #edf2f7;
   display: grid;
-  grid-template-columns: minmax(150px, 0.8fr) minmax(0, 1.4fr) auto;
+  grid-template-columns: minmax(120px, 0.72fr) minmax(0, 1.5fr) minmax(116px, auto);
   gap: 10px;
   align-items: center;
   padding: 8px 11px;
   font-size: 13px;
   line-height: 1.4;
+}
+
+.document-field-row > span {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .locator-document-field-row {
@@ -1240,15 +1294,34 @@ svg {
   background: var(--teal-soft);
 }
 
+.locator-document-field-row.review {
+  grid-template-columns: minmax(112px, 0.65fr) minmax(0, 1.8fr) minmax(116px, auto);
+  background: #fffbeb;
+  box-shadow: inset 3px 0 0 #f59e0b;
+}
+
+.locator-document-field-row.review:hover,
+.locator-document-field-row.review.active {
+  background: #fff7d6;
+}
+
 .locator-document-field-row.active {
   box-shadow: inset 3px 0 0 var(--teal);
+}
+
+.locator-document-field-row.review.active {
+  box-shadow: inset 3px 0 0 var(--teal), inset 6px 0 0 #f59e0b;
 }
 
 .document-field-status {
   display: inline-flex;
   justify-content: flex-end;
   align-items: center;
+  align-self: start;
   gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
   white-space: nowrap;
 }
 
@@ -1259,6 +1332,83 @@ svg {
   padding: 4px 7px;
   font-size: 12px;
   font-weight: 900;
+}
+
+.document-field-value {
+  min-width: 0;
+  max-width: 100%;
+  display: grid;
+  gap: 6px;
+}
+
+.document-parallel-box {
+  min-width: 0;
+  max-width: 100%;
+  border: 1px solid #f5c26b;
+  border-radius: 8px;
+  background: #fffbeb;
+  display: grid;
+  gap: 7px;
+  padding: 8px;
+}
+
+.document-parallel-title {
+  color: #78350f;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.document-parallel-reason,
+.document-parallel-suggestion {
+  min-width: 0;
+  max-width: 100%;
+  color: #92400e;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.4;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.document-parallel-options {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+
+.document-parallel-option {
+  min-width: 0;
+  max-width: 100%;
+  border: 1px solid #fde68a;
+  border-radius: 7px;
+  background: #fff;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+  padding: 7px;
+}
+
+.document-parallel-option small {
+  color: #92400e;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.document-parallel-option strong {
+  min-width: 0;
+  color: #111827;
+  font-size: 13px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.document-parallel-option em {
+  justify-self: end;
+  color: #78350f;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
 }
 
 .document-field-row:last-child {
@@ -1275,6 +1425,9 @@ svg {
 
 .document-field-row strong {
   color: #0f2f24;
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
   overflow-wrap: anywhere;
 }
 
@@ -1327,6 +1480,8 @@ svg {
 
 .verification-summary-card,
 .verification-section {
+  min-width: 0;
+  max-width: 100%;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface-muted);
@@ -1337,6 +1492,15 @@ svg {
   display: grid;
   gap: 6px;
   border-left: 4px solid var(--teal);
+}
+
+.verification-summary-card strong,
+.verification-summary-card p,
+.verification-section p {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .verification-summary-card.decision-pass {
@@ -1486,12 +1650,14 @@ svg {
   justify-content: center;
   border-radius: 8px;
   padding: 7px 9px;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .material-template-table,
 .minutes-template-table {
   width: 100%;
+  max-width: 100%;
   border-collapse: separate;
   border-spacing: 0;
   border: 1px solid var(--line);
@@ -1505,12 +1671,17 @@ svg {
 .material-template-table td,
 .minutes-template-table th,
 .minutes-template-table td {
+  min-width: 0;
+  max-width: 100%;
   border-bottom: 1px solid var(--line);
   padding: 11px 12px;
   text-align: left;
   vertical-align: top;
   font-size: 13px;
   line-height: 1.45;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .material-template-table th,
@@ -1549,6 +1720,9 @@ svg {
 .minutes-template-table td code,
 .minutes-template-table td small,
 .minutes-template-table td p {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
   overflow-wrap: anywhere;
 }
 
@@ -1561,26 +1735,38 @@ svg {
 
 .template-field-value {
   display: block;
+  min-width: 0;
+  max-width: 100%;
   color: #062f35;
   font-size: 15px;
   line-height: 1.4;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .template-normalized-result {
   display: block;
+  min-width: 0;
+  max-width: 100%;
   margin-top: 6px;
   color: var(--muted);
   font-size: 12px;
   line-height: 1.35;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .template-evidence-list {
   display: grid;
   gap: 8px;
   margin-top: 8px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .template-evidence-card {
+  min-width: 0;
+  max-width: 100%;
   border: 1px solid #d8e0eb;
   border-radius: 8px;
   background: #fff;
@@ -1595,6 +1781,7 @@ svg {
 }
 
 .template-evidence-snapshot {
+  min-width: 0;
   min-height: 66px;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
@@ -1625,16 +1812,23 @@ svg {
 }
 
 .template-evidence-body strong {
+  min-width: 0;
+  max-width: 100%;
   color: #0f2f24;
   font-size: 13px;
   line-height: 1.35;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .template-evidence-body span,
 .template-evidence-body small {
+  min-width: 0;
+  max-width: 100%;
   color: var(--muted);
   font-size: 12px;
   line-height: 1.35;
+  white-space: normal;
   overflow-wrap: anywhere;
 }
 
@@ -1698,6 +1892,8 @@ svg {
 }
 
 .conflict-list li {
+  min-width: 0;
+  max-width: 100%;
   border-left: 3px solid #f59e0b;
   background: #fffbeb;
   border-radius: 6px;
@@ -1707,13 +1903,21 @@ svg {
 }
 
 .conflict-list strong {
+  min-width: 0;
+  max-width: 100%;
   color: #7c2d12;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .conflict-list span {
+  min-width: 0;
+  max-width: 100%;
   color: #667085;
   font-size: 12px;
   line-height: 1.45;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .verification-list {
@@ -2219,6 +2423,8 @@ svg {
 
 .source-evidence-row {
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   min-height: 54px;
   border: 1px solid #d8e0eb;
   border-radius: 8px;
@@ -2261,21 +2467,25 @@ svg {
 
 .source-evidence-value {
   min-width: 0;
+  max-width: 100%;
   color: #334155;
   font-size: 13px;
   line-height: 1.35;
+  white-space: normal;
   overflow-wrap: anywhere;
 }
 
 .source-confidence-pill {
   justify-self: end;
+  max-width: 100%;
   border-radius: 999px;
   background: #dcfce7;
   color: #15803d;
   padding: 4px 7px;
   font-size: 12px;
   font-weight: 900;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .source-confidence-pill.muted {
@@ -2362,7 +2572,8 @@ svg {
   .template-status-legend,
   .upload-grid,
   .review-workspace,
-  .field-card-body {
+  .field-card-body,
+  .document-parallel-options {
     grid-template-columns: 1fr;
   }
 
@@ -2386,8 +2597,42 @@ svg {
 }
 
 @media (max-width: 760px) {
+  html,
+  body,
+  #app,
+  .fdh-app,
+  .review-workspace,
+  .review-sidebar,
+  .review-main,
+  .fields-panel,
+  .standard-field-card,
+  .field-value-panel,
+  .issue-box {
+    max-width: 100%;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  body {
+    overflow-x: hidden;
+  }
+
   .fdh-app {
     padding: 12px;
+  }
+
+  .result-stage,
+  .result-toolbar,
+  .file-summary,
+  .recognized-materials-panel,
+  .recognized-materials-heading,
+  .recognized-material-list,
+  .source-review-panel,
+  .source-review-heading,
+  .source-review-body {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
   }
 
   .app-header,
@@ -2426,6 +2671,19 @@ svg {
     width: 100%;
   }
 
+  .file-summary {
+    flex-wrap: wrap;
+  }
+
+  .file-summary strong {
+    white-space: normal;
+  }
+
+  .recognized-material-list,
+  .source-page-thumbs {
+    max-width: 100%;
+  }
+
   .result-tabs button {
     flex: 1;
   }
@@ -2441,6 +2699,28 @@ svg {
   .template-evidence-card,
   .source-evidence-row {
     grid-template-columns: 1fr;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .field-value-panel.compact {
+    margin: 0 10px 10px;
+  }
+
+  .source-evidence-list {
+    padding: 10px;
+  }
+
+  .source-evidence-row {
+    overflow: hidden;
+  }
+
+  .document-parallel-alert,
+  .document-parallel-box,
+  .document-parallel-suggestion,
+  .issue-box {
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   .source-review-body {

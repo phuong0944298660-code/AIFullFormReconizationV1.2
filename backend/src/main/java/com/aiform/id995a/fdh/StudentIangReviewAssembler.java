@@ -3,6 +3,7 @@ package com.aiform.id995a.fdh;
 import com.aiform.id995a.ocr.DocumentTemplate;
 import com.aiform.id995a.ocr.OcrDemoResponse;
 import com.aiform.id995a.ocr.OcrPage;
+import com.aiform.id995a.ocr.ParallelRecognitionOutput;
 import com.aiform.id995a.ocr.StructuredFieldDetail;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Clock;
@@ -696,7 +697,12 @@ public class StudentIangReviewAssembler {
         detail == null ? "" : detail.snapshotDataUrl(),
         sourcePage == null ? 0 : sourcePage.imageWidth(),
         sourcePage == null ? 0 : sourcePage.imageHeight(),
-        detail == null ? List.of() : detail.bbox()
+        detail == null ? List.of() : detail.bbox(),
+        detail == null ? "" : detail.suggestedValue(),
+        detail == null ? "" : detail.issue(),
+        detail == null ? "" : detail.modelAgreement(),
+        detail == null ? "" : detail.conflictType(),
+        detail == null ? List.of() : detail.modelOutputs()
     ));
   }
 
@@ -918,7 +924,12 @@ public class StudentIangReviewAssembler {
         value.snapshotDataUrl(),
         value.imageWidth(),
         value.imageHeight(),
-        value.bbox()
+        value.bbox(),
+        value.suggestedValue(),
+        value.issue(),
+        value.modelAgreement(),
+        value.conflictType(),
+        value.modelOutputs()
     ));
   }
 
@@ -969,11 +980,19 @@ public class StudentIangReviewAssembler {
         value.imageWidth(),
         value.imageHeight(),
         value.bbox(),
-        value.bbox().isEmpty() ? 0 : value.confidence()
+        value.bbox().isEmpty() ? 0 : value.confidence(),
+        value.suggestedValue(),
+        value.issue(),
+        value.modelAgreement(),
+        value.conflictType(),
+        value.modelOutputs()
     );
   }
 
   private String documentFieldStatus(String materialId, ExtractedValue value) {
+    if ("disagree".equals(value.modelAgreement())) {
+      return "review";
+    }
     if ("paymentStatus".equals(materialId) && isIncompletePayment(value.value())) {
       return "fail";
     }
@@ -1275,7 +1294,12 @@ public class StudentIangReviewAssembler {
       String snapshotDataUrl,
       int imageWidth,
       int imageHeight,
-      List<Integer> bbox
+      List<Integer> bbox,
+      String suggestedValue,
+      String issue,
+      String modelAgreement,
+      String conflictType,
+      List<ParallelRecognitionOutput> modelOutputs
   ) {
     private ExtractedValue(
         FdhReviewDocument document,
@@ -1287,6 +1311,29 @@ public class StudentIangReviewAssembler {
         String snapshotDataUrl
     ) {
       this(document, path, label, value, page, confidence, snapshotDataUrl, 0, 0, List.of());
+    }
+
+    private ExtractedValue(
+        FdhReviewDocument document,
+        String path,
+        String label,
+        String value,
+        int page,
+        double confidence,
+        String snapshotDataUrl,
+        int imageWidth,
+        int imageHeight,
+        List<Integer> bbox
+    ) {
+      this(document, path, label, value, page, confidence, snapshotDataUrl, imageWidth, imageHeight, bbox, "", "", "", "", List.of());
+    }
+
+    private ExtractedValue {
+      suggestedValue = suggestedValue == null ? "" : suggestedValue;
+      issue = issue == null ? "" : issue;
+      modelAgreement = modelAgreement == null ? "" : modelAgreement;
+      conflictType = conflictType == null ? "" : conflictType;
+      modelOutputs = modelOutputs == null ? List.of() : List.copyOf(modelOutputs);
     }
   }
 }

@@ -3,6 +3,7 @@ package com.aiform.id995a.fdh;
 import com.aiform.id995a.ocr.DocumentTemplate;
 import com.aiform.id995a.ocr.OcrDemoResponse;
 import com.aiform.id995a.ocr.OcrPage;
+import com.aiform.id995a.ocr.ParallelRecognitionOutput;
 import com.aiform.id995a.ocr.StructuredFieldDetail;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Clock;
@@ -175,7 +176,12 @@ public class FdhReviewAssembler {
         value.imageWidth(),
         value.imageHeight(),
         value.bbox(),
-        locatorConfidence(value)
+        locatorConfidence(value),
+        value.suggestedValue(),
+        value.issue(),
+        value.modelAgreement(),
+        value.conflictType(),
+        value.modelOutputs()
     );
   }
 
@@ -186,6 +192,9 @@ public class FdhReviewAssembler {
   }
 
   private String documentFieldStatus(ExtractedValue value, boolean multipleApplicationTypeRows) {
+    if ("disagree".equals(value.modelAgreement())) {
+      return "review";
+    }
     if (value.value().isBlank()) {
       return "review";
     }
@@ -1357,7 +1366,12 @@ public class FdhReviewAssembler {
                 page.page(),
                 page.imageWidth(),
                 page.imageHeight(),
-                detail.bbox()
+                detail.bbox(),
+                detail.suggestedValue(),
+                detail.issue(),
+                detail.modelAgreement(),
+                detail.conflictType(),
+                detail.modelOutputs()
             ));
             coveredByStructuredFields.add(fieldDedupKey(detail.label(), detail.displayValue()));
             coveredByStructuredFields.add(fieldDedupKey(fieldNameFromPath(detail.path()), detail.displayValue()));
@@ -1785,7 +1799,12 @@ public class FdhReviewAssembler {
       int pageNo,
       int imageWidth,
       int imageHeight,
-      List<Integer> bbox
+      List<Integer> bbox,
+      String suggestedValue,
+      String issue,
+      String modelAgreement,
+      String conflictType,
+      List<ParallelRecognitionOutput> modelOutputs
   ) {
     private ExtractedValue(
         String path,
@@ -1795,7 +1814,15 @@ public class FdhReviewAssembler {
         double confidence,
         String snapshotDataUrl
     ) {
-      this(path, fieldName, section, value, confidence, snapshotDataUrl, 0, 0, 0, List.of());
+      this(path, fieldName, section, value, confidence, snapshotDataUrl, 0, 0, 0, List.of(), "", "", "", "", List.of());
+    }
+
+    private ExtractedValue {
+      suggestedValue = suggestedValue == null ? "" : suggestedValue;
+      issue = issue == null ? "" : issue;
+      modelAgreement = modelAgreement == null ? "" : modelAgreement;
+      conflictType = conflictType == null ? "" : conflictType;
+      modelOutputs = modelOutputs == null ? List.of() : List.copyOf(modelOutputs);
     }
 
     private String searchText() {

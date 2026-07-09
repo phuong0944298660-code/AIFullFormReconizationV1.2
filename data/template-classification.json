@@ -68,7 +68,7 @@
     "confidence" : 92,
     "structureHash" : "6ae8976f29e1a87c",
     "firstSeenAt" : "2026-05-25 15:15:09",
-    "lastSeenAt" : "2026-06-18 15:41:44"
+    "lastSeenAt" : "2026-07-06 15:08:04"
   }, {
     "filename" : "黄晓兰B.pdf",
     "templateId" : "id988b_2024_06",
@@ -158,7 +158,7 @@
     "confidence" : 92,
     "structureHash" : "ec393313f82b3f1c",
     "firstSeenAt" : "2026-05-25 15:16:01",
-    "lastSeenAt" : "2026-06-02 15:19:25"
+    "lastSeenAt" : "2026-07-07 13:48:12"
   }, {
     "filename" : "周咏诗-B-V6.pdf",
     "templateId" : "id988b_2024_06",
@@ -218,7 +218,7 @@
     "confidence" : 65,
     "structureHash" : "923d4a81d3c1141c",
     "firstSeenAt" : "2026-06-23 11:11:21",
-    "lastSeenAt" : "2026-07-03 16:33:30"
+    "lastSeenAt" : "2026-07-07 17:59:41"
   }, {
     "filename" : "ID990A_employment_professionals_applicant_iang.pdf",
     "templateId" : "id990a_2025_01",
@@ -248,7 +248,7 @@
     "confidence" : 65,
     "structureHash" : "d6e30a3e1804e519",
     "firstSeenAt" : "2026-06-23 16:29:46",
-    "lastSeenAt" : "2026-07-03 16:36:16"
+    "lastSeenAt" : "2026-07-09 16:19:31"
   }, {
     "filename" : "��ҵ֤��.pdf",
     "templateId" : "unknown_1p_923d4a81",
@@ -319,5 +319,35 @@
     "structureHash" : "1c2d0dff00e6be1e",
     "firstSeenAt" : "2026-07-02 16:59:45",
     "lastSeenAt" : "2026-07-02 20:27:53"
+  }, {
+    "filename" : "upload-small.pdf",
+    "templateId" : "unknown_1p_923d4a81",
+    "footerId" : "",
+    "pageCount" : 1,
+    "matchSource" : "structure_hash",
+    "confidence" : 65,
+    "structureHash" : "923d4a81d3c1141c",
+    "firstSeenAt" : "2026-07-06 14:17:01",
+    "lastSeenAt" : "2026-07-06 14:19:15"
+  }, {
+    "filename" : "护照-未知国家.jpg",
+    "templateId" : "unknown_1p_55424b3a",
+    "footerId" : "",
+    "pageCount" : 1,
+    "matchSource" : "structure_hash",
+    "confidence" : 65,
+    "structureHash" : "55424b3a4482246e",
+    "firstSeenAt" : "2026-07-06 17:58:31",
+    "lastSeenAt" : "2026-07-06 17:58:31"
+  }, {
+    "filename" : "zhou-a-v6.pdf",
+    "templateId" : "id988a_2024_06",
+    "footerId" : "ID 988A (06/2024)",
+    "pageCount" : 5,
+    "matchSource" : "visual_layout_footer",
+    "confidence" : 92,
+    "structureHash" : "ec393313f82b3f1c",
+    "firstSeenAt" : "2026-07-07 10:34:48",
+    "lastSeenAt" : "2026-07-07 10:34:48"
   } ]
 }

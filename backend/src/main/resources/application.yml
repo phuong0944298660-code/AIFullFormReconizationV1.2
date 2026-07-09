@@ -46,6 +46,13 @@ dashscope:
   model: ${DASHSCOPE_MODEL:qwen3.6-35b-a3b}
   enable-thinking: ${DASHSCOPE_ENABLE_THINKING:true}
 
+parallel-llm:
+  enabled: ${PARALLEL_LLM_ENABLED:true}
+  base-url: ${PARALLEL_LLM_BASE_URL:https://token.zhisuaninfo.com/v1}
+  api-key: ${PARALLEL_LLM_API_KEY:}
+  model: ${PARALLEL_LLM_MODEL:Qwen3.5-397B-A17B}
+  enable-thinking: ${PARALLEL_LLM_ENABLE_THINKING:false}
+
 field-ocr:
   enabled: ${FIELD_OCR_ENABLED:false}
   base-url: ${FIELD_OCR_BASE_URL:http://127.0.0.1:18092}
