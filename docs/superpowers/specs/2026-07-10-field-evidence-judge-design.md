@@ -1,34 +1,36 @@
-# Field Evidence Judge Design
+# 字段证据裁判设计方案
 
-## Goal
+## 一、目标
 
-Replace the extraction LLM's self-reported field confidence with an evidence-based verification score for both Student IANG and FDH review flows.
+为学生 IANG 与外籍家庭佣工 FDH 两套审核流程引入统一的字段证据裁判机制，用基于截图证据的核验分数，取代主识别 LLM 自行给出的字段置信度。
 
-The main LLM continues to extract structured field names and values from each document. Local PP-OCRv6 Tiny uses those field names and values as search hints to locate the field label and its filled value on the rendered page. A combined evidence region is used for both frontend highlighting and the image sent to `qwen3.6-flash`. The judge independently reads the image and reports comparison facts. The backend converts those facts into a deterministic score and sends low-scoring or unverifiable fields to manual review.
+主 LLM 继续负责从整份材料中提取结构化字段名称和值。本地 PP-OCRv6 Tiny 根据这些字段名称和值，在渲染后的材料页面中定位字段标签及其填写值。系统把字段标签和填写值合并成同一个证据区域，该区域同时用于前端高亮和发送给 `qwen3.6-flash` 的裁判截图。
 
-## Success Criteria
+裁判模型独立读取截图并返回可核验的识别事实，后端再按固定规则计算最终核验分数。低分字段或无法完成裁判的字段统一进入人工复核。
 
-- Student IANG and FDH use the same evidence-location, judge, scoring, and failure-policy services.
-- Frontend field highlighting and judge input use the same combined field-and-value evidence box.
-- The extraction LLM's confidence is not used to auto-pass, fail, rank, or display a field when judge scoring is enabled.
-- A field with a verification score below `85` is `review`.
-- Missing or partial evidence boxes, incomplete crops, unreadable values, judge timeouts, invalid judge responses, and disabled/unavailable dependencies are `review` and never fall back to extraction confidence.
-- The result remains explainable: users can see the evidence crop, extraction value, judge-observed value, score, and reason.
-- No image base64, API key, or unredacted judge request is written to normal application logs.
+## 二、成功标准
 
-## Non-Goals
+- 学生 IANG 与 FDH 共用同一套证据定位、裁判调用、评分和失败处理服务。
+- 前端字段高亮与裁判模型输入必须使用同一个“字段标签 + 填写值”联合证据框。
+- 启用裁判强制模式后，主 LLM 的置信度不再参与字段自动通过、失败、排序和前端展示。
+- `verificationScore` 低于 `85` 的字段必须进入 `review`。
+- 证据框缺失或不完整、截图不完整、填写值不可读、裁判超时、裁判响应非法、依赖服务关闭或不可用时，字段必须进入 `review`，不得回退到主 LLM 置信度自动放行。
+- 用户可以看到证据截图、主 LLM 识别值、裁判识别值、核验分数和复核原因。
+- 普通应用日志不得记录图片 Base64、API Key、完整裁判请求或未脱敏的字段值。
 
-- The judge does not replace document classification, page recognition, material completeness rules, cross-document rules, or the existing conclusion-generation model.
-- The judge does not correct source documents or silently overwrite an extracted value.
-- The first version does not train or fine-tune OCR or the judge model.
-- The first version does not create a second independent whole-document extraction pipeline.
-- The first version does not use the judge model's arbitrary self-reported `0-100` confidence as the displayed score.
+## 三、不在本次范围内
 
-## Core Responsibilities
+- 裁判模型不替代材料分类、页码识别、材料完整性规则、跨文件规则或现有结论生成模型。
+- 裁判模型不得直接修改原始材料，也不得静默覆盖主 LLM 的识别值。
+- 第一版不训练或微调 OCR 模型与裁判模型。
+- 第一版不建设第二套独立的整份材料抽取流程。
+- 第一版不直接采用裁判模型自行给出的任意 `0-100` 置信度作为最终展示分数。
 
-### Main extraction LLM
+## 四、核心职责划分
 
-The existing extraction LLM remains responsible for document-level understanding and structured JSON. For every populated field it supplies at least:
+### 4.1 主识别 LLM
+
+现有主 LLM 继续负责理解整份材料并输出结构化 JSON。每个已填写字段至少包含：
 
 ```json
 {
@@ -39,13 +41,13 @@ The existing extraction LLM remains responsible for document-level understanding
 }
 ```
 
-Its confidence may be retained as `recognitionConfidence` in internal/debug data during migration, but it does not drive the verification UI or review decision after enforcement is enabled.
+迁移阶段可以把原始 LLM 置信度保留为内部调试字段 `recognitionConfidence`，但启用强制裁判后，该值不得参与核验页面展示或字段状态判断。
 
-### Local OCR and evidence locator
+### 4.2 本地 OCR 与证据区域定位
 
-PP-OCRv6 Tiny detects page text and polygons once per rendered page. The backend evidence locator uses the extraction field label as the primary anchor and the extracted value only as a secondary search hint. It must not treat the extracted value as truth.
+PP-OCRv6 Tiny 对每个渲染页面执行一次文字检测与识别，输出文字、检测框和置信信息。后端证据定位器使用主 LLM 给出的字段名称作为主要锚点，使用主 LLM 的填写值作为辅助搜索线索，但不能把该填写值当作正确答案。
 
-The locator produces:
+定位结果格式：
 
 ```json
 {
@@ -58,25 +60,33 @@ The locator produces:
 }
 ```
 
-- `labelBbox` is the OCR-located field label.
-- `valueBbox` is the OCR-detected filled-value region. Its recognized text may be wrong or empty, especially for handwriting; the box can still be useful evidence.
-- `evidenceBbox` is the union of label and value boxes plus bounded padding.
-- `locationScore` describes localization quality only. It is never the field verification score.
+- `labelBbox`：OCR 定位到的字段名称区域。
+- `valueBbox`：OCR 检测到的填写值区域。对于手写内容，即使 OCR 识别文字错误或为空，只要检测到了书写区域，该框仍可作为有效候选。
+- `evidenceBbox`：`labelBbox` 与 `valueBbox` 的并集，并增加受控边距。
+- `locationScore`：只表示定位质量，不能作为字段识别正确性的核验分数。
 
-The existing `bbox` response property remains as a compatibility alias for `evidenceBbox` during migration. Both frontend highlighting and the judge crop use `evidenceBbox`, eliminating the current split where highlighting uses a label box while snapshots can still come from an LLM-provided value box.
+迁移期间保留现有 `bbox` 属性，但令其作为 `evidenceBbox` 的兼容别名。前端高亮与裁判截图统一使用 `evidenceBbox`，消除当前“前端高亮使用字段标签框、截图仍可能使用 LLM 值框”的分裂状态。
 
-### Visual judge
+### 4.3 视觉裁判模型
 
-`qwen3.6-flash` receives one field evidence crop per request, together with the field key, field label, extraction value, value type, and narrowly scoped comparison instructions. It does not receive the extraction LLM's confidence.
+每个字段单独调用一次 `qwen3.6-flash`。输入包括：
 
-The request uses:
+- 字段联合证据截图；
+- 字段 key 与字段名称；
+- 主 LLM 识别出的填写值；
+- 字段值类型，例如姓名、日期、证件号、金额或选择项；
+- 该字段必要且有限的比较规则。
+
+不得把主 LLM 置信度发送给裁判模型，避免对裁判结果产生锚定影响。
+
+调用参数固定为：
 
 - `enable_thinking: false`
 - `temperature: 0`
-- structured JSON output
-- a bounded output-token limit
+- 强制结构化 JSON 输出
+- 限制最大输出 Token
 
-The judge returns facts rather than a final system score:
+裁判返回识别事实，而不是最终系统分数：
 
 ```json
 {
@@ -84,208 +94,218 @@ The judge returns facts rather than a final system score:
   "matchType": "exact",
   "legibility": "clear",
   "cropCoverage": "complete",
-  "reason": "The identity-card number in the crop matches the extracted value."
+  "reason": "截图中的香港身份证号码与主识别值完全一致"
 }
 ```
 
-Allowed `matchType` values are:
+`matchType` 仅允许以下枚举：
 
-- `exact`
-- `normalized_equal`
-- `semantic_equal`
-- `mismatch`
-- `unreadable`
-- `crop_incomplete`
+- `exact`：完全一致；
+- `normalized_equal`：经过确定性格式归一后一致；
+- `semantic_equal`：语义一致，但需要解释或业务判断；
+- `mismatch`：明确不一致；
+- `unreadable`：截图中的值无法辨认；
+- `crop_incomplete`：证据截图不完整。
 
-The backend validates the response schema and independently checks deterministic normalization of `observedValue` against the extraction value. A model claim of `exact` or `normalized_equal` is not trusted when the returned values contradict it.
+后端必须校验裁判响应结构，并重新使用确定性归一规则比较 `observedValue` 与主 LLM 值。如果裁判声明 `exact` 或 `normalized_equal`，但返回的两个值实际矛盾，则不得信任该声明，字段直接进入 `review`。
 
-### Deterministic scorer
+### 4.4 后端确定性评分器
 
-The backend computes `verificationScore` from validated judge facts:
+后端根据已校验的裁判事实计算 `verificationScore`：
 
-| Validated result | Score | Status |
+| 已校验结果 | 分数 | 字段状态 |
 | --- | ---: | --- |
-| Exact match, clear, complete crop | 100 | pass |
-| Deterministic normalized match, clear, complete crop | 90 | pass |
-| Semantic equivalence requiring interpretation | 80 | review |
-| Crop incomplete | 40 | review |
-| Value unreadable | 30 | review |
-| Clear mismatch | 0 | review or existing rule-driven fail |
-| Dependency/error/invalid response | no score | review |
+| 完全一致、清晰且截图完整 | 100 | pass |
+| 确定性格式归一后一致、清晰且截图完整 | 90 | pass |
+| 需要解释的语义一致 | 80 | review |
+| 截图不完整 | 40 | review |
+| 填写值不可读 | 30 | review |
+| 明确不一致 | 0 | review，或由已有确定性规则判 fail |
+| 依赖异常或响应非法 | 无分数 | review |
 
-The initial pass threshold is `85`. This deliberately keeps semantic adjudication in review unless a separate, explicit workflow rule authorizes automatic equivalence. Existing material and cross-document rules remain able to make a result stricter; a high verification score cannot override a missing material, required blank, payment-not-complete state, or cross-document conflict.
+初始自动通过阈值为 `85`。这意味着需要解释的语义一致默认仍进入人工复核；只有单独且明确的流程规则允许时，才可以自动接受语义等价。
 
-## Evidence Location Strategy
+材料缺失、必填未填写、付款未完成、模板错误和跨文件冲突等现有规则仍具有更高约束力。高核验分数不能覆盖这些材料或业务规则结论。
 
-One geometry rule is not sufficient for all immigration forms. The locator chooses a strategy from field metadata and page structure:
+## 五、证据区域定位策略
 
-- `inline`: value appears on the same row, usually to the right of the label.
-- `below`: value appears directly below the label.
-- `multiline`: addresses and other multi-line values.
-- `selection`: checkbox and radio-button groups.
-- `table_cell`: value appears in a neighboring or containing table cell.
-- `signature`: handwritten signature or signature area.
+香港入境处材料的字段布局并不统一，不能只使用一个固定的“向右扩展”算法。定位器根据字段元数据和页面结构选择策略：
 
-The search order is:
+- `inline`：字段名和值在同一行，值通常位于字段名右侧；
+- `below`：填写值位于字段名下方；
+- `multiline`：地址等多行填写区域；
+- `selection`：复选框或单选框组；
+- `table_cell`：值位于相邻或所属表格单元格；
+- `signature`：签名或签署区域。
 
-1. Fuzzy-match the field label against OCR lines using normalized text.
-2. Search nearby OCR detections using expected layout and field type.
-3. Use normalized extraction-value text only to rank plausible nearby detections.
-4. Reject ambiguous matches rather than selecting an arbitrary equal-scoring region.
-5. Form `evidenceBbox` only when both the label and a plausible value region are available.
+定位顺序：
 
-The OCR sidecar must retain detection polygons even when text recognition is weak, so handwritten or poorly recognized values can still become `valueBbox` candidates. Detection confidence and text-recognition confidence must be separate properties.
+1. 对字段名称和 OCR 文字进行标准化模糊匹配。
+2. 根据字段布局类型，在字段名称附近搜索 OCR 检测区域。
+3. 仅使用主 LLM 的值文本对候选区域排序，不直接把它当作真值。
+4. 出现多个同分或近似候选时，标记为歧义，不得任意选择其中一个。
+5. 只有同时找到字段名称和合理的填写值区域时，才生成可自动裁判的 `evidenceBbox`。
 
-If only a label is located, the result is `partial`. The system may retain a diagnostic wide crop, but the field remains `review` and cannot be auto-passed.
+OCR sidecar 必须保留文字识别较弱或为空的检测多边形，使手写内容仍有机会形成 `valueBbox`。检测置信度与文字识别置信度需要作为两个独立属性返回。
 
-## Shared Processing Flow
+如果只能定位字段名称而无法确定值区域，则 `locationStatus` 为 `partial`。系统可以保留诊断用宽截图，但字段必须进入 `review`，不能自动通过。
 
-The judge is inserted in the common recognition/evidence path before Student IANG or FDH review assembly:
+## 六、学生与佣工共用处理流程
 
-1. Render uploaded files to pages.
-2. Classify document and page using existing deterministic rules.
-3. Run the main LLM structured extraction.
-4. Run full-page local OCR once per page.
-5. Build label, value, and combined evidence boxes for each populated field.
-6. Crop `evidenceBbox` from the original rendered page.
-7. Call the visual judge for each successfully located field.
-8. Validate judge facts and calculate `verificationScore`.
-9. Pass enriched field details to the existing Student IANG or FDH assembler.
-10. Apply material, required-field, cross-document, payment, and conclusion rules.
+裁判处理插入公共识别证据链路，并位于学生 IANG 或 FDH 结果组装之前：
 
-The judge must not be added to `FdhReviewConclusionService`. That service drafts the final narrative and field adjudications after review assembly; mixing evidence verification into it would make failures difficult to isolate and would duplicate Student/FDH behavior.
+1. 将上传材料渲染为页面图片。
+2. 按现有确定性规则识别材料类型和页码。
+3. 调用主 LLM 完成结构化字段抽取。
+4. 对每页执行一次本地全页 OCR。
+5. 为每个已填写字段生成 `labelBbox`、`valueBbox` 与 `evidenceBbox`。
+6. 从原始渲染页面中裁剪 `evidenceBbox`。
+7. 对定位成功的字段调用视觉裁判模型。
+8. 校验裁判事实并计算 `verificationScore`。
+9. 把增强后的字段明细交给现有 Student IANG 或 FDH assembler。
+10. 再执行材料完整性、必填字段、付款状态、跨文件规则和最终结论规则。
 
-## Backend Component Changes
+裁判逻辑不得加入 `FdhReviewConclusionService`。该服务处于结果组装之后，职责是生成最终结论文字和字段裁定建议；把证据核验混入其中会造成学生与佣工行为重复、错误隔离困难和调用顺序混乱。
 
-### OCR evidence data
+## 七、后端改造设计
 
-Replace the label-only result with an evidence-region value object containing:
+### 7.1 OCR 证据数据
 
-- detected label text and `labelBbox`
-- detected value text and `valueBbox`
-- `evidenceBbox`
-- detection and text confidence
-- location status, method, and ambiguity reason
+把现有只描述字段标签的检测结果扩展为字段证据区域对象，包含：
 
-Extend `FieldRegionOcrGateway` and `/ocr/page-detect` without creating a second sidecar. The page is OCRed once and detections are reused for every field on that page.
+- OCR 字段名称与 `labelBbox`；
+- OCR 填写值文字与 `valueBbox`；
+- `evidenceBbox`；
+- 文字检测置信度和文字识别置信度；
+- 定位状态、定位方法和歧义原因。
 
-### Region resolution
+扩展 `FieldRegionOcrGateway` 与 `/ocr/page-detect`，不新建第二套 OCR sidecar。页面只执行一次 OCR，结果复用于该页所有字段。
 
-Evolve `FieldLabelLocator` into a focused evidence-region resolver. Keep label matching isolated from layout-specific value-region selection so each part can be tested independently.
+### 7.2 证据区域解析
 
-`StructuredFieldEvidenceService` should:
+把 `FieldLabelLocator` 演进为专门的字段证据区域解析器。字段名称匹配与布局相关的值区域选择应保持分离，便于独立测试和扩展。
 
-- stop using the LLM value bbox for the final crop when OCR evidence location is enabled;
-- retain the original LLM bbox only as debug metadata;
-- create the crop from `evidenceBbox`;
-- attach localization metadata to `StructuredFieldDetail`.
+`StructuredFieldEvidenceService` 需要：
 
-### Judge client and orchestration
+- 启用 OCR 证据定位后，不再使用 LLM value bbox 生成最终截图；
+- 原始 LLM bbox 只保留在调试元数据中；
+- 使用 `evidenceBbox` 生成证据截图；
+- 把定位元数据写入 `StructuredFieldDetail`。
 
-Add a dedicated judge configuration and HTTP client rather than reusing the conclusion model configuration:
+### 7.3 裁判客户端与调度
 
-- endpoint/base URL
-- API key from a local secret or environment variable
-- model, defaulting to `qwen3.6-flash`
-- connect/request timeout
-- maximum judge concurrency
-- enforcement mode
+新增独立的裁判配置与 HTTP 客户端，不复用结论生成模型的配置：
 
-The API key provided during exploration must not be committed. It should be rotated because it was shared in plaintext, then stored in a local ignored credential file or environment variable.
+- Base URL；
+- 从本地凭据或环境变量读取的 API Key；
+- 模型名称，默认 `qwen3.6-flash`；
+- 连接与请求超时；
+- 最大裁判并发数；
+- `shadow` 或 `enforce` 运行模式。
 
-The judge runs per field with a small bounded concurrency pool. Initial defaults are four concurrent judge calls per review job, a 20-second request timeout, and one retry only for transport errors, `429`, and retryable `5xx` responses. Invalid JSON and semantic schema failures are not retried automatically.
+探索阶段提供的 API Key 已在对话中明文出现，不能提交到仓库。正式开发和部署前应先轮换该 Key，再放入被 Git 忽略的本地凭据文件或环境变量。
 
-### Response model
+裁判采用单字段请求和独立的小型并发池。初始默认值：
 
-Enrich field-source/detail responses with:
+- 每个审核任务最多并发调用 4 个字段；
+- 单次请求超时 20 秒；
+- 仅对网络异常、`429` 和可重试 `5xx` 执行一次重试；
+- 非法 JSON 或语义结构错误不自动重试。
 
-- `recognitionConfidence` for debug compatibility
-- `labelBbox`
-- `valueBbox`
-- `bbox` / `evidenceBbox`
-- `locationStatus`, `locationMethod`, `locationScore`
-- `judgeStatus`, `judgeObservedValue`, `judgeMatchType`
-- `verificationScore`, `verificationReason`, `scoreSource`
+### 7.4 返回数据模型
 
-Assemblers use `verificationScore` and judge status for low-score review logic. Existing confidence comparisons used to choose a suggested value must be replaced by deterministic document priority, source agreement, and verification score in that order.
+字段来源和字段明细增加：
 
-## Failure Policy
+- `recognitionConfidence`：迁移期内部调试值；
+- `labelBbox`；
+- `valueBbox`；
+- `bbox` / `evidenceBbox`；
+- `locationStatus`、`locationMethod`、`locationScore`；
+- `judgeStatus`、`judgeObservedValue`、`judgeMatchType`；
+- `verificationScore`、`verificationReason`、`scoreSource`。
 
-The system is fail-closed for field verification:
+学生与佣工 assembler 使用 `verificationScore` 和 `judgeStatus` 判断低分复核。现有依赖 LLM confidence 选择建议值的逻辑，应改为依次参考：确定性材料优先级、多个来源的一致性、核验分数。
 
-- OCR sidecar disabled or unavailable: `review`.
-- Label not found, value region not found, or ambiguous combined box: `review`.
-- Empty or incomplete crop: `review`.
-- Judge disabled, timeout, transport failure, rate limit after retry, or server failure: `review`.
-- Judge returns invalid JSON, unknown enum, contradictory values, or missing required properties: `review`.
-- Judge says unreadable or crop incomplete: `review`.
+## 八、失败处理策略
 
-Failures are represented with stable machine-readable reason codes and localized user text. Raw exceptions, endpoints, credentials, and image data are not shown to users.
+字段裁判采用安全失败策略：
 
-## Frontend Experience
+- OCR sidecar 关闭或不可用：`review`；
+- 字段名称未找到、值区域未找到或联合框存在歧义：`review`；
+- 证据截图为空或不完整：`review`；
+- 裁判关闭、超时、网络错误、重试后仍限流或服务失败：`review`；
+- 裁判返回非法 JSON、未知枚举、相互矛盾的值或缺少必填属性：`review`；
+- 裁判判定不可读或截图不完整：`review`。
 
-The recognition result page keeps its current split layout and review filters.
+错误通过稳定的机器可读原因码保存，并由前端转换为中英文用户提示。原始异常、接口地址、凭据和图片数据不得展示给用户。
 
-Changes are surgical:
+## 九、前端体验
 
-- Rename the primary field metric from “confidence” to “verification score” / “裁判评分”.
-- Highlight `evidenceBbox`, which contains the field label and filled value.
-- Show extraction value and judge-observed value together when the field is selected.
-- Show a concise explanation such as “format-normalized match”, “value mismatch”, “crop incomplete”, or “judge unavailable”.
-- Keep localization quality secondary and label it “定位质量”; it must not look like another correctness score.
-- Fields without a completed judge result show “未完成裁判” and remain in the review filter.
-- JSON view includes judge and localization metadata but compacts/removes image base64 as it does today.
+识别结果页保留当前左右分栏、来源定位和复核筛选结构，只做与本功能直接相关的调整：
 
-The verification/Minutes page keeps the existing allowed statuses: pass, unrecognized, required missing, and review. It does not add a new end-user status solely for judge failures.
+- 主字段指标从“置信度”改为“裁判评分”或“核验分数”。
+- 页面高亮使用同时包含字段名称和值的 `evidenceBbox`。
+- 用户选中字段后，同时展示主 LLM 识别值与裁判识别值。
+- 展示简短原因，例如“格式归一后一致”“识别值不一致”“截图不完整”或“裁判服务不可用”。
+- 定位质量作为次要信息，名称改为“定位质量”，不能表现成另一个正确性分数。
+- 未完成裁判的字段显示“未完成裁判”，并保留在“待复核”筛选中。
+- JSON 视图包含裁判和定位元数据，但继续压缩或移除图片 Base64。
 
-## Privacy and Logging
+核验结果 / Minutes 页面继续只使用现有四类状态：通过、未识别、必填未填写、待复核。裁判失败不新增单独的最终用户状态。
 
-Evidence crops contain identity and immigration information. The judge request therefore sends only the smallest combined field-and-value crop, never a full document page unless explicitly required by a future design.
+## 十、隐私与日志
 
-- Do not log authorization headers, request bodies, base64 images, extracted values, or judge-observed values in normal logs.
-- Log request ID, field key hash or safe key, model, latency, HTTP category, judge status, token usage, and reason code.
-- Do not expose the judge API key to the frontend.
-- Keep existing JSON-preview compaction for data URLs.
+字段截图包含身份和入境材料信息。裁判请求只发送能够说明字段名称和值的最小联合截图，第一版不得发送整页材料。
 
-## Rollout
+- 普通日志不得记录 Authorization、请求体、Base64 图片、主 LLM 字段值或裁判识别值。
+- 日志只记录请求 ID、安全字段 key、模型名称、耗时、HTTP 结果类别、裁判状态、Token 使用量和原因码。
+- 裁判 API Key 只能存在后端，不得返回前端。
+- JSON 预览继续对 Data URL 做压缩处理。
 
-Implement both modes behind a single judge feature setting:
+## 十一、发布策略
 
-- `shadow`: calculate and expose judge results for calibration, but preserve the current decision logic.
-- `enforce`: replace extraction confidence with verification score and apply fail-closed review behavior.
+通过一个裁判功能配置支持两种运行模式：
 
-Development and automated tests target `enforce`. A real-data rollout starts in `shadow`, validates a labeled Student/FDH sample, then switches to `enforce`. This is a deployment control, not a second implementation.
+- `shadow`：计算并返回裁判结果，用于校准，但暂不改变现有最终决策。
+- `enforce`：由裁判核验分数取代主 LLM 置信度，并启用所有失败即复核规则。
 
-## Testing
+开发和自动化测试以 `enforce` 为验收目标。真实材料首次上线先使用 `shadow` 验证样本，再切换到 `enforce`。这是部署控制，不是两套实现。
 
-### OCR and localization tests
+## 十二、测试方案
 
-- Exact, partial, and bilingual label matching.
-- Same-row, below-label, multiline, checkbox, table-cell, and signature layouts.
-- Printed, handwritten, low-contrast, and weak-recognition value regions.
-- Duplicate labels and ambiguous matches.
-- Combined-box union, padding, clamping, and page-boundary behavior.
-- OCR sidecar page-detection response containing polygons with weak or empty text.
+### 12.1 OCR 与定位测试
 
-### Judge client and scorer tests
+- 字段名称完全匹配、部分匹配和中英双语匹配。
+- 同行、下方、多行地址、复选框、表格单元格和签名布局。
+- 印刷体、手写体、低对比度和文字识别较弱的值区域。
+- 页面存在重复字段名称和多个近似候选。
+- 联合框并集、边距、页面边界裁剪和坐标合法性。
+- OCR sidecar 返回文字较弱或为空但仍保留检测多边形。
 
-- OpenAI-compatible multimodal request shape with top-level `enable_thinking: false`.
-- Valid responses for every allowed match type.
-- Contradictory judge output is downgraded to review.
-- Exact and normalized scoring boundaries.
-- Threshold behavior at `84` and `85`.
-- Timeout, `429`, retryable `5xx`, invalid JSON, missing fields, and unknown enums all fail closed.
-- Logs and exported JSON do not contain API keys or full base64 images.
+### 12.2 裁判客户端与评分测试
 
-### Flow tests
+- OpenAI 兼容多模态请求结构，并确认 `enable_thinking: false` 位于请求顶层。
+- 所有允许的 `matchType` 响应。
+- 裁判响应自相矛盾时自动降级为 `review`。
+- 完全一致和格式归一的评分边界。
+- `84` 与 `85` 的阈值行为。
+- 超时、`429`、可重试 `5xx`、非法 JSON、缺失属性和未知枚举全部安全失败。
+- 日志与导出 JSON 不包含 API Key 或完整 Base64 图片。
 
-- Student IANG and FDH both receive judge-enriched field sources.
-- A high extraction confidence with a judge mismatch becomes review.
-- A low extraction confidence with a clear exact judge match can pass when no other rule blocks it.
-- Payment-not-complete, missing material, required blank, and cross-document conflict remain review/fail regardless of judge score.
-- Frontend review filtering, score labels, selected evidence highlight, and judge explanation render correctly.
+### 12.3 学生与佣工流程测试
 
-### Calibration set
+- 学生 IANG 与 FDH 都能收到裁判增强后的字段来源。
+- 主 LLM 高置信但裁判识别不一致时，字段进入 `review`。
+- 主 LLM 低置信但证据清晰且完全一致时，在没有其他规则阻断的情况下可以 `pass`。
+- 付款未完成、材料缺失、必填未填写和跨文件冲突不受高裁判分数覆盖。
+- 前端复核筛选、核验分数、证据高亮和裁判解释正确展示。
 
-Before enabling enforcement on real cases, evaluate at least 200 labeled field crops split across Student IANG and FDH, including at least 30 handwritten values and 30 deliberate extraction mismatches. No known mismatch in this set may auto-pass at the selected threshold. Record coverage, review rate, false-pass rate, false-review rate, judge latency, and token cost before switching from shadow to enforce.
+### 12.4 校准样本
+
+正式启用 `enforce` 前，至少使用 200 个已人工标注的字段截图进行评估，学生 IANG 与 FDH 均需覆盖，其中至少包含：
+
+- 30 个手写填写值；
+- 30 个特意构造或已确认的主 LLM 识别错误。
+
+在该校准集内，任何已知错误值都不得以当前阈值自动通过。切换到 `enforce` 前，需要记录证据覆盖率、人工复核率、错误放行率、误复核率、裁判耗时和 Token 成本。
 
