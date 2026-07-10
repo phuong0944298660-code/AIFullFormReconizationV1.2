@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.imageio.ImageIO;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -24,7 +25,17 @@ public class StructuredFieldEvidenceService {
       "([0-9０-９]+)\\s*(?:名|家|个|個|人)?\\s*(?:成人|成年人|小孩|小童|兒童|儿童|将出生的婴儿|將出生的嬰兒|嬰兒|婴儿|家庭成员|家庭成員|需要經常照料|需要经常照料|雇工|僱工|傭工|佣工)"
   );
 
-  public StructuredFieldEvidenceService() {}
+  private final FieldRegionOcrGateway fieldRegionOcrGateway;
+  private final FieldLabelLocator fieldLabelLocator = new FieldLabelLocator();
+
+  public StructuredFieldEvidenceService() {
+    this(cropImageBytes -> List.of());
+  }
+
+  @Autowired
+  public StructuredFieldEvidenceService(FieldRegionOcrGateway fieldRegionOcrGateway) {
+    this.fieldRegionOcrGateway = fieldRegionOcrGateway;
+  }
 
   public Map<Integer, List<StructuredFieldDetail>> buildFieldDetails(
       JsonNode structuredData,
@@ -36,10 +47,11 @@ public class StructuredFieldEvidenceService {
       JsonNode pageData = structuredData == null ? NullNode.getInstance() : structuredData.path(pageKey);
       JsonNode confidenceData = metadataPage(structuredData, "_confidence", pageKey);
       JsonNode evidenceData = metadataPage(structuredData, "_field_evidence", pageKey);
+      List<FieldLabelDetection> labelDetections = detectPageLabels(page);
       List<FieldCandidate> candidates = new ArrayList<>();
       collectCandidates(pageData, List.of(), candidates);
       List<PreparedField> preparedFields = candidates.stream()
-          .map(candidate -> prepareField(page, candidate, confidenceData, evidenceData))
+          .map(candidate -> prepareField(page, candidate, confidenceData, evidenceData, labelDetections))
           .toList();
       List<StructuredFieldDetail> details = new ArrayList<>();
       for (PreparedField preparedField : preparedFields) {
@@ -54,21 +66,23 @@ public class StructuredFieldEvidenceService {
       RenderedOcrPage page,
       FieldCandidate candidate,
       JsonNode confidenceData,
-      JsonNode evidenceData
+      JsonNode evidenceData,
+      List<FieldLabelDetection> labelDetections
   ) {
     String pageKey = "page_" + page.page();
     JsonNode evidence = lookupMetadata(evidenceData, candidate.path(), pageKey);
     double confidence = confidence(evidence, confidenceData, candidate.path(), candidate.value(), pageKey);
-    List<Integer> bbox = parseBbox(evidence, page.imageWidth(), page.imageHeight());
-    CropResult crop = crop(page, bbox);
+    List<Integer> valueBbox = parseBbox(evidence, page.imageWidth(), page.imageHeight());
+    CropResult crop = crop(page, valueBbox);
     String label = label(evidence, candidate.path());
+    List<Integer> labelBbox = fieldLabelLocator.locate(label, labelDetections);
     String displayValue = displayValue(candidate.path(), label, candidate.value());
     String rawValueText = valueText(candidate.value());
     String valueText = valueText(candidate.value(), displayValue);
     List<FieldCharacterEvidence> characters = characters(
         valueText.equals(rawValueText) ? evidence : NullNode.getInstance(),
         valueText,
-        bbox
+        valueBbox
     );
     return new PreparedField(
         page.page(),
@@ -77,11 +91,22 @@ public class StructuredFieldEvidenceService {
         candidate.value(),
         displayValue,
         confidence,
-        bbox,
+        labelBbox,
         crop,
         valueText,
         characters
     );
+  }
+
+  private List<FieldLabelDetection> detectPageLabels(RenderedOcrPage page) {
+    if (page == null || page.pngBytes() == null || page.pngBytes().length == 0) {
+      return List.of();
+    }
+    try {
+      return fieldRegionOcrGateway.detectPage(page.pngBytes());
+    } catch (IOException exception) {
+      return List.of();
+    }
   }
 
   private StructuredFieldDetail toDetail(PreparedField prepared) {

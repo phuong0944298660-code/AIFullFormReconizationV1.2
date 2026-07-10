@@ -19,6 +19,38 @@ class StructuredFieldEvidenceServiceTest {
   private final ObjectMapper objectMapper = new ObjectMapper();
 
   @Test
+  void exposesPrintedLabelBboxWhileKeepingValueBboxForSnapshotAndCharacters() throws Exception {
+    FakeFieldRegionOcrGateway gateway = new FakeFieldRegionOcrGateway();
+    gateway.pageDetections = List.of(
+        new FieldLabelDetection("Length of residence", 97, List.of(8, 12, 108, 28)),
+        new FieldLabelDetection("22 year(s)", 99, List.of(120, 50, 180, 70))
+    );
+    StructuredFieldEvidenceService service = new StructuredFieldEvidenceService(gateway);
+    JsonNode structuredData = objectMapper.readTree("""
+        {
+          "page_1": {"residence_years": "22 year(s)"},
+          "_field_evidence": {
+            "page_1": {
+              "residence_years": {
+                "label": "Length of residence",
+                "value_bbox": [120, 50, 180, 70]
+              }
+            }
+          }
+        }
+        """);
+
+    StructuredFieldDetail detail = service.buildFieldDetails(structuredData, List.of(renderedPage()))
+        .get(1)
+        .get(0);
+
+    assertThat(gateway.pageDetectionCallCount).isEqualTo(1);
+    assertThat(detail.bbox()).containsExactly(8, 12, 108, 28);
+    assertThat(detail.snapshotDataUrl()).startsWith("data:image/jpeg;base64,");
+    assertThat(detail.characters().get(0).bbox().get(0)).isEqualTo(120);
+  }
+
+  @Test
   void buildsLlmFieldDetailsWithoutCallingOcrGateway() throws Exception {
     FakeFieldRegionOcrGateway gateway = new FakeFieldRegionOcrGateway();
     StructuredFieldEvidenceService service = new StructuredFieldEvidenceService();
@@ -272,7 +304,15 @@ class StructuredFieldEvidenceServiceTest {
 
   private static final class FakeFieldRegionOcrGateway implements FieldRegionOcrGateway {
     private int batchCallCount;
+    private int pageDetectionCallCount;
     private final List<Integer> batchSizes = new ArrayList<>();
+    private List<FieldLabelDetection> pageDetections = List.of();
+
+    @Override
+    public List<FieldLabelDetection> detectPage(byte[] pageImageBytes) {
+      pageDetectionCallCount += 1;
+      return pageDetections;
+    }
 
     @Override
     public List<FieldRegionOcrResult> recognizeBatch(List<byte[]> cropImageBytes) {

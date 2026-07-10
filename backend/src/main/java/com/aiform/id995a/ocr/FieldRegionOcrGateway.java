@@ -5,6 +5,10 @@ import java.util.List;
 
 public interface FieldRegionOcrGateway {
 
+  default List<FieldLabelDetection> detectPage(byte[] pageImageBytes) throws IOException {
+    return List.of();
+  }
+
   default FieldRegionOcrResult recognize(byte[] cropImageBytes) throws IOException {
     List<FieldRegionOcrResult> results = recognizeBatch(List.of(cropImageBytes));
     return results.isEmpty() ? FieldRegionOcrResult.unavailable("not_run") : results.get(0);

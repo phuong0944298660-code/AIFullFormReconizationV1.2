@@ -10,6 +10,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.UUID;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,6 +26,51 @@ public class LocalFieldRegionOcrClient implements FieldRegionOcrGateway {
   @Autowired
   public LocalFieldRegionOcrClient(FieldOcrProperties properties, ObjectMapper objectMapper) {
     this(properties, objectMapper, HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build());
+  }
+
+  @Override
+  public List<FieldLabelDetection> detectPage(byte[] pageImageBytes) throws IOException {
+    if (!properties.enabled() || pageImageBytes == null || pageImageBytes.length == 0) {
+      return List.of();
+    }
+
+    String boundary = "----page-ocr-" + UUID.randomUUID();
+    HttpRequest request = HttpRequest.newBuilder()
+        .uri(URI.create(trimTrailingSlash(properties.baseUrl()) + "/ocr/page-detect"))
+        .version(HttpClient.Version.HTTP_1_1)
+        .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
+        .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+        .POST(HttpRequest.BodyPublishers.ofByteArray(singleMultipartBody(boundary, pageImageBytes)))
+        .build();
+
+    try {
+      HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+      if (response.statusCode() < 200 || response.statusCode() >= 300) {
+        return List.of();
+      }
+      JsonNode lines = objectMapper.readTree(response.body()).path("lines");
+      if (!lines.isArray()) {
+        return List.of();
+      }
+      ArrayList<FieldLabelDetection> detections = new ArrayList<>();
+      for (JsonNode line : lines) {
+        List<Integer> bbox = parseBbox(line.path("bbox"));
+        if (bbox.isEmpty()) {
+          continue;
+        }
+        detections.add(new FieldLabelDetection(
+            line.path("text").asText(""),
+            normalizeConfidence(line.path("confidence").asDouble(0)),
+            bbox
+        ));
+      }
+      return List.copyOf(detections);
+    } catch (InterruptedException exception) {
+      Thread.currentThread().interrupt();
+      return List.of();
+    } catch (IOException exception) {
+      return List.of();
+    }
   }
 
   LocalFieldRegionOcrClient(
@@ -88,6 +134,31 @@ public class LocalFieldRegionOcrClient implements FieldRegionOcrGateway {
     }
     output.write(("--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
     return output.toByteArray();
+  }
+
+  private byte[] singleMultipartBody(String boundary, byte[] imageBytes) throws IOException {
+    ByteArrayOutputStream output = new ByteArrayOutputStream();
+    output.write(("--" + boundary + "\r\n").getBytes(StandardCharsets.UTF_8));
+    output.write("Content-Disposition: form-data; name=\"file\"; filename=\"page.jpg\"\r\n".getBytes(StandardCharsets.UTF_8));
+    output.write("Content-Type: image/jpeg\r\n\r\n".getBytes(StandardCharsets.UTF_8));
+    output.write(imageBytes);
+    output.write("\r\n".getBytes(StandardCharsets.UTF_8));
+    output.write(("--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
+    return output.toByteArray();
+  }
+
+  private List<Integer> parseBbox(JsonNode bboxNode) {
+    if (!bboxNode.isArray() || bboxNode.size() != 4) {
+      return List.of();
+    }
+    int left = bboxNode.get(0).asInt();
+    int top = bboxNode.get(1).asInt();
+    int right = bboxNode.get(2).asInt();
+    int bottom = bboxNode.get(3).asInt();
+    if (left < 0 || top < 0 || right <= left || bottom <= top) {
+      return List.of();
+    }
+    return List.of(left, top, right, bottom);
   }
 
   private List<FieldRegionOcrResult> paddedResults(JsonNode results, int expectedSize) {

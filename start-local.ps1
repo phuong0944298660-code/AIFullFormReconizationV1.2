@@ -183,6 +183,9 @@ $env:RAG_ENABLED = "false"
 $env:FIELD_OCR_ENABLED = $(if ($shouldStartSidecar) { "true" } else { "false" })
 $env:FIELD_OCR_BASE_URL = "http://127.0.0.1:$FieldOcrPort"
 $env:FIELD_OCR_PORT = [string]$FieldOcrPort
+if ($shouldStartSidecar -and -not $env:FIELD_OCR_TIMEOUT_SECONDS) {
+  $env:FIELD_OCR_TIMEOUT_SECONDS = "180"
+}
 $env:npm_config_cache = Join-Path $Root "frontend\.npm-cache"
 if (-not $env:LLM_PAGE_CONCURRENCY) {
   $env:LLM_PAGE_CONCURRENCY = "2"

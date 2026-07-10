@@ -15,6 +15,34 @@ import org.junit.jupiter.api.Test;
 class LocalFieldRegionOcrClientTest {
 
   @Test
+  void detectsPrintedPageLinesWithAbsoluteBboxes() throws Exception {
+    HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+    server.createContext("/ocr/page-detect", exchange -> write(
+        exchange,
+        200,
+        "{\"status\":\"available\",\"lines\":[{\"text\":\"Length of residence\",\"confidence\":0.97,\"bbox\":[20,100,220,124]}]}"
+    ));
+    server.start();
+    try {
+      String baseUrl = "http://127.0.0.1:" + server.getAddress().getPort();
+      LocalFieldRegionOcrClient client = new LocalFieldRegionOcrClient(
+          new FieldOcrProperties(true, baseUrl, 2),
+          new ObjectMapper()
+      );
+
+      assertThat(client.detectPage(new byte[] {1, 2, 3}))
+          .singleElement()
+          .satisfies(line -> {
+            assertThat(line.text()).isEqualTo("Length of residence");
+            assertThat(line.confidence()).isEqualTo(97);
+            assertThat(line.bbox()).containsExactly(20, 100, 220, 124);
+          });
+    } finally {
+      server.stop(0);
+    }
+  }
+
+  @Test
   void retriesOcrModelAfterHttpFailure() throws Exception {
     AtomicInteger calls = new AtomicInteger();
     HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);

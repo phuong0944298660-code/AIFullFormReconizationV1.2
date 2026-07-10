@@ -148,6 +148,7 @@ mvn '-Dtest=FdhReviewConclusionServiceTest,FdhReviewControllerTest,FdhReviewAsse
 
 ## Git 与文件处理约定
 
+- GitHub 分支 `LocateUpgrade_BaseProd` 专门保存基于生产代码的字段定位升级：使用本地 PP-OCRv6 Tiny 根据 LLM 已识别的字段名称定位字段 `bbox`。该分支用于替代不够精确、容易偏移的 LLM `bbox` 作为页面字段高亮依据；填写值不参与高亮定位。
 - 工作区可能包含用户或生成工具造成的无关改动，不要擅自回退，除非用户明确要求。
 - 忽略 WPS 临时锁文件，例如 `docs/~$*.xlsx`。
 - 不要提交日志、本地凭据、临时生成文件或真实 API key。
