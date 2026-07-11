@@ -82,4 +82,61 @@ class FieldLabelLocatorTest {
         )
     )).isEmpty();
   }
+
+  @Test
+  void resolvesDuplicateLabelsUsingTheValueBboxGeometry() {
+    List<FieldLabelDetection> detections = List.of(
+        new FieldLabelDetection("Name of employer(s)", 98, List.of(100, 300, 300, 340)),
+        new FieldLabelDetection("Name of employer(s)", 98, List.of(100, 700, 300, 740))
+    );
+
+    FieldLabelLocation location = locator.locate(
+        "Name of employer(s)",
+        detections,
+        List.of(320, 720, 620, 780)
+    );
+
+    assertThat(location.bbox()).containsExactly(100, 700, 300, 740);
+    assertThat(location.reason()).isEmpty();
+  }
+
+  @Test
+  void mergesAdjacentOcrLinesBeforeMatchingTheLabel() {
+    List<FieldLabelDetection> detections = List.of(
+        new FieldLabelDetection("Name of", 96, List.of(100, 300, 220, 330)),
+        new FieldLabelDetection("employer(s)", 97, List.of(100, 334, 280, 366))
+    );
+
+    FieldLabelLocation location = locator.locate(
+        "Name of employer(s)",
+        detections,
+        List.of(300, 320, 620, 380)
+    );
+
+    assertThat(location.bbox()).containsExactly(100, 300, 280, 366);
+    assertThat(location.reason()).isEmpty();
+  }
+
+  @Test
+  void reportsWhyAConfidentOcrCandidateDidNotMatch() {
+    FieldLabelLocation location = locator.locate(
+        "Name of employer(s)",
+        List.of(new FieldLabelDetection("Address", 98, List.of(100, 300, 220, 330))),
+        List.of(300, 320, 620, 380)
+    );
+
+    assertThat(location.bbox()).isEmpty();
+    assertThat(location.reason()).isEqualTo("ocr_text_not_found");
+  }
+
+  @Test
+  void toleratesParenthesizedPluralBeingRecognizedAsAPlainPlural() {
+    FieldLabelLocation location = locator.locate(
+        "Name of employer(s)",
+        List.of(new FieldLabelDetection("Name of employers", 96, List.of(100, 300, 280, 340))),
+        List.of(300, 320, 620, 380)
+    );
+
+    assertThat(location.bbox()).containsExactly(100, 300, 280, 340);
+  }
 }

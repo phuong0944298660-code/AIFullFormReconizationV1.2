@@ -184,11 +184,12 @@ public class StructuredFieldEvidenceService {
     String displayValue = displayValue(candidate.path(), label, candidate.value());
     String rawValueText = valueText(candidate.value());
     String valueText = valueText(candidate.value(), displayValue);
-    List<Integer> labelBbox = fieldLabelLocator.locate(label, labelDetections);
+    FieldLabelLocation labelLocation = fieldLabelLocator.locate(label, labelDetections, recognitionBbox);
+    List<Integer> labelBbox = labelLocation.bbox();
     List<Integer> valueBbox = recognitionBbox;
     List<Integer> evidenceBbox = List.of();
     List<Integer> displayBbox = labelBbox;
-    FieldEvidenceRegion region = labelRegion(labelBbox, labelDetections);
+    FieldEvidenceRegion region = labelRegion(labelLocation);
     CropResult crop = crop(page, valueBbox, labelBbox);
     FieldJudgeObservation judgeObservation = judge(
         candidate, label, valueText, crop, valueBbox
@@ -253,20 +254,12 @@ public class StructuredFieldEvidenceService {
     );
   }
 
-  private FieldEvidenceRegion labelRegion(
-      List<Integer> labelBbox,
-      List<FieldLabelDetection> labelDetections
-  ) {
-    if (labelBbox.isEmpty()) {
-      return FieldEvidenceRegion.notFound("label_not_found");
+  private FieldEvidenceRegion labelRegion(FieldLabelLocation location) {
+    if (location.bbox().isEmpty()) {
+      return FieldEvidenceRegion.notFound(location.reason());
     }
-    double score = labelDetections.stream()
-        .filter(detection -> detection != null && labelBbox.equals(detection.bbox()))
-        .mapToDouble(FieldLabelDetection::confidence)
-        .findFirst()
-        .orElse(0);
     return new FieldEvidenceRegion(
-        labelBbox, List.of(), List.of(), "located", "label_ocr", score, ""
+        location.bbox(), List.of(), List.of(), "located", "label_ocr", location.score(), ""
     );
   }
 
