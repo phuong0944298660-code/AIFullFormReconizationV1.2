@@ -31,43 +31,13 @@ public record StructuredFieldDetail(
     Integer verificationScore,
     String verificationStatus,
     String verificationReason,
-    String scoreSource
+    String scoreSource,
+    String suggestedValue,
+    String issue,
+    String modelAgreement,
+    String conflictType,
+    List<ParallelRecognitionOutput> modelOutputs
 ) {
-
-  public StructuredFieldDetail(
-      int page,
-      String path,
-      String label,
-      JsonNode value,
-      String displayValue,
-      double confidence,
-      List<Integer> bbox,
-      String snapshotDataUrl,
-      String ocrText,
-      double ocrConfidence,
-      String ocrStatus,
-      List<FieldCharacterEvidence> characters
-  ) {
-    this(
-        page,
-        path,
-        label,
-        value,
-        displayValue,
-        confidence,
-        bbox,
-        snapshotDataUrl,
-        ocrText,
-        ocrConfidence,
-        ocrStatus,
-        characters,
-        "",
-        "",
-        "",
-        "",
-        List.of()
-    );
-  }
 
   public StructuredFieldDetail {
     path = path == null ? "" : path;
@@ -98,6 +68,11 @@ public record StructuredFieldDetail(
     verificationStatus = clean(verificationStatus, "not_run");
     verificationReason = clean(verificationReason, "");
     scoreSource = clean(scoreSource, "recognition_confidence");
+    suggestedValue = clean(suggestedValue, "");
+    issue = clean(issue, "");
+    modelAgreement = clean(modelAgreement, "");
+    conflictType = clean(conflictType, "");
+    modelOutputs = modelOutputs == null ? List.of() : List.copyOf(modelOutputs);
   }
 
   public StructuredFieldDetail(
@@ -118,8 +93,73 @@ public record StructuredFieldDetail(
         page, path, label, value, displayValue, confidence, bbox, snapshotDataUrl,
         ocrText, ocrConfidence, ocrStatus, characters,
         confidence, bbox, bbox, bbox, bbox,
-        "legacy", "legacy", 0, "", "not_run", "", "", null, "not_run", "", "recognition_confidence"
+        "legacy", "legacy", 0, "", "not_run", "", "", null, "not_run", "", "recognition_confidence",
+        "", "", "", "", List.of()
     );
+  }
+
+  public StructuredFieldDetail(
+      int page,
+      String path,
+      String label,
+      JsonNode value,
+      String displayValue,
+      double confidence,
+      List<Integer> bbox,
+      String snapshotDataUrl,
+      String ocrText,
+      double ocrConfidence,
+      String ocrStatus,
+      List<FieldCharacterEvidence> characters,
+      String suggestedValue,
+      String issue,
+      String modelAgreement,
+      String conflictType,
+      List<ParallelRecognitionOutput> modelOutputs
+  ) {
+    this(page, path, label, value, displayValue, confidence, bbox, snapshotDataUrl,
+        ocrText, ocrConfidence, ocrStatus, characters,
+        confidence, bbox, bbox, bbox, bbox,
+        "legacy", "legacy", 0, "", "not_run", "", "", null, "not_run", "", "recognition_confidence",
+        suggestedValue, issue, modelAgreement, conflictType, modelOutputs);
+  }
+
+  public StructuredFieldDetail(
+      int page,
+      String path,
+      String label,
+      JsonNode value,
+      String displayValue,
+      double confidence,
+      List<Integer> bbox,
+      String snapshotDataUrl,
+      String ocrText,
+      double ocrConfidence,
+      String ocrStatus,
+      List<FieldCharacterEvidence> characters,
+      double recognitionConfidence,
+      List<Integer> recognitionBbox,
+      List<Integer> labelBbox,
+      List<Integer> valueBbox,
+      List<Integer> evidenceBbox,
+      String locationStatus,
+      String locationMethod,
+      double locationScore,
+      String locationReason,
+      String judgeStatus,
+      String judgeObservedValue,
+      String judgeMatchType,
+      Integer verificationScore,
+      String verificationStatus,
+      String verificationReason,
+      String scoreSource
+  ) {
+    this(page, path, label, value, displayValue, confidence, bbox, snapshotDataUrl,
+        ocrText, ocrConfidence, ocrStatus, characters,
+        recognitionConfidence, recognitionBbox, labelBbox, valueBbox, evidenceBbox,
+        locationStatus, locationMethod, locationScore, locationReason, judgeStatus, judgeObservedValue,
+        judgeMatchType, verificationScore, verificationStatus, verificationReason, scoreSource,
+        "", "", "", "", List.of());
   }
 
   private static List<Integer> copy(List<Integer> value) {

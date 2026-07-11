@@ -1906,7 +1906,12 @@ public class FdhReviewAssembler {
       List<Integer> labelBbox,
       List<Integer> valueBbox,
       List<Integer> evidenceBbox,
-      String locationStatus
+      String locationStatus,
+      String suggestedValue,
+      String issue,
+      String modelAgreement,
+      String conflictType,
+      List<ParallelRecognitionOutput> modelOutputs
   ) {
     private ExtractedValue(
         String path,
@@ -1917,7 +1922,7 @@ public class FdhReviewAssembler {
         String snapshotDataUrl
     ) {
       this(path, fieldName, section, value, confidence, snapshotDataUrl, 0, 0, 0, List.of(),
-          null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run");
+          null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run", "", "", "", "", List.of());
     }
 
     private ExtractedValue(
@@ -1933,7 +1938,32 @@ public class FdhReviewAssembler {
         List<Integer> bbox
     ) {
       this(path, fieldName, section, value, confidence, snapshotDataUrl, pageNo, imageWidth, imageHeight, bbox,
-          null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run");
+          null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run", "", "", "", "", List.of());
+    }
+
+    private ExtractedValue(
+        String path,
+        String fieldName,
+        String section,
+        String value,
+        double confidence,
+        String snapshotDataUrl,
+        int pageNo,
+        int imageWidth,
+        int imageHeight,
+        List<Integer> bbox,
+        Integer verificationScore,
+        String verificationStatus,
+        String judgeObservedValue,
+        String verificationReason,
+        List<Integer> labelBbox,
+        List<Integer> valueBbox,
+        List<Integer> evidenceBbox,
+        String locationStatus
+    ) {
+      this(path, fieldName, section, value, confidence, snapshotDataUrl, pageNo, imageWidth, imageHeight, bbox,
+          verificationScore, verificationStatus, judgeObservedValue, verificationReason,
+          labelBbox, valueBbox, evidenceBbox, locationStatus, "", "", "", "", List.of());
     }
 
     private String searchText() {

@@ -754,7 +754,12 @@ public class StudentIangReviewAssembler {
         detail == null ? List.of() : detail.labelBbox(),
         detail == null ? List.of() : detail.valueBbox(),
         detail == null ? List.of() : detail.evidenceBbox(),
-        detail == null ? "not_run" : detail.locationStatus()
+        detail == null ? "not_run" : detail.locationStatus(),
+        detail == null ? "" : detail.suggestedValue(),
+        detail == null ? "" : detail.issue(),
+        detail == null ? "" : detail.modelAgreement(),
+        detail == null ? "" : detail.conflictType(),
+        detail == null ? List.of() : detail.modelOutputs()
     ));
   }
 
@@ -1040,7 +1045,12 @@ public class StudentIangReviewAssembler {
         value.labelBbox(),
         value.valueBbox(),
         value.evidenceBbox(),
-        value.locationStatus()
+        value.locationStatus(),
+        value.suggestedValue(),
+        value.issue(),
+        value.modelAgreement(),
+        value.conflictType(),
+        value.modelOutputs()
     );
   }
 
@@ -1360,7 +1370,12 @@ public class StudentIangReviewAssembler {
       List<Integer> labelBbox,
       List<Integer> valueBbox,
       List<Integer> evidenceBbox,
-      String locationStatus
+      String locationStatus,
+      String suggestedValue,
+      String issue,
+      String modelAgreement,
+      String conflictType,
+      List<ParallelRecognitionOutput> modelOutputs
   ) {
     private ExtractedValue(
         FdhReviewDocument document,
@@ -1372,7 +1387,7 @@ public class StudentIangReviewAssembler {
         String snapshotDataUrl
     ) {
       this(document, path, label, value, page, confidence, snapshotDataUrl, 0, 0, List.of(),
-          null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run");
+          null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run", "", "", "", "", List.of());
     }
 
     private ExtractedValue(
@@ -1388,7 +1403,7 @@ public class StudentIangReviewAssembler {
         List<Integer> bbox
     ) {
       this(document, path, label, value, page, confidence, snapshotDataUrl, imageWidth, imageHeight, bbox,
-          null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run");
+          null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run", "", "", "", "", List.of());
     }
 
     private ExtractedValue(
@@ -1401,9 +1416,41 @@ public class StudentIangReviewAssembler {
         String snapshotDataUrl,
         int imageWidth,
         int imageHeight,
-        List<Integer> bbox
+        List<Integer> bbox,
+        Integer verificationScore,
+        String verificationStatus,
+        String judgeObservedValue,
+        String verificationReason,
+        List<Integer> labelBbox,
+        List<Integer> valueBbox,
+        List<Integer> evidenceBbox,
+        String locationStatus
     ) {
-      this(document, path, label, value, page, confidence, snapshotDataUrl, imageWidth, imageHeight, bbox, "", "", "", "", List.of());
+      this(document, path, label, value, page, confidence, snapshotDataUrl, imageWidth, imageHeight, bbox,
+          verificationScore, verificationStatus, judgeObservedValue, verificationReason,
+          labelBbox, valueBbox, evidenceBbox, locationStatus, "", "", "", "", List.of());
+    }
+
+    private ExtractedValue(
+        FdhReviewDocument document,
+        String path,
+        String label,
+        String value,
+        int page,
+        double confidence,
+        String snapshotDataUrl,
+        int imageWidth,
+        int imageHeight,
+        List<Integer> bbox,
+        String suggestedValue,
+        String issue,
+        String modelAgreement,
+        String conflictType,
+        List<ParallelRecognitionOutput> modelOutputs
+    ) {
+      this(document, path, label, value, page, confidence, snapshotDataUrl, imageWidth, imageHeight, bbox,
+          null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run",
+          suggestedValue, issue, modelAgreement, conflictType, modelOutputs);
     }
 
     private ExtractedValue {

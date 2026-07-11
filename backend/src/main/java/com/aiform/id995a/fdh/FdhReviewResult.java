@@ -157,7 +157,12 @@ public record FdhReviewResult(
       List<Integer> labelBbox,
       List<Integer> valueBbox,
       List<Integer> evidenceBbox,
-      String locationStatus
+      String locationStatus,
+      String suggestedValue,
+      String issue,
+      String modelAgreement,
+      String conflictType,
+      List<ParallelRecognitionOutput> modelOutputs
   ) {
 
     public FieldSource(
@@ -171,7 +176,8 @@ public record FdhReviewResult(
         String snapshotDataUrl
     ) {
       this(documentName, filename, section, fieldName, value, confidence, snapshotText, snapshotDataUrl,
-          "", 0, 0, 0, List.of(), 0, null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run");
+          "", 0, 0, 0, List.of(), 0, null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run",
+          "", "", "", "", List.of());
     }
 
     public FieldSource(
@@ -192,7 +198,37 @@ public record FdhReviewResult(
     ) {
       this(documentName, filename, section, fieldName, value, confidence, snapshotText, snapshotDataUrl,
           materialId, pageNo, imageWidth, imageHeight, bbox, locatorConfidence,
-          null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run");
+          null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run", "", "", "", "", List.of());
+    }
+
+    public FieldSource(
+        String documentName,
+        String filename,
+        String section,
+        String fieldName,
+        String value,
+        double confidence,
+        String snapshotText,
+        String snapshotDataUrl,
+        String materialId,
+        int pageNo,
+        int imageWidth,
+        int imageHeight,
+        List<Integer> bbox,
+        double locatorConfidence,
+        Integer verificationScore,
+        String verificationStatus,
+        String judgeObservedValue,
+        String verificationReason,
+        List<Integer> labelBbox,
+        List<Integer> valueBbox,
+        List<Integer> evidenceBbox,
+        String locationStatus
+    ) {
+      this(documentName, filename, section, fieldName, value, confidence, snapshotText, snapshotDataUrl,
+          materialId, pageNo, imageWidth, imageHeight, bbox, locatorConfidence,
+          verificationScore, verificationStatus, judgeObservedValue, verificationReason,
+          labelBbox, valueBbox, evidenceBbox, locationStatus, "", "", "", "", List.of());
     }
 
     public FieldSource {
@@ -301,7 +337,12 @@ public record FdhReviewResult(
       List<Integer> labelBbox,
       List<Integer> valueBbox,
       List<Integer> evidenceBbox,
-      String locationStatus
+      String locationStatus,
+      String suggestedValue,
+      String issue,
+      String modelAgreement,
+      String conflictType,
+      List<ParallelRecognitionOutput> modelOutputs
   ) {
 
     public DocumentField(
@@ -310,7 +351,7 @@ public record FdhReviewResult(
         String status
     ) {
       this(label, value, status, 0, 0, 0, 0, List.of(), 0,
-          null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run");
+          null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run", "", "", "", "", List.of());
     }
 
     public DocumentField(
@@ -325,7 +366,7 @@ public record FdhReviewResult(
         double locatorConfidence
     ) {
       this(label, value, status, confidence, pageNo, imageWidth, imageHeight, bbox, locatorConfidence,
-          null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run");
+          null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run", "", "", "", "", List.of());
     }
 
     public DocumentField(
@@ -337,9 +378,19 @@ public record FdhReviewResult(
         int imageWidth,
         int imageHeight,
         List<Integer> bbox,
-        double locatorConfidence
+        double locatorConfidence,
+        Integer verificationScore,
+        String verificationStatus,
+        String judgeObservedValue,
+        String verificationReason,
+        List<Integer> labelBbox,
+        List<Integer> valueBbox,
+        List<Integer> evidenceBbox,
+        String locationStatus
     ) {
-      this(label, value, status, confidence, pageNo, imageWidth, imageHeight, bbox, locatorConfidence, "", "", "", "", List.of());
+      this(label, value, status, confidence, pageNo, imageWidth, imageHeight, bbox, locatorConfidence,
+          verificationScore, verificationStatus, judgeObservedValue, verificationReason,
+          labelBbox, valueBbox, evidenceBbox, locationStatus, "", "", "", "", List.of());
     }
 
     public DocumentField {
@@ -362,6 +413,16 @@ public record FdhReviewResult(
       valueBbox = valueBbox == null ? List.of() : List.copyOf(valueBbox);
       evidenceBbox = evidenceBbox == null ? List.of() : List.copyOf(evidenceBbox);
       locationStatus = locationStatus == null || locationStatus.isBlank() ? "not_run" : locationStatus;
+      suggestedValue = suggestedValue == null ? "" : suggestedValue;
+      issue = issue == null ? "" : issue;
+      modelAgreement = modelAgreement == null ? "" : modelAgreement;
+      conflictType = conflictType == null ? "" : conflictType;
+      modelOutputs = modelOutputs == null ? List.of() : List.copyOf(modelOutputs);
+      suggestedValue = suggestedValue == null ? "" : suggestedValue;
+      issue = issue == null ? "" : issue;
+      modelAgreement = modelAgreement == null ? "" : modelAgreement;
+      conflictType = conflictType == null ? "" : conflictType;
+      modelOutputs = modelOutputs == null ? List.of() : List.copyOf(modelOutputs);
     }
   }
 }

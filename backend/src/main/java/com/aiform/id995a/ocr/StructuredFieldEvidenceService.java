@@ -70,11 +70,12 @@ public class StructuredFieldEvidenceService {
       JsonNode pageData = structuredData == null ? NullNode.getInstance() : structuredData.path(pageKey);
       JsonNode confidenceData = metadataPage(structuredData, "_confidence", pageKey);
       JsonNode evidenceData = metadataPage(structuredData, "_field_evidence", pageKey);
+      JsonNode parallelRecognitionData = metadataPage(structuredData, "_parallel_recognition", pageKey);
       List<FieldLabelDetection> labelDetections = detectPageLabels(page);
       List<FieldCandidate> candidates = new ArrayList<>();
       collectCandidates(pageData, List.of(), candidates);
       List<PreparedField> preparedFields = prepareFields(
-          page, candidates, confidenceData, evidenceData, labelDetections
+          page, candidates, confidenceData, evidenceData, parallelRecognitionData, labelDetections
       );
       List<StructuredFieldDetail> details = new ArrayList<>();
       for (PreparedField preparedField : preparedFields) {
@@ -90,11 +91,12 @@ public class StructuredFieldEvidenceService {
       List<FieldCandidate> candidates,
       JsonNode confidenceData,
       JsonNode evidenceData,
+      JsonNode parallelRecognitionData,
       List<FieldLabelDetection> labelDetections
   ) {
     if (!fieldJudgeProperties.enabled() || candidates.size() <= 1 || fieldJudgeProperties.concurrency() <= 1) {
       return candidates.stream()
-          .map(candidate -> prepareFieldSafely(page, candidate, confidenceData, evidenceData, labelDetections))
+          .map(candidate -> prepareFieldSafely(page, candidate, confidenceData, evidenceData, parallelRecognitionData, labelDetections))
           .toList();
     }
     int concurrency = Math.min(fieldJudgeProperties.concurrency(), candidates.size());
@@ -102,7 +104,7 @@ public class StructuredFieldEvidenceService {
     try {
       List<Future<PreparedField>> futures = candidates.stream()
           .map(candidate -> executor.submit(
-              () -> prepareFieldSafely(page, candidate, confidenceData, evidenceData, labelDetections)
+              () -> prepareFieldSafely(page, candidate, confidenceData, evidenceData, parallelRecognitionData, labelDetections)
           ))
           .toList();
       List<PreparedField> results = new ArrayList<>(futures.size());
@@ -110,14 +112,14 @@ public class StructuredFieldEvidenceService {
         try {
           results.add(futures.get(index).get());
         } catch (ExecutionException exception) {
-          results.add(failedPreparedField(page, candidates.get(index), confidenceData, evidenceData));
+          results.add(failedPreparedField(page, candidates.get(index), confidenceData, evidenceData, parallelRecognitionData));
         }
       }
       return List.copyOf(results);
     } catch (InterruptedException exception) {
       Thread.currentThread().interrupt();
       return candidates.stream()
-          .map(candidate -> failedPreparedField(page, candidate, confidenceData, evidenceData))
+          .map(candidate -> failedPreparedField(page, candidate, confidenceData, evidenceData, parallelRecognitionData))
           .toList();
     } finally {
       executor.shutdownNow();
@@ -129,12 +131,13 @@ public class StructuredFieldEvidenceService {
       FieldCandidate candidate,
       JsonNode confidenceData,
       JsonNode evidenceData,
+      JsonNode parallelRecognitionData,
       List<FieldLabelDetection> labelDetections
   ) {
     try {
-      return prepareField(page, candidate, confidenceData, evidenceData, labelDetections);
+      return prepareField(page, candidate, confidenceData, evidenceData, parallelRecognitionData, labelDetections);
     } catch (RuntimeException exception) {
-      return failedPreparedField(page, candidate, confidenceData, evidenceData);
+      return failedPreparedField(page, candidate, confidenceData, evidenceData, parallelRecognitionData);
     }
   }
 
@@ -161,7 +164,7 @@ public class StructuredFieldEvidenceService {
         page.page(), candidate.path(), label, candidate.value(), displayValue, confidence,
         List.of(), new CropResult(new byte[0], ""), valueText(candidate.value()), List.of(),
         List.of(), List.of(), List.of(), List.of(), FieldEvidenceRegion.notFound("field_processing_failed"),
-        observation, verification
+        observation, verification, lookupMetadata(parallelRecognitionData, candidate.path(), pageKey)
     );
   }
 
@@ -170,6 +173,7 @@ public class StructuredFieldEvidenceService {
       FieldCandidate candidate,
       JsonNode confidenceData,
       JsonNode evidenceData,
+      JsonNode parallelRecognitionData,
       List<FieldLabelDetection> labelDetections
   ) {
     String pageKey = "page_" + page.page();
@@ -202,7 +206,6 @@ public class StructuredFieldEvidenceService {
         valueText,
         valueBbox.isEmpty() ? recognitionBbox : valueBbox
     );
-    JsonNode parallelRecognition = lookupMetadata(parallelRecognitionData, candidate.path(), pageKey);
     return new PreparedField(
         page.page(),
         candidate.path(),
@@ -220,7 +223,8 @@ public class StructuredFieldEvidenceService {
         evidenceBbox,
         region,
         judgeObservation,
-        verification
+        verification,
+        lookupMetadata(parallelRecognitionData, candidate.path(), pageKey)
     );
   }
 
@@ -317,7 +321,12 @@ public class StructuredFieldEvidenceService {
         prepared.verification().score(),
         prepared.verification().status(),
         localizedVerificationReason(prepared.verification(), prepared.judgeObservation()),
-        fieldJudgeProperties.enabled() ? "field_judge" : "recognition_confidence"
+        fieldJudgeProperties.enabled() ? "field_judge" : "recognition_confidence",
+        firstExisting(prepared.parallelRecognition(), "suggested_value", "suggestedValue").asText(""),
+        firstExisting(prepared.parallelRecognition(), "issue", "suggestion_reason", "suggestionReason").asText(""),
+        firstExisting(prepared.parallelRecognition(), "model_agreement", "modelAgreement").asText(""),
+        firstExisting(prepared.parallelRecognition(), "conflict_type", "conflictType").asText(""),
+        parallelModelOutputs(prepared.parallelRecognition())
     );
   }
 
@@ -339,6 +348,22 @@ public class StructuredFieldEvidenceService {
         .replace("\"", "\\\"")
         .replace("\n", "\\n")
         .replace("\r", "\\r");
+  }
+
+  private List<ParallelRecognitionOutput> parallelModelOutputs(JsonNode parallelRecognition) {
+    JsonNode outputs = firstExisting(parallelRecognition, "outputs", "model_outputs", "modelOutputs");
+    if (!outputs.isArray()) {
+      return List.of();
+    }
+    List<ParallelRecognitionOutput> result = new ArrayList<>();
+    for (JsonNode output : outputs) {
+      result.add(new ParallelRecognitionOutput(
+          firstExisting(output, "label", "name").asText(""),
+          firstExisting(output, "value", "text").asText(""),
+          normalizeConfidence(firstExisting(output, "confidence", "score").asDouble(0))
+      ));
+    }
+    return List.copyOf(result);
   }
 
   private void collectCandidates(JsonNode node, List<String> path, List<FieldCandidate> candidates) {
@@ -778,7 +803,8 @@ public class StructuredFieldEvidenceService {
       List<Integer> evidenceBbox,
       FieldEvidenceRegion region,
       FieldJudgeObservation judgeObservation,
-      FieldVerification verification
+      FieldVerification verification,
+      JsonNode parallelRecognition
   ) {}
 
   private record CropResult(byte[] bytes, String dataUrl) {}
