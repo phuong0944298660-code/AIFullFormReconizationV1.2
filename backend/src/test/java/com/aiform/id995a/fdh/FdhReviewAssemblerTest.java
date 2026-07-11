@@ -933,6 +933,55 @@ class FdhReviewAssemblerTest {
     );
   }
 
+  @Test
+  void fieldJudgeStatusOverridesRecognitionConfidenceForExtractedFields() throws Exception {
+    StructuredFieldDetail highConfidenceMismatch = verifiedDetail(
+        "custom_high", "HIGH", 99, 0, "review", "mismatch"
+    );
+    StructuredFieldDetail lowConfidenceExact = verifiedDetail(
+        "custom_low", "LOW", 40, 100, "pass", "exact"
+    );
+    OcrPage page = new OcrPage(
+        1, "data:image/png;base64,AAA=", 200, 200, "", List.of(), List.of(), List.of(),
+        List.of(highConfidenceMismatch, lowConfidenceExact)
+    );
+    OcrDemoResponse response = new OcrDemoResponse(
+        "support.pdf", "test", 1, List.of(page), List.of(), new EngineStatus("test", false, List.of()),
+        objectMapper.readTree("{\"page_1\":{\"custom_high\":\"HIGH\",\"custom_low\":\"LOW\"}}"), ""
+    );
+    FdhReviewDocument document = new FdhReviewDocument(
+        "support.pdf", "application/pdf", 1,
+        new DocumentTemplate("support", "", 1, 98, "test", "support"), response, "supporting"
+    );
+
+    FdhReviewResult result = assembler.assemble("entry_visa", List.of(document));
+
+    FdhReviewResult.StandardField mismatch = field(result, "extracted.custom_high");
+    FdhReviewResult.StandardField exact = field(result, "extracted.custom_low");
+    assertThat(mismatch.status()).isEqualTo("review");
+    assertThat(mismatch.sources().get(0).verificationScore()).isZero();
+    assertThat(exact.status()).isEqualTo("pass");
+    assertThat(exact.sources().get(0).verificationScore()).isEqualTo(100);
+  }
+
+  private StructuredFieldDetail verifiedDetail(
+      String path,
+      String value,
+      double recognitionConfidence,
+      int verificationScore,
+      String verificationStatus,
+      String matchType
+  ) {
+    List<Integer> bbox = List.of(10, 10, 180, 40);
+    return new StructuredFieldDetail(
+        1, path, path, text(value), value, recognitionConfidence, bbox,
+        "data:image/jpeg;base64,SNAPSHOT", "", 0, "not_run", List.of(),
+        recognitionConfidence, bbox, List.of(10, 10, 70, 40), List.of(80, 10, 180, 40), bbox,
+        "located", "label_and_value", 96, "", "available", value, matchType,
+        verificationScore, verificationStatus, matchType, "field_judge"
+    );
+  }
+
   private FdhReviewDocument document(
       String filename,
       String materialId,

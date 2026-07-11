@@ -7,10 +7,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.imageio.ImageIO;
 import org.junit.jupiter.api.Test;
 
@@ -19,7 +23,116 @@ class StructuredFieldEvidenceServiceTest {
   private final ObjectMapper objectMapper = new ObjectMapper();
 
   @Test
-  void exposesPrintedLabelBboxWhileKeepingValueBboxForSnapshotAndCharacters() throws Exception {
+  void keepsOcrLabelAndLlmValueBboxesIndependentWhenCallingJudge() throws Exception {
+    FakeFieldRegionOcrGateway gateway = new FakeFieldRegionOcrGateway();
+    gateway.pageDetections = List.of(
+        new FieldLabelDetection("HKID", 98, List.of(60, 12, 82, 28))
+    );
+    AtomicReference<String> judgeSnapshot = new AtomicReference<>("");
+    FieldJudgeGateway judge = (fieldKey, fieldLabel, expectedValue, valueType, snapshotDataUrl) -> {
+      judgeSnapshot.set(snapshotDataUrl);
+      return new FieldJudgeObservation(
+          "available", "A123456(7)", "exact", "clear", "complete", ""
+      );
+    };
+    StructuredFieldEvidenceService service = new StructuredFieldEvidenceService(
+        gateway,
+        judge,
+        new FieldJudgeProperties(true, "enforce", "", "", "qwen3.6-flash", 2, 85, 1)
+    );
+    JsonNode structuredData = objectMapper.readTree("""
+        {
+          "page_1": {"hkid": "A123456(7)"},
+          "_confidence": {"page_1": {"hkid": 99}},
+          "_field_evidence": {"page_1": {"hkid": {
+            "label": "HKID",
+            "bbox": [1, 1, 20, 20],
+            "value_bbox": [82, 12, 180, 28]
+          }}}
+        }
+        """);
+
+    StructuredFieldDetail detail = service.buildFieldDetails(structuredData, List.of(renderedPage()))
+        .get(1)
+        .get(0);
+
+    assertThat(detail.recognitionConfidence()).isEqualTo(99);
+    assertThat(detail.recognitionBbox()).containsExactly(82, 12, 180, 28);
+    assertThat(detail.labelBbox()).containsExactly(60, 12, 82, 28);
+    assertThat(detail.valueBbox()).containsExactly(82, 12, 180, 28);
+    assertThat(detail.bbox()).isEqualTo(detail.labelBbox());
+    assertThat(judgeSnapshot.get()).startsWith("data:image/jpeg;base64,");
+    BufferedImage judgeImage = ImageIO.read(new ByteArrayInputStream(
+        Base64.getDecoder().decode(judgeSnapshot.get().substring(judgeSnapshot.get().indexOf(',') + 1))
+    ));
+    assertThat(judgeImage.getWidth()).isEqualTo(112);
+    assertThat(detail.judgeObservedValue()).isEqualTo("A123456(7)");
+    assertThat(detail.verificationScore()).isEqualTo(100);
+    assertThat(detail.verificationStatus()).isEqualTo("pass");
+    assertThat(detail.scoreSource()).isEqualTo("field_judge");
+  }
+
+  @Test
+  void storesBilingualJudgeReasonForTheFrontendLanguageSwitcher() throws Exception {
+    FakeFieldRegionOcrGateway gateway = new FakeFieldRegionOcrGateway();
+    FieldJudgeGateway judge = (fieldKey, fieldLabel, expectedValue, valueType, snapshotDataUrl) ->
+        new FieldJudgeObservation(
+            "available", "CHAN", "exact", "clear", "complete",
+            "The value matches exactly.", "填寫值完全一致。"
+        );
+    StructuredFieldEvidenceService service = new StructuredFieldEvidenceService(
+        gateway, judge, new FieldJudgeProperties(true, "enforce", "", "", "qwen3.6-flash", 2, 85, 1)
+    );
+    JsonNode structuredData = objectMapper.readTree("""
+        {"page_1":{"name":"CHAN"},"_field_evidence":{"page_1":{"name":{"label":"Name","value_bbox":[82,12,180,28]}}}}
+        """);
+
+    StructuredFieldDetail detail = service.buildFieldDetails(structuredData, List.of(renderedPage())).get(1).get(0);
+
+    assertThat(detail.verificationReason())
+        .isEqualTo("{\"en\":\"The value matches exactly.\",\"zh-Hant\":\"填寫值完全一致。\"}");
+  }
+
+  @Test
+  void doesNotFallBackToGenericBboxWhenLlmValueBboxIsMissing() throws Exception {
+    FakeFieldRegionOcrGateway gateway = new FakeFieldRegionOcrGateway();
+    gateway.pageDetections = List.of(
+        new FieldLabelDetection("HKID", 98, List.of(60, 12, 82, 28))
+    );
+    AtomicInteger judgeCalls = new AtomicInteger();
+    FieldJudgeGateway judge = (fieldKey, fieldLabel, expectedValue, valueType, snapshotDataUrl) -> {
+      judgeCalls.incrementAndGet();
+      return new FieldJudgeObservation(
+          "available", "A123456(7)", "exact", "clear", "complete", ""
+      );
+    };
+    StructuredFieldEvidenceService service = new StructuredFieldEvidenceService(
+        gateway,
+        judge,
+        new FieldJudgeProperties(true, "enforce", "", "", "qwen3.6-flash", 2, 85, 1)
+    );
+    JsonNode structuredData = objectMapper.readTree("""
+        {
+          "page_1": {"hkid": "A123456(7)"},
+          "_field_evidence": {"page_1": {"hkid": {
+            "label": "HKID",
+            "bbox": [82, 12, 180, 28]
+          }}}
+        }
+        """);
+
+    StructuredFieldDetail detail = service.buildFieldDetails(structuredData, List.of(renderedPage()))
+        .get(1)
+        .get(0);
+
+    assertThat(judgeCalls).hasValue(0);
+    assertThat(detail.valueBbox()).isEmpty();
+    assertThat(detail.verificationScore()).isNull();
+    assertThat(detail.verificationReason()).isEqualTo("value_bbox_missing");
+  }
+
+  @Test
+  void exposesLabelBboxForHighlightWhileKeepingLlmValueBboxForCharacters() throws Exception {
     FakeFieldRegionOcrGateway gateway = new FakeFieldRegionOcrGateway();
     gateway.pageDetections = List.of(
         new FieldLabelDetection("Length of residence", 97, List.of(8, 12, 108, 28)),
@@ -46,8 +159,35 @@ class StructuredFieldEvidenceServiceTest {
 
     assertThat(gateway.pageDetectionCallCount).isEqualTo(1);
     assertThat(detail.bbox()).containsExactly(8, 12, 108, 28);
+    assertThat(detail.labelBbox()).containsExactly(8, 12, 108, 28);
+    assertThat(detail.valueBbox()).containsExactly(120, 50, 180, 70);
+    assertThat(detail.evidenceBbox()).isEmpty();
     assertThat(detail.snapshotDataUrl()).startsWith("data:image/jpeg;base64,");
     assertThat(detail.characters().get(0).bbox().get(0)).isEqualTo(120);
+  }
+
+  @Test
+  void usesTheOcrLocatedFieldLabelForHighlightWhenItsValueIsNotLocated() throws Exception {
+    FakeFieldRegionOcrGateway gateway = new FakeFieldRegionOcrGateway();
+    gateway.pageDetections = List.of(
+        new FieldLabelDetection("Surname in English", 98, List.of(8, 12, 140, 28))
+    );
+    StructuredFieldEvidenceService service = new StructuredFieldEvidenceService(gateway);
+    JsonNode structuredData = objectMapper.readTree("""
+        {
+          "page_1": {"surname": "CHEN"},
+          "_field_evidence": {"page_1": {"surname": {"label": "Surname in English"}}}
+        }
+        """);
+
+    StructuredFieldDetail detail = service.buildFieldDetails(structuredData, List.of(renderedPage()))
+        .get(1)
+        .get(0);
+
+    assertThat(detail.locationStatus()).isEqualTo("located");
+    assertThat(detail.labelBbox()).containsExactly(8, 12, 140, 28);
+    assertThat(detail.evidenceBbox()).isEmpty();
+    assertThat(detail.bbox()).isEqualTo(detail.labelBbox());
   }
 
   @Test

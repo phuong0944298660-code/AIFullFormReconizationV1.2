@@ -21,6 +21,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,7 +46,7 @@ public class FdhReviewJobService {
   private final FdhOfficialPageNumberDetector officialPageNumberDetector;
   private final int fileConcurrency;
   private final ConcurrentMap<String, JobState> jobs = new ConcurrentHashMap<>();
-  private final ExecutorService executor = Executors.newCachedThreadPool();
+  private final ExecutorService executor = Executors.newCachedThreadPool(applicationThreadFactory("fdh-review-job"));
 
   @Autowired
   public FdhReviewJobService(
@@ -135,15 +137,22 @@ public class FdhReviewJobService {
   public FdhReviewJobStatusResponse status(String jobId) {
     JobState state = jobs.get(jobId);
     if (state == null) {
-      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "FDH review job not found.");
+      throw new ResponseStatusException(
+          HttpStatus.NOT_FOUND,
+          "Recognition job is no longer available. The backend may have restarted; upload the documents again."
+      );
     }
+    state.markFailedIfWorkerEnded();
     return state.snapshot();
   }
 
   public FdhReviewJobStatusResponse cancel(String jobId) {
     JobState state = jobs.get(jobId);
     if (state == null) {
-      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "FDH review job not found.");
+      throw new ResponseStatusException(
+          HttpStatus.NOT_FOUND,
+          "Recognition job is no longer available. The backend may have restarted; upload the documents again."
+      );
     }
     Future<?> future = state.markCanceled();
     if (future != null) {
@@ -156,7 +165,10 @@ public class FdhReviewJobService {
     List<IndexedReviewDocument> documents = new ArrayList<>();
     long jobStartedAt = System.nanoTime();
     int concurrency = Math.min(fileConcurrency, uploads.size());
-    ExecutorService fileExecutor = Executors.newFixedThreadPool(concurrency);
+    ExecutorService fileExecutor = Executors.newFixedThreadPool(
+        concurrency,
+        applicationThreadFactory("fdh-review-file")
+    );
     try {
       log.info(
           "FDH review job {} started: applicationType={}, files={}, fileConcurrency={}",
@@ -681,6 +693,16 @@ public class FdhReviewJobService {
     return Math.max(0, (System.nanoTime() - startedAtNanos) / 1_000_000);
   }
 
+  private static ThreadFactory applicationThreadFactory(String namePrefix) {
+    ClassLoader applicationClassLoader = FdhReviewJobService.class.getClassLoader();
+    AtomicInteger sequence = new AtomicInteger();
+    return task -> {
+      Thread thread = new Thread(task, namePrefix + "-" + sequence.incrementAndGet());
+      thread.setContextClassLoader(applicationClassLoader);
+      return thread;
+    };
+  }
+
   private String filename(String value) {
     return value == null || value.isBlank() ? "uploaded-document" : value;
   }
@@ -750,6 +772,23 @@ public class FdhReviewJobService {
       }
     }
 
+    private synchronized void markFailedIfWorkerEnded() {
+      if (!isTerminal() && future != null && future.isDone()) {
+        try {
+          future.get();
+          markFailed("任务工作线程意外结束，请重新发起识别。");
+        } catch (InterruptedException exception) {
+          Thread.currentThread().interrupt();
+          markFailed("任务工作线程被中断，请重新发起识别。");
+        } catch (ExecutionException exception) {
+          Throwable cause = exception.getCause() == null ? exception : exception.getCause();
+          log.error("FDH review job {} terminated outside the task error handler", jobId, cause);
+          markFailed("任务工作线程执行异常：" + cause.getClass().getSimpleName()
+              + (cause.getMessage() == null || cause.getMessage().isBlank() ? "" : " - " + cause.getMessage()));
+        }
+      }
+    }
+
     private synchronized boolean isCanceled() {
       return "canceled".equals(status);
     }
@@ -814,7 +853,7 @@ public class FdhReviewJobService {
         return;
       }
       status = "failed";
-      progress = Math.max(progress, progressFor(processedFiles, totalFiles, 0));
+      progress = 100;
       error = failureMessage == null || failureMessage.isBlank() ? "材料审批任务失败。" : failureMessage;
       message = error;
     }

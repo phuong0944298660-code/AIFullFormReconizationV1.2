@@ -4,7 +4,7 @@
 
 - `backend/`：Java 17 + Spring Boot 后端，承载材料 review API、任务编排、字段组装、结论生成与 OCR/LLM 调用入口。
 - `frontend/`：Vue 3 + Vite 前端，承载上传页、识别结果页、JSON 视图、核验结果页和主要 UI 样式。
-- `ocr-service/`：可选 field OCR sidecar 服务，默认不启动；只有明确使用 `-WithSidecar` 时才参与本地流程。
+- `ocr-service/`：field OCR sidecar 服务，本地启动默认自动启动；只有明确使用 `-NoSidecar` 时才禁用。
 - `data/`：模板分类、材料识别规则和 demo 配置类数据，不放本地凭据。
 - `docs/`：项目说明、测试材料、业务文档和人工整理资料；忽略 WPS 临时锁文件如 `docs/~$*.xlsx`。
 - `models/`：本地模型或模型相关资源目录；不要提交大型模型产物或本地私有权重，除非明确确认。
@@ -28,7 +28,7 @@
 - 前端：Vue 3 + Vite，目录为 `frontend/`。
 - 后端：Java 17 + Spring Boot，目录为 `backend/`。
 - 识别与结构化提取：默认使用本地 OpenAI-compatible 多模态 LLM。
-- 可选 OCR sidecar：目录为 `ocr-service/`，默认不启动；只有明确使用 `-WithSidecar` 时才启动。
+- OCR sidecar：目录为 `ocr-service/`，本地启动默认自动启动；使用 `-NoSidecar` 可显式禁用。
 - 当前默认演示流程：学生出入境 IANG 应届毕业生在港首次申请。
 - 可切换演示流程：FDH Entry Visa 外籍家庭佣工入境审核。
 - 主要用户流程：申请材料上传 -> 文档解析识别 -> 字段结构化提取与归一 -> 跨档智能校验 -> 自动生成审核结论。
@@ -40,13 +40,15 @@
 默认本地服务：
 - 前端：`http://127.0.0.1:5197/`
 - 后端：`http://127.0.0.1:18083`
-- 可选 field OCR sidecar：`http://127.0.0.1:18092`
+- field OCR sidecar：`http://127.0.0.1:18092`（默认启动）
 
 启动服务：
 
 ```powershell
-.\start-local.ps1 -SkipBuild
+ .\start-local.ps1 -SkipBuild
 ```
+
+本地启动前端和后端时默认同时启动 field OCR sidecar；如需禁用 OCR，使用 `.start-local.ps1 -SkipBuild -NoSidecar`。
 
 停止服务：
 

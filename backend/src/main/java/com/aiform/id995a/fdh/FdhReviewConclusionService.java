@@ -370,14 +370,16 @@ public class FdhReviewConclusionService {
   }
 
   private Map<String, Object> compactSource(FdhReviewResult.FieldSource source) {
-    return Map.of(
-        "documentName", source.documentName(),
-        "filename", source.filename(),
-        "section", source.section(),
-        "fieldName", source.fieldName(),
-        "value", source.value(),
-        "confidence", source.confidence()
-    );
+    Map<String, Object> row = new LinkedHashMap<>();
+    row.put("documentName", source.documentName());
+    row.put("filename", source.filename());
+    row.put("section", source.section());
+    row.put("fieldName", source.fieldName());
+    row.put("value", source.value());
+    row.put("verificationScore", source.verificationScore());
+    row.put("verificationStatus", source.verificationStatus());
+    row.put("verificationReason", source.verificationReason());
+    return row;
   }
 
   private List<FdhFieldAdjudication> deterministicFieldAdjudications(FdhReviewResult result) {
@@ -436,7 +438,7 @@ public class FdhReviewConclusionService {
   private ValueGroup chooseSuggestedValue(FdhReviewResult.StandardField field, List<ValueGroup> groups) {
     Comparator<ValueGroup> reliability = Comparator
         .comparingInt(ValueGroup::priority)
-        .thenComparingDouble(ValueGroup::confidence)
+        .thenComparingInt(ValueGroup::verificationScore)
         .thenComparingInt(ValueGroup::sourceCount);
     if ("contract.dh_contract_no".equals(clean(field.key()))) {
       int currentYear = Year.now().getValue();
@@ -473,20 +475,24 @@ public class FdhReviewConclusionService {
       if (existing == null) {
         groups.put(value, new ValueGroup(
             value,
-            source.confidence(),
+            sourceVerificationScore(source),
             sourcePriority(field.key(), source.documentName()),
             1
         ));
       } else {
         groups.put(value, new ValueGroup(
             existing.value(),
-            Math.max(existing.confidence(), source.confidence()),
+            Math.max(existing.verificationScore(), sourceVerificationScore(source)),
             Math.max(existing.priority(), sourcePriority(field.key(), source.documentName())),
             existing.sourceCount() + 1
         ));
       }
     }
     return List.copyOf(groups.values());
+  }
+
+  private int sourceVerificationScore(FdhReviewResult.FieldSource source) {
+    return source.verificationScore() == null ? 0 : source.verificationScore();
   }
 
   private String normalizeFieldValue(String fieldKey, String value) {
@@ -661,5 +667,5 @@ public class FdhReviewConclusionService {
     }
   }
 
-  private record ValueGroup(String value, double confidence, int priority, int sourceCount) {}
+  private record ValueGroup(String value, int verificationScore, int priority, int sourceCount) {}
 }

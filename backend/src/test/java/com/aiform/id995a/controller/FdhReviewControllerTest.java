@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -22,6 +23,8 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
 
 @WebMvcTest(FdhReviewController.class)
 class FdhReviewControllerTest {
@@ -82,6 +85,24 @@ class FdhReviewControllerTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status", equalTo("ok")))
         .andExpect(jsonPath("$.text", equalTo("整体结论：PASS - 允许通过")));
+  }
+
+  @Test
+  void returnsAnImmediateMessageWhenTheReviewJobWasLostAfterRestart() throws Exception {
+    when(reviewJobService.status("expired-job"))
+        .thenThrow(new ResponseStatusException(
+            HttpStatus.NOT_FOUND,
+            "Recognition job is no longer available. The backend may have restarted; upload the documents again."
+        ));
+
+    mockMvc.perform(get("/api/fdh/review/jobs/expired-job"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.jobId", equalTo("expired-job")))
+        .andExpect(jsonPath("$.status", equalTo("failed")))
+        .andExpect(jsonPath("$.progress", equalTo(100)))
+        .andExpect(jsonPath("$.error", equalTo(
+            "Recognition job is no longer available. The backend may have restarted; upload the documents again."
+        )));
   }
 
   private MockMultipartFile file(String filename) {

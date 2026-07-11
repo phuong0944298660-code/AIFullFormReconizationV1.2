@@ -7,11 +7,32 @@ import {
   structuredJsonPreview,
   pageStructuredFieldCount,
   structuredFieldRows,
+  sourceEvidenceBbox,
+  averageFieldVerificationScore,
   pageFieldConclusion,
   documentFieldConclusion,
   cropPlaceholderText
 } from './ocrPresentation.js'
 import { pageProgressItems, recognitionProgressState } from './progressState.js'
+
+test('sourceEvidenceBbox uses label bbox instead of value or combined evidence', () => {
+  assert.deepEqual(sourceEvidenceBbox({
+    labelBbox: [10, 20, 110, 40],
+    valueBbox: [200, 20, 300, 40],
+    evidenceBbox: [0, 10, 320, 50],
+    bbox: [10, 20, 110, 40]
+  }), [10, 20, 110, 40])
+})
+
+test('averageFieldVerificationScore keeps zero and ignores unscored sources', () => {
+  assert.equal(averageFieldVerificationScore([
+    { verificationScore: 0 },
+    { verificationScore: null },
+    { verificationScore: 100 }
+  ]), 50)
+  assert.equal(averageFieldVerificationScore([{ verificationScore: 0 }]), 0)
+  assert.equal(averageFieldVerificationScore([{ verificationScore: null }]), null)
+})
 
 test('visibleOcrLines removes locator tokens and replacement noise', () => {
   const lines = visibleOcrLines([
@@ -515,7 +536,7 @@ test('pageFieldConclusion summarizes confidence distribution for the active page
 
   assert.equal(
     conclusion,
-    '本页共识别 4 个字段，其中 2 个置信率在 85% 以上，1 个在 70%-84% 之间，1 个低于 70%，建议优先复核低置信字段。'
+    '本页共识别 4 个字段，其中 2 个核验分数在 85 分以上，1 个在 70-84 分之间，1 个低于 70 分或未完成裁判，建议优先复核低分或未完成裁判的字段。'
   )
 })
 
@@ -541,7 +562,7 @@ test('documentFieldConclusion summarizes confidence distribution across all page
 
   assert.equal(
     conclusion,
-    '整份文件共识别 4 个字段，其中 2 个置信率在 85% 以上，1 个在 70%-84% 之间，1 个低于 70%；建议优先复核低置信字段。'
+    '整份文件共识别 4 个字段，其中 2 个核验分数在 85 分以上，1 个在 70-84 分之间，1 个低于 70 分或未完成裁判；建议优先复核低分或未完成裁判的字段。'
   )
 })
 

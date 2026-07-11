@@ -22,6 +22,7 @@ import com.aiform.id995a.review.EngineStatus;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
@@ -31,6 +32,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
@@ -41,6 +44,30 @@ class FdhReviewJobServiceTest {
   private static final String CONTRACT_NO = "FH-CON-IDN2026-0612";
 
   private final ObjectMapper objectMapper = new ObjectMapper();
+
+  @Test
+  void asyncJobWorkersUseTheApplicationClassLoader() throws Exception {
+    FdhReviewJobService service = new FdhReviewJobService(
+        mock(BaiduOcrPageRenderer.class),
+        mock(TemplateDetectionService.class),
+        mock(OcrDemoService.class),
+        new FdhReviewAssembler(5100, 1236, Clock.systemUTC())
+    );
+    Field executorField = FdhReviewJobService.class.getDeclaredField("executor");
+    executorField.setAccessible(true);
+    ExecutorService executor = (ExecutorService) executorField.get(service);
+    Thread caller = Thread.currentThread();
+    ClassLoader original = caller.getContextClassLoader();
+    ClassLoader foreign = new ClassLoader(null) {};
+    try {
+      caller.setContextClassLoader(foreign);
+      assertThat(executor.submit(() -> Thread.currentThread().getContextClassLoader()).get())
+          .isSameAs(FdhReviewJobService.class.getClassLoader());
+    } finally {
+      caller.setContextClassLoader(original);
+      executor.shutdownNow();
+    }
+  }
 
   @Test
   void asyncJobRunsMaterialClassificationLlmExtractionAndRules() throws Exception {
@@ -102,6 +129,42 @@ class FdhReviewJobServiceTest {
         any(),
         any(DocumentTemplate.class)
     );
+  }
+
+  @Test
+  void statusFailsAJobWhoseWorkerFinishedBeforeReachingATerminalState() throws Exception {
+    FdhReviewJobService service = new FdhReviewJobService(
+        mock(BaiduOcrPageRenderer.class),
+        mock(TemplateDetectionService.class),
+        mock(OcrDemoService.class),
+        new FdhReviewAssembler(5100, 1236, Clock.systemUTC())
+    );
+    Class<?> stateType = Class.forName("com.aiform.id995a.fdh.FdhReviewJobService$JobState");
+    Constructor<?> constructor = stateType.getDeclaredConstructor(String.class, String.class, int.class);
+    constructor.setAccessible(true);
+    Object state = constructor.newInstance("finished-worker", "iang_recent_in_hk", 1);
+    Method markActive = stateType.getDeclaredMethod("markActive", String.class, String.class);
+    Method attachFuture = stateType.getDeclaredMethod("attachFuture", java.util.concurrent.Future.class);
+    markActive.setAccessible(true);
+    attachFuture.setAccessible(true);
+    markActive.invoke(state, "ID990A.pdf", "正在渲染并识别材料类型");
+    FutureTask<Void> completedFuture = new FutureTask<>(() -> {
+      throw new AssertionError("simulated worker crash");
+    });
+    completedFuture.run();
+    attachFuture.invoke(state, completedFuture);
+
+    java.lang.reflect.Field jobsField = FdhReviewJobService.class.getDeclaredField("jobs");
+    jobsField.setAccessible(true);
+    @SuppressWarnings("unchecked")
+    ConcurrentHashMap<String, Object> jobs = (ConcurrentHashMap<String, Object>) jobsField.get(service);
+    jobs.put("finished-worker", state);
+
+    FdhReviewJobStatusResponse status = service.status("finished-worker");
+
+    assertThat(status.status()).isEqualTo("failed");
+    assertThat(status.progress()).isEqualTo(100);
+    assertThat(status.error()).contains("simulated worker crash");
   }
 
   @Test

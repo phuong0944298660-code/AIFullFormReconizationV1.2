@@ -64,11 +64,15 @@ class OcrPipelineTest(unittest.TestCase):
                 {
                     "text": "Length of residence",
                     "confidence": 0.97,
+                    "detection_confidence": 0.97,
+                    "text_status": "readable",
                     "bbox": [20, 100, 220, 124],
                 },
                 {
                     "text": "22",
                     "confidence": 0.61,
+                    "detection_confidence": 0.61,
+                    "text_status": "readable",
                     "bbox": [450, 100, 485, 124],
                 },
             ],
@@ -80,6 +84,24 @@ class OcrPipelineTest(unittest.TestCase):
         self.assertEqual(result["status"], "available")
         self.assertEqual(result["lines"][0]["text"], "Length of residence")
         self.assertEqual(result["lines"][0]["bbox"], [20, 100, 220, 124])
+
+    def test_page_detection_keeps_polygon_when_text_is_empty(self):
+        payload = [{
+            "rec_texts": ["Name", ""],
+            "rec_scores": [0.99, 0.0],
+            "dt_polys": [
+                [[10, 10], [80, 10], [80, 30], [10, 30]],
+                [[100, 10], [220, 10], [220, 30], [100, 30]],
+            ],
+        }]
+
+        lines = extract_lines_from_ocr_response(payload)
+
+        self.assertEqual(len(lines), 2)
+        self.assertEqual(lines[1]["text"], "")
+        self.assertEqual(lines[1]["text_status"], "unreadable")
+        self.assertEqual(lines[1]["detection_confidence"], 0.5)
+        self.assertEqual(lines[1]["bbox"], [100, 10, 220, 30])
 
 
 if __name__ == "__main__":

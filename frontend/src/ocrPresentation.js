@@ -59,6 +59,47 @@ export function pageStructuredFieldCount(response, pageNumber) {
   return structuredFieldRows(response, pageNumber).length
 }
 
+export function fieldVerificationScore(field) {
+  if (field && Object.hasOwn(field, 'verificationScore')) {
+    const score = Number(field.verificationScore)
+    return field.verificationScore !== null && Number.isFinite(score)
+      ? Math.max(0, Math.min(100, Math.round(score)))
+      : null
+  }
+  const legacy = Number(field?.confidence)
+  return Number.isFinite(legacy) ? Math.max(0, Math.min(100, Math.round(legacy))) : null
+}
+
+export function averageFieldVerificationScore(sources = []) {
+  const scores = sources
+    .map(fieldVerificationScore)
+    .filter((score) => score !== null)
+  if (!scores.length) return null
+  return Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length)
+}
+
+export function sourceEvidenceBbox(source) {
+  for (const candidate of [source?.labelBbox, source?.bbox]) {
+    if (Array.isArray(candidate)
+      && candidate.length === 4
+      && candidate.every((value) => Number.isFinite(Number(value)))) {
+      return candidate.map(Number)
+    }
+  }
+  return []
+}
+
+export function fieldNeedsReview(field, passThreshold = 85) {
+  if (field?.verificationStatus === 'shadow') return false
+  if (field?.verificationStatus === 'review') return true
+  if (field?.verificationStatus === 'pass') return false
+  if (field && Object.hasOwn(field, 'verificationScore')) {
+    const score = fieldVerificationScore(field)
+    return score === null || score < passThreshold
+  }
+  return false
+}
+
 export function structuredFieldRows(response, pageNumber) {
   const evidenceRows = pageStructuredFields(response, pageNumber)
   const pageData = response?.structuredData?.[`page_${pageNumber}`]
@@ -147,30 +188,36 @@ export function fieldIssueRegions(response, pageNumber) {
 export function pageFieldConclusion(rows = []) {
   const total = rows.length
   if (!total) return '本页暂未识别到字段。'
-  const high = rows.filter((row) => row.confidence >= 85).length
-  const medium = rows.filter((row) => row.confidence >= 70 && row.confidence < 85).length
-  const low = rows.filter((row) => row.confidence < 70).length
+  const high = rows.filter((row) => (fieldVerificationScore(row) ?? -1) >= 85).length
+  const medium = rows.filter((row) => {
+    const score = fieldVerificationScore(row) ?? -1
+    return score >= 70 && score < 85
+  }).length
+  const low = rows.filter((row) => (fieldVerificationScore(row) ?? -1) < 70).length
   const advice = low > 0
-    ? '建议优先复核低置信字段。'
+    ? '建议优先复核低分或未完成裁判的字段。'
     : medium > 0
       ? '建议抽查中等置信字段。'
       : '整体可信度较高，可按需抽查。'
-  return `本页共识别 ${total} 个字段，其中 ${high} 个置信率在 85% 以上，${medium} 个在 70%-84% 之间，${low} 个低于 70%，${advice}`
+  return `本页共识别 ${total} 个字段，其中 ${high} 个核验分数在 85 分以上，${medium} 个在 70-84 分之间，${low} 个低于 70 分或未完成裁判，${advice}`
 }
 
 export function documentFieldConclusion(response) {
   const rows = documentFieldRows(response)
   const total = rows.length
   if (!total) return '整份文件暂未识别到字段。'
-  const high = rows.filter((row) => row.confidence >= 85).length
-  const medium = rows.filter((row) => row.confidence >= 70 && row.confidence < 85).length
-  const low = rows.filter((row) => row.confidence < 70).length
+  const high = rows.filter((row) => (fieldVerificationScore(row) ?? -1) >= 85).length
+  const medium = rows.filter((row) => {
+    const score = fieldVerificationScore(row) ?? -1
+    return score >= 70 && score < 85
+  }).length
+  const low = rows.filter((row) => (fieldVerificationScore(row) ?? -1) < 70).length
   const advice = low > 0
-    ? '建议优先复核低置信字段。'
+    ? '建议优先复核低分或未完成裁判的字段。'
     : medium > 0
       ? '建议抽查中等置信字段。'
       : '整体可信度较高，可按需抽查。'
-  return `整份文件共识别 ${total} 个字段，其中 ${high} 个置信率在 85% 以上，${medium} 个在 70%-84% 之间，${low} 个低于 70%；${advice}`
+  return `整份文件共识别 ${total} 个字段，其中 ${high} 个核验分数在 85 分以上，${medium} 个在 70-84 分之间，${low} 个低于 70 分或未完成裁判；${advice}`
 }
 
 export function cropPlaceholderText() {
@@ -336,7 +383,17 @@ function toEvidenceFieldRow(field) {
     rawValue: field.value,
     displayValue,
     confidence: normalizeConfidence(field.confidence, pathParts, field.value),
-    bbox: field.bbox || [],
+    recognitionConfidence: normalizeConfidence(field.recognitionConfidence ?? field.confidence, pathParts, field.value),
+    ...(Object.hasOwn(field, 'verificationScore') ? { verificationScore: field.verificationScore ?? null } : {}),
+    verificationStatus: field.verificationStatus || 'not_run',
+    verificationReason: field.verificationReason || '',
+    judgeObservedValue: field.judgeObservedValue || '',
+    judgeMatchType: field.judgeMatchType || '',
+    locationStatus: field.locationStatus || 'not_run',
+    labelBbox: field.labelBbox || [],
+    valueBbox: field.valueBbox || [],
+    evidenceBbox: field.evidenceBbox || [],
+    bbox: sourceEvidenceBbox(field),
     snapshotDataUrl: field.snapshotDataUrl || '',
     ocrText: '',
     ocrStatus: 'not_run',

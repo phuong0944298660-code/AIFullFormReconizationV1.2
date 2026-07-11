@@ -51,6 +51,16 @@ field-ocr:
   base-url: ${FIELD_OCR_BASE_URL:http://127.0.0.1:18092}
   timeout-seconds: ${FIELD_OCR_TIMEOUT_SECONDS:20}
 
+field-judge:
+  enabled: ${FIELD_JUDGE_ENABLED:false}
+  mode: ${FIELD_JUDGE_MODE:shadow}
+  base-url: ${FIELD_JUDGE_BASE_URL:}
+  api-key: ${FIELD_JUDGE_API_KEY:}
+  model: ${FIELD_JUDGE_MODEL:qwen3.6-flash}
+  timeout-seconds: ${FIELD_JUDGE_TIMEOUT_SECONDS:20}
+  pass-threshold: ${FIELD_JUDGE_PASS_THRESHOLD:85}
+  concurrency: ${FIELD_JUDGE_CONCURRENCY:4}
+
 fdh:
   review:
     file-concurrency: ${FDH_REVIEW_FILE_CONCURRENCY:2}

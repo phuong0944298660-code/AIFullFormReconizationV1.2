@@ -148,7 +148,15 @@ public record FdhReviewResult(
       int imageWidth,
       int imageHeight,
       List<Integer> bbox,
-      double locatorConfidence
+      double locatorConfidence,
+      Integer verificationScore,
+      String verificationStatus,
+      String judgeObservedValue,
+      String verificationReason,
+      List<Integer> labelBbox,
+      List<Integer> valueBbox,
+      List<Integer> evidenceBbox,
+      String locationStatus
   ) {
 
     public FieldSource(
@@ -161,7 +169,29 @@ public record FdhReviewResult(
         String snapshotText,
         String snapshotDataUrl
     ) {
-      this(documentName, filename, section, fieldName, value, confidence, snapshotText, snapshotDataUrl, "", 0, 0, 0, List.of(), 0);
+      this(documentName, filename, section, fieldName, value, confidence, snapshotText, snapshotDataUrl,
+          "", 0, 0, 0, List.of(), 0, null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run");
+    }
+
+    public FieldSource(
+        String documentName,
+        String filename,
+        String section,
+        String fieldName,
+        String value,
+        double confidence,
+        String snapshotText,
+        String snapshotDataUrl,
+        String materialId,
+        int pageNo,
+        int imageWidth,
+        int imageHeight,
+        List<Integer> bbox,
+        double locatorConfidence
+    ) {
+      this(documentName, filename, section, fieldName, value, confidence, snapshotText, snapshotDataUrl,
+          materialId, pageNo, imageWidth, imageHeight, bbox, locatorConfidence,
+          null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run");
     }
 
     public FieldSource {
@@ -179,6 +209,16 @@ public record FdhReviewResult(
       imageHeight = Math.max(0, imageHeight);
       bbox = bbox == null ? List.of() : List.copyOf(bbox);
       locatorConfidence = Math.max(0, Math.min(100, locatorConfidence));
+      if (verificationScore != null) {
+        verificationScore = Math.max(0, Math.min(100, verificationScore));
+      }
+      verificationStatus = verificationStatus == null || verificationStatus.isBlank() ? "not_run" : verificationStatus;
+      judgeObservedValue = judgeObservedValue == null ? "" : judgeObservedValue;
+      verificationReason = verificationReason == null ? "" : verificationReason;
+      labelBbox = labelBbox == null ? List.of() : List.copyOf(labelBbox);
+      valueBbox = valueBbox == null ? List.of() : List.copyOf(valueBbox);
+      evidenceBbox = evidenceBbox == null ? List.of() : List.copyOf(evidenceBbox);
+      locationStatus = locationStatus == null || locationStatus.isBlank() ? "not_run" : locationStatus;
     }
   }
 
@@ -252,7 +292,15 @@ public record FdhReviewResult(
       int imageWidth,
       int imageHeight,
       List<Integer> bbox,
-      double locatorConfidence
+      double locatorConfidence,
+      Integer verificationScore,
+      String verificationStatus,
+      String judgeObservedValue,
+      String verificationReason,
+      List<Integer> labelBbox,
+      List<Integer> valueBbox,
+      List<Integer> evidenceBbox,
+      String locationStatus
   ) {
 
     public DocumentField(
@@ -260,7 +308,23 @@ public record FdhReviewResult(
         String value,
         String status
     ) {
-      this(label, value, status, 0, 0, 0, 0, List.of(), 0);
+      this(label, value, status, 0, 0, 0, 0, List.of(), 0,
+          null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run");
+    }
+
+    public DocumentField(
+        String label,
+        String value,
+        String status,
+        double confidence,
+        int pageNo,
+        int imageWidth,
+        int imageHeight,
+        List<Integer> bbox,
+        double locatorConfidence
+    ) {
+      this(label, value, status, confidence, pageNo, imageWidth, imageHeight, bbox, locatorConfidence,
+          null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run");
     }
 
     public DocumentField {
@@ -273,6 +337,16 @@ public record FdhReviewResult(
       imageHeight = Math.max(0, imageHeight);
       bbox = bbox == null ? List.of() : List.copyOf(bbox);
       locatorConfidence = Math.max(0, Math.min(100, locatorConfidence));
+      if (verificationScore != null) {
+        verificationScore = Math.max(0, Math.min(100, verificationScore));
+      }
+      verificationStatus = verificationStatus == null || verificationStatus.isBlank() ? "not_run" : verificationStatus;
+      judgeObservedValue = judgeObservedValue == null ? "" : judgeObservedValue;
+      verificationReason = verificationReason == null ? "" : verificationReason;
+      labelBbox = labelBbox == null ? List.of() : List.copyOf(labelBbox);
+      valueBbox = valueBbox == null ? List.of() : List.copyOf(valueBbox);
+      evidenceBbox = evidenceBbox == null ? List.of() : List.copyOf(evidenceBbox);
+      locationStatus = locationStatus == null || locationStatus.isBlank() ? "not_run" : locationStatus;
     }
   }
 }

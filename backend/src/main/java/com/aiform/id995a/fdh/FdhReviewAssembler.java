@@ -175,7 +175,15 @@ public class FdhReviewAssembler {
         value.imageWidth(),
         value.imageHeight(),
         value.bbox(),
-        locatorConfidence(value)
+        locatorConfidence(value),
+        value.verificationScore(),
+        value.verificationStatus(),
+        value.judgeObservedValue(),
+        value.verificationReason(),
+        value.labelBbox(),
+        value.valueBbox(),
+        value.evidenceBbox(),
+        value.locationStatus()
     );
   }
 
@@ -190,6 +198,9 @@ public class FdhReviewAssembler {
       return "review";
     }
     if (multipleApplicationTypeRows && applicationTypeCandidate(value).isPresent()) {
+      return "review";
+    }
+    if ("review".equals(value.verificationStatus())) {
       return "review";
     }
     return "pass";
@@ -558,7 +569,9 @@ public class FdhReviewAssembler {
               value.imageWidth(),
               value.imageHeight(),
               value.bbox(),
-              locatorConfidence(value)
+              locatorConfidence(value),
+              value.verificationScore(), value.verificationStatus(), value.judgeObservedValue(), value.verificationReason(),
+              value.labelBbox(), value.valueBbox(), value.evidenceBbox(), value.locationStatus()
           );
         })
         .toList();
@@ -935,7 +948,9 @@ public class FdhReviewAssembler {
             value.imageWidth(),
             value.imageHeight(),
             value.bbox(),
-            locatorConfidence(value)
+            locatorConfidence(value),
+            value.verificationScore(), value.verificationStatus(), value.judgeObservedValue(), value.verificationReason(),
+            value.labelBbox(), value.valueBbox(), value.evidenceBbox(), value.locationStatus()
         ));
       }
     }
@@ -1068,7 +1083,7 @@ public class FdhReviewAssembler {
           ? new FieldAssessment("review", "未能从已上传材料识别该必填字段，需要人工复核。")
           : new FieldAssessment("pass", "");
     }
-    if (sources.stream().anyMatch(source -> source.confidence() < 70)) {
+    if (sources.stream().anyMatch(FdhReviewAssembler::requiresFieldReview)) {
       return new FieldAssessment("review", "字段识别置信度较低，需要人工复核。");
     }
     List<String> normalized = sources.stream()
@@ -1082,6 +1097,34 @@ public class FdhReviewAssembler {
     return hasOnlyTinyDifference(normalized)
         ? new FieldAssessment("review", "跨文件字段值存在轻微差异，需要人工复核。")
         : new FieldAssessment("fail", "跨文件字段值明显不一致。");
+  }
+
+  private static boolean requiresFieldReview(FdhReviewResult.FieldSource source) {
+    if ("review".equals(source.verificationStatus())) {
+      return true;
+    }
+    if ("pass".equals(source.verificationStatus())) {
+      return false;
+    }
+    return source.confidence() < 70;
+  }
+
+  private static Integer combinedVerificationScore(Integer left, Integer right) {
+    return left == null || right == null ? null : Math.min(left, right);
+  }
+
+  private static String combinedVerificationStatus(String left, String right) {
+    if ("review".equals(left) || "review".equals(right)) return "review";
+    if ("shadow".equals(left) || "shadow".equals(right)) return "shadow";
+    if ("pass".equals(left) && "pass".equals(right)) return "pass";
+    return "not_run";
+  }
+
+  private static String combinedReason(String left, String right) {
+    return java.util.stream.Stream.of(left, right)
+        .filter(value -> value != null && !value.isBlank())
+        .distinct()
+        .collect(java.util.stream.Collectors.joining("; "));
   }
 
   private FdhReviewResult.StandardField employerNameField(
@@ -1158,7 +1201,12 @@ public class FdhReviewAssembler {
           locationSource.imageWidth(),
           locationSource.imageHeight(),
           locationSource.bbox(),
-          locationSource.locatorConfidence()
+          locationSource.locatorConfidence(),
+          combinedVerificationScore(surnameSource.verificationScore(), givenSource.verificationScore()),
+          combinedVerificationStatus(surnameSource.verificationStatus(), givenSource.verificationStatus()),
+          (givenSource.judgeObservedValue() + " " + surnameSource.judgeObservedValue()).trim(),
+          combinedReason(surnameSource.verificationReason(), givenSource.verificationReason()),
+          locationSource.labelBbox(), locationSource.valueBbox(), locationSource.evidenceBbox(), locationSource.locationStatus()
       ));
     }
     Optional<FdhReviewResult.FieldSource> full = evidence(
@@ -1216,7 +1264,12 @@ public class FdhReviewAssembler {
           locationSource.imageWidth(),
           locationSource.imageHeight(),
           locationSource.bbox(),
-          locationSource.locatorConfidence()
+          locationSource.locatorConfidence(),
+          combinedVerificationScore(first.verificationScore(), second.verificationScore()),
+          combinedVerificationStatus(first.verificationStatus(), second.verificationStatus()),
+          (first.judgeObservedValue() + " " + second.judgeObservedValue()).trim(),
+          combinedReason(first.verificationReason(), second.verificationReason()),
+          locationSource.labelBbox(), locationSource.valueBbox(), locationSource.evidenceBbox(), locationSource.locationStatus()
       ));
     }
     Optional<FdhReviewResult.FieldSource> full = evidence(
@@ -1319,7 +1372,15 @@ public class FdhReviewAssembler {
             extracted.imageWidth(),
             extracted.imageHeight(),
             extracted.bbox(),
-            locatorConfidence(extracted)
+            locatorConfidence(extracted),
+            extracted.verificationScore(),
+            extracted.verificationStatus(),
+            extracted.judgeObservedValue(),
+            extracted.verificationReason(),
+            extracted.labelBbox(),
+            extracted.valueBbox(),
+            extracted.evidenceBbox(),
+            extracted.locationStatus()
         ));
       }
     }
@@ -1334,7 +1395,9 @@ public class FdhReviewAssembler {
     List<ExtractedValue> fields = flatten(document);
     return fields.stream()
         .filter(value -> matchesAnyGroup(value.searchText(), tokenGroups))
-        .max(Comparator.comparingDouble(ExtractedValue::confidence));
+        .max(Comparator
+            .comparingInt((ExtractedValue value) -> verificationStatusRank(value.verificationStatus()))
+            .thenComparingInt(value -> value.verificationScore() == null ? 0 : value.verificationScore()));
   }
 
   private List<ExtractedValue> flatten(FdhReviewDocument document) {
@@ -1357,14 +1420,24 @@ public class FdhReviewAssembler {
                 page.page(),
                 page.imageWidth(),
                 page.imageHeight(),
-                detail.bbox()
+                detail.bbox(),
+                detail.verificationScore(),
+                detail.verificationStatus(),
+                detail.judgeObservedValue(),
+                detail.verificationReason(),
+                detail.labelBbox(),
+                detail.valueBbox(),
+                detail.evidenceBbox(),
+                detail.locationStatus()
             ));
             coveredByStructuredFields.add(fieldDedupKey(detail.label(), detail.displayValue()));
             coveredByStructuredFields.add(fieldDedupKey(fieldNameFromPath(detail.path()), detail.displayValue()));
           }
         }
       }
-      flattenJson(response.structuredData(), "", values, coveredByStructuredFields);
+      boolean enforceVerification = values.stream()
+          .anyMatch(value -> Set.of("pass", "review").contains(value.verificationStatus()));
+      flattenJson(response.structuredData(), "", values, coveredByStructuredFields, enforceVerification);
     }
     return values;
   }
@@ -1373,18 +1446,26 @@ public class FdhReviewAssembler {
     return normalizeFieldName(label) + "|" + normalizeTokens(value);
   }
 
-  private void flattenJson(JsonNode node, String path, List<ExtractedValue> values, Set<String> coveredByStructuredFields) {
+  private void flattenJson(
+      JsonNode node,
+      String path,
+      List<ExtractedValue> values,
+      Set<String> coveredByStructuredFields,
+      boolean enforceVerification
+  ) {
     if (node == null || node.isMissingNode() || node.isNull()) {
       return;
     }
     if (node.isObject()) {
-      node.fields().forEachRemaining(entry -> flattenJson(entry.getValue(), append(path, entry.getKey()), values, coveredByStructuredFields));
+      node.fields().forEachRemaining(entry -> flattenJson(
+          entry.getValue(), append(path, entry.getKey()), values, coveredByStructuredFields, enforceVerification
+      ));
       return;
     }
     if (node.isArray()) {
       int index = 0;
       for (JsonNode child : node) {
-        flattenJson(child, append(path, String.valueOf(index)), values, coveredByStructuredFields);
+        flattenJson(child, append(path, String.valueOf(index)), values, coveredByStructuredFields, enforceVerification);
         index += 1;
       }
       return;
@@ -1397,7 +1478,11 @@ public class FdhReviewAssembler {
     if (coveredByStructuredFields.contains(fieldDedupKey(fieldNameFromPath(path), value))) {
       return;
     }
-    values.add(new ExtractedValue(path, fieldNameFromPath(path), sectionFromPath(path), value, 78, ""));
+    values.add(new ExtractedValue(
+        path, fieldNameFromPath(path), sectionFromPath(path), value, 78, "", 0, 0, 0, List.of(),
+        null, enforceVerification ? "review" : "not_run", "",
+        enforceVerification ? "judge_not_run" : "", List.of(), List.of(), List.of(), "not_run"
+    ));
   }
 
   private String append(String path, String key) {
@@ -1737,7 +1822,7 @@ public class FdhReviewAssembler {
           normalizeTokens(source.value())
       );
       FdhReviewResult.FieldSource existing = sources.get(sourceKey);
-      if (existing == null || source.confidence() > existing.confidence()) {
+      if (existing == null || compareVerification(source, existing) > 0) {
         sources.put(sourceKey, source);
       }
     }
@@ -1755,13 +1840,13 @@ public class FdhReviewAssembler {
           assessment.issue(),
           false,
           sourceRows,
-          "从上传材料结构化识别结果展示；同名字段按材料来源合并，建议归一值取最高置信来源。"
+          "从上传材料结构化识别结果展示；同名字段按材料来源合并，建议归一值优先采用裁判核验通过且分数更高的来源。"
       );
     }
 
     private FieldAssessment assessment(List<FdhReviewResult.FieldSource> sourceRows) {
-      if (sourceRows.stream().anyMatch(source -> source.confidence() < 70)) {
-        return new FieldAssessment("review", "字段识别置信度较低，需要人工复核。");
+      if (sourceRows.stream().anyMatch(FdhReviewAssembler::requiresFieldReview)) {
+        return new FieldAssessment("review", "字段裁判核验未通过，需要人工复核。");
       }
       long distinctValues = sourceRows.stream()
           .map(source -> normalizeTokens(source.value()))
@@ -1775,6 +1860,30 @@ public class FdhReviewAssembler {
     }
   }
 
+  private static int compareVerification(
+      FdhReviewResult.FieldSource left,
+      FdhReviewResult.FieldSource right
+  ) {
+    int status = Integer.compare(
+        verificationStatusRank(left.verificationStatus()),
+        verificationStatusRank(right.verificationStatus())
+    );
+    if (status != 0) return status;
+    return Integer.compare(
+        left.verificationScore() == null ? 0 : left.verificationScore(),
+        right.verificationScore() == null ? 0 : right.verificationScore()
+    );
+  }
+
+  private static int verificationStatusRank(String status) {
+    return switch (status == null ? "" : status) {
+      case "pass" -> 3;
+      case "shadow" -> 2;
+      case "review" -> 1;
+      default -> 0;
+    };
+  }
+
   private record ExtractedValue(
       String path,
       String fieldName,
@@ -1785,7 +1894,15 @@ public class FdhReviewAssembler {
       int pageNo,
       int imageWidth,
       int imageHeight,
-      List<Integer> bbox
+      List<Integer> bbox,
+      Integer verificationScore,
+      String verificationStatus,
+      String judgeObservedValue,
+      String verificationReason,
+      List<Integer> labelBbox,
+      List<Integer> valueBbox,
+      List<Integer> evidenceBbox,
+      String locationStatus
   ) {
     private ExtractedValue(
         String path,
@@ -1795,7 +1912,24 @@ public class FdhReviewAssembler {
         double confidence,
         String snapshotDataUrl
     ) {
-      this(path, fieldName, section, value, confidence, snapshotDataUrl, 0, 0, 0, List.of());
+      this(path, fieldName, section, value, confidence, snapshotDataUrl, 0, 0, 0, List.of(),
+          null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run");
+    }
+
+    private ExtractedValue(
+        String path,
+        String fieldName,
+        String section,
+        String value,
+        double confidence,
+        String snapshotDataUrl,
+        int pageNo,
+        int imageWidth,
+        int imageHeight,
+        List<Integer> bbox
+    ) {
+      this(path, fieldName, section, value, confidence, snapshotDataUrl, pageNo, imageWidth, imageHeight, bbox,
+          null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run");
     }
 
     private String searchText() {

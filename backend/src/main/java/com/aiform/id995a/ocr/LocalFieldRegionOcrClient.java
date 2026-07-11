@@ -61,7 +61,11 @@ public class LocalFieldRegionOcrClient implements FieldRegionOcrGateway {
         detections.add(new FieldLabelDetection(
             line.path("text").asText(""),
             normalizeConfidence(line.path("confidence").asDouble(0)),
-            bbox
+            bbox,
+            normalizeConfidence(line.path("detection_confidence").asDouble(
+                line.path("confidence").asDouble(0)
+            )),
+            line.path("text_status").asText("")
         ));
       }
       return List.copyOf(detections);

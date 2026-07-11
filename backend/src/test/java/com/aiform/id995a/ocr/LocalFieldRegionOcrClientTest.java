@@ -70,6 +70,32 @@ class LocalFieldRegionOcrClientTest {
     }
   }
 
+  @Test
+  void preservesUnreadableDetectionQualitySeparatelyFromTextConfidence() throws Exception {
+    HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+    server.createContext("/ocr/page-detect", exchange -> write(
+        exchange, 200,
+        "{\"status\":\"available\",\"lines\":[{\"text\":\"\",\"confidence\":0,\"detection_confidence\":0.96,\"text_status\":\"unreadable\",\"bbox\":[100,10,220,30]}]}"
+    ));
+    server.start();
+    try {
+      LocalFieldRegionOcrClient client = new LocalFieldRegionOcrClient(
+          new FieldOcrProperties(true, "http://127.0.0.1:" + server.getAddress().getPort(), 2),
+          new ObjectMapper()
+      );
+
+      assertThat(client.detectPage(new byte[] {1}))
+          .singleElement()
+          .satisfies(line -> {
+            assertThat(line.confidence()).isZero();
+            assertThat(line.detectionConfidence()).isEqualTo(96);
+            assertThat(line.textStatus()).isEqualTo("unreadable");
+          });
+    } finally {
+      server.stop(0);
+    }
+  }
+
   private static void respond(HttpExchange exchange, int call) throws IOException {
     if (call == 1) {
       write(exchange, 502, "{\"detail\":\"temporary\"}");

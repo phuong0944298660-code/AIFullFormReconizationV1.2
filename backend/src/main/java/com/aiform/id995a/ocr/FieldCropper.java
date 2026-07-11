@@ -15,6 +15,15 @@ final class FieldCropper {
   private FieldCropper() {}
 
   static CropResult crop(RenderedOcrPage page, List<Integer> bbox, CropKind kind) {
+    return crop(page, bbox, kind, List.of());
+  }
+
+  static CropResult crop(
+      RenderedOcrPage page,
+      List<Integer> bbox,
+      CropKind kind,
+      List<Integer> excludedBbox
+  ) {
     if (page == null || bbox.size() < 4 || page.pngBytes().length == 0) {
       return CropResult.empty();
     }
@@ -23,7 +32,11 @@ final class FieldCropper {
       if (source == null) {
         return CropResult.empty();
       }
-      List<Integer> expanded = expandBbox(bbox, source.getWidth(), source.getHeight(), kind);
+      List<Integer> expanded = excludeAdjacentBbox(
+          expandBbox(bbox, source.getWidth(), source.getHeight(), kind),
+          bbox,
+          excludedBbox
+      );
       if (expanded.size() < 4) {
         return CropResult.empty();
       }
@@ -52,6 +65,58 @@ final class FieldCropper {
     } catch (IOException | RuntimeException exception) {
       return CropResult.empty();
     }
+  }
+
+  private static List<Integer> excludeAdjacentBbox(
+      List<Integer> expanded,
+      List<Integer> valueBbox,
+      List<Integer> excludedBbox
+  ) {
+    if (expanded.size() < 4 || valueBbox.size() < 4 || excludedBbox == null || excludedBbox.size() < 4) {
+      return expanded;
+    }
+    int left = expanded.get(0);
+    int top = expanded.get(1);
+    int right = expanded.get(2);
+    int bottom = expanded.get(3);
+    int horizontalOverlap = Math.min(right, excludedBbox.get(2))
+        - Math.max(left, excludedBbox.get(0));
+    int verticalOverlap = Math.min(bottom, excludedBbox.get(3))
+        - Math.max(top, excludedBbox.get(1));
+    if (horizontalOverlap <= 0 || verticalOverlap <= 0) {
+      return expanded;
+    }
+
+    int bestCost = Integer.MAX_VALUE;
+    int trimEdge = 0;
+    if (excludedBbox.get(2) > left && excludedBbox.get(2) <= valueBbox.get(0)) {
+      bestCost = excludedBbox.get(2) - left;
+      trimEdge = 1;
+    }
+    if (excludedBbox.get(0) < right && excludedBbox.get(0) >= valueBbox.get(2)
+        && right - excludedBbox.get(0) < bestCost) {
+      bestCost = right - excludedBbox.get(0);
+      trimEdge = 2;
+    }
+    if (excludedBbox.get(3) > top && excludedBbox.get(3) <= valueBbox.get(1)
+        && excludedBbox.get(3) - top < bestCost) {
+      bestCost = excludedBbox.get(3) - top;
+      trimEdge = 3;
+    }
+    if (excludedBbox.get(1) < bottom && excludedBbox.get(1) >= valueBbox.get(3)
+        && bottom - excludedBbox.get(1) < bestCost) {
+      trimEdge = 4;
+    }
+    if (trimEdge == 1) {
+      left = excludedBbox.get(2);
+    } else if (trimEdge == 2) {
+      right = excludedBbox.get(0);
+    } else if (trimEdge == 3) {
+      top = excludedBbox.get(3);
+    } else if (trimEdge == 4) {
+      bottom = excludedBbox.get(1);
+    }
+    return right > left && bottom > top ? List.of(left, top, right, bottom) : valueBbox;
   }
 
   static List<Integer> expandBbox(List<Integer> bbox, int imageWidth, int imageHeight, CropKind kind) {

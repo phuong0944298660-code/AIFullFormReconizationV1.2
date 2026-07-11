@@ -9,3 +9,11 @@ set DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 set DASHSCOPE_MODEL=qwen3.6-35b-a3b
 set DASHSCOPE_ENABLE_THINKING=true
 set DASHSCOPE_API_KEY=replace-with-your-dashscope-key
+rem Field judge requires start-local.ps1 -WithSidecar so OCR can build field-and-value evidence crops.
+set FIELD_JUDGE_ENABLED=true
+set FIELD_JUDGE_MODE=enforce
+set FIELD_JUDGE_BASE_URL=https://llm-98pa6gca5iqr30ky.cn-beijing.maas.aliyuncs.com/compatible-mode/v1
+set FIELD_JUDGE_MODEL=qwen3.6-flash
+set FIELD_JUDGE_API_KEY=replace-with-your-field-judge-key
+set FIELD_JUDGE_TIMEOUT_SECONDS=20
+set FIELD_JUDGE_PASS_THRESHOLD=85

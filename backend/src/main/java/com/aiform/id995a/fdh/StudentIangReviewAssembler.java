@@ -425,7 +425,7 @@ public class StudentIangReviewAssembler {
           ? new FieldAssessment("fail", "必填字段未识别。")
           : new FieldAssessment("review", "未识别到可用字段；如官方填写为 if any，可由人工确认。");
     }
-    if (sources.stream().anyMatch(source -> source.confidence() > 0 && source.confidence() < 75)) {
+    if (sources.stream().anyMatch(this::requiresFieldReview)) {
       return new FieldAssessment("review", "字段置信度偏低，需要人工复核。");
     }
     Set<String> normalizedValues = sources.stream()
@@ -437,6 +437,34 @@ public class StudentIangReviewAssembler {
       return new FieldAssessment("review", "跨材料字段值不一致，需要人工复核。");
     }
     return new FieldAssessment("pass", "");
+  }
+
+  private boolean requiresFieldReview(FdhReviewResult.FieldSource source) {
+    if ("review".equals(source.verificationStatus())) {
+      return true;
+    }
+    if ("pass".equals(source.verificationStatus())) {
+      return false;
+    }
+    return source.confidence() > 0 && source.confidence() < 75;
+  }
+
+  private static Integer combinedVerificationScore(Integer left, Integer right) {
+    return left == null || right == null ? null : Math.min(left, right);
+  }
+
+  private static String combinedVerificationStatus(String left, String right) {
+    if ("review".equals(left) || "review".equals(right)) return "review";
+    if ("shadow".equals(left) || "shadow".equals(right)) return "shadow";
+    if ("pass".equals(left) && "pass".equals(right)) return "pass";
+    return "not_run";
+  }
+
+  private static String combinedReason(String left, String right) {
+    return java.util.stream.Stream.of(left, right)
+        .filter(value -> value != null && !value.isBlank())
+        .distinct()
+        .collect(java.util.stream.Collectors.joining("; "));
   }
 
   private List<FdhReviewResult.FieldSource> sourcesFor(List<FdhReviewDocument> documents, List<SourceSpec> specs) {
@@ -467,7 +495,15 @@ public class StudentIangReviewAssembler {
             extracted.imageWidth(),
             extracted.imageHeight(),
             extracted.bbox(),
-            locatorConfidence(extracted)
+            locatorConfidence(extracted),
+            extracted.verificationScore(),
+            extracted.verificationStatus(),
+            extracted.judgeObservedValue(),
+            extracted.verificationReason(),
+            extracted.labelBbox(),
+            extracted.valueBbox(),
+            extracted.evidenceBbox(),
+            extracted.locationStatus()
         ));
       }
     }
@@ -500,7 +536,15 @@ public class StudentIangReviewAssembler {
           left.imageWidth() > 0 ? left.imageWidth() : right.imageWidth(),
           left.imageHeight() > 0 ? left.imageHeight() : right.imageHeight(),
           left.bbox().isEmpty() ? right.bbox() : left.bbox(),
-          Math.min(locatorConfidence(left), locatorConfidence(right))
+          Math.min(locatorConfidence(left), locatorConfidence(right)),
+          combinedVerificationScore(left.verificationScore(), right.verificationScore()),
+          combinedVerificationStatus(left.verificationStatus(), right.verificationStatus()),
+          (left.judgeObservedValue() + " " + right.judgeObservedValue()).trim(),
+          combinedReason(left.verificationReason(), right.verificationReason()),
+          left.labelBbox().isEmpty() ? right.labelBbox() : left.labelBbox(),
+          left.valueBbox().isEmpty() ? right.valueBbox() : left.valueBbox(),
+          left.evidenceBbox().isEmpty() ? right.evidenceBbox() : left.evidenceBbox(),
+          "located".equals(left.locationStatus()) ? left.locationStatus() : right.locationStatus()
       ));
     }
     return sources;
@@ -538,7 +582,9 @@ public class StudentIangReviewAssembler {
               value.imageWidth(),
               value.imageHeight(),
               value.bbox(),
-              locatorConfidence(value)
+              locatorConfidence(value),
+              value.verificationScore(), value.verificationStatus(), value.judgeObservedValue(), value.verificationReason(),
+              value.labelBbox(), value.valueBbox(), value.evidenceBbox(), value.locationStatus()
           ));
       if (structured.isPresent()) {
         sources.add(structured.get());
@@ -646,8 +692,10 @@ public class StudentIangReviewAssembler {
       return List.of();
     }
     Map<String, StructuredFieldDetail> detailsByPath = detailsByPath(document.ocrResult());
+    boolean enforceVerification = detailsByPath.values().stream()
+        .anyMatch(detail -> Set.of("pass", "review").contains(detail.verificationStatus()));
     List<ExtractedValue> values = new ArrayList<>();
-    flatten(document, document.ocrResult().structuredData(), "", 0, values, detailsByPath);
+    flatten(document, document.ocrResult().structuredData(), "", 0, values, detailsByPath, enforceVerification);
     return values;
   }
 
@@ -657,7 +705,8 @@ public class StudentIangReviewAssembler {
       String path,
       int page,
       List<ExtractedValue> values,
-      Map<String, StructuredFieldDetail> detailsByPath
+      Map<String, StructuredFieldDetail> detailsByPath,
+      boolean enforceVerification
   ) {
     if (node == null || node.isNull()) {
       return;
@@ -670,13 +719,13 @@ public class StudentIangReviewAssembler {
         }
         String nextPath = path.isBlank() ? key : path + "." + key;
         int nextPage = pageFromKey(key).orElse(page);
-        flatten(document, entry.getValue(), nextPath, nextPage, values, detailsByPath);
+        flatten(document, entry.getValue(), nextPath, nextPage, values, detailsByPath, enforceVerification);
       });
       return;
     }
     if (node.isArray()) {
       for (int index = 0; index < node.size(); index += 1) {
-        flatten(document, node.get(index), path + "[" + index + "]", page, values, detailsByPath);
+        flatten(document, node.get(index), path + "[" + index + "]", page, values, detailsByPath, enforceVerification);
       }
       return;
     }
@@ -696,7 +745,15 @@ public class StudentIangReviewAssembler {
         detail == null ? "" : detail.snapshotDataUrl(),
         sourcePage == null ? 0 : sourcePage.imageWidth(),
         sourcePage == null ? 0 : sourcePage.imageHeight(),
-        detail == null ? List.of() : detail.bbox()
+        detail == null ? List.of() : detail.bbox(),
+        detail == null ? null : detail.verificationScore(),
+        detail == null ? (enforceVerification ? "review" : "not_run") : detail.verificationStatus(),
+        detail == null ? "" : detail.judgeObservedValue(),
+        detail == null ? (enforceVerification ? "judge_not_run" : "") : detail.verificationReason(),
+        detail == null ? List.of() : detail.labelBbox(),
+        detail == null ? List.of() : detail.valueBbox(),
+        detail == null ? List.of() : detail.evidenceBbox(),
+        detail == null ? "not_run" : detail.locationStatus()
     ));
   }
 
@@ -969,13 +1026,24 @@ public class StudentIangReviewAssembler {
         value.imageWidth(),
         value.imageHeight(),
         value.bbox(),
-        value.bbox().isEmpty() ? 0 : value.confidence()
+        value.bbox().isEmpty() ? 0 : value.confidence(),
+        value.verificationScore(),
+        value.verificationStatus(),
+        value.judgeObservedValue(),
+        value.verificationReason(),
+        value.labelBbox(),
+        value.valueBbox(),
+        value.evidenceBbox(),
+        value.locationStatus()
     );
   }
 
   private String documentFieldStatus(String materialId, ExtractedValue value) {
     if ("paymentStatus".equals(materialId) && isIncompletePayment(value.value())) {
       return "fail";
+    }
+    if ("review".equals(value.verificationStatus())) {
+      return "review";
     }
     return value.value().isBlank() ? "review" : "pass";
   }
@@ -1275,7 +1343,15 @@ public class StudentIangReviewAssembler {
       String snapshotDataUrl,
       int imageWidth,
       int imageHeight,
-      List<Integer> bbox
+      List<Integer> bbox,
+      Integer verificationScore,
+      String verificationStatus,
+      String judgeObservedValue,
+      String verificationReason,
+      List<Integer> labelBbox,
+      List<Integer> valueBbox,
+      List<Integer> evidenceBbox,
+      String locationStatus
   ) {
     private ExtractedValue(
         FdhReviewDocument document,
@@ -1286,7 +1362,24 @@ public class StudentIangReviewAssembler {
         double confidence,
         String snapshotDataUrl
     ) {
-      this(document, path, label, value, page, confidence, snapshotDataUrl, 0, 0, List.of());
+      this(document, path, label, value, page, confidence, snapshotDataUrl, 0, 0, List.of(),
+          null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run");
+    }
+
+    private ExtractedValue(
+        FdhReviewDocument document,
+        String path,
+        String label,
+        String value,
+        int page,
+        double confidence,
+        String snapshotDataUrl,
+        int imageWidth,
+        int imageHeight,
+        List<Integer> bbox
+    ) {
+      this(document, path, label, value, page, confidence, snapshotDataUrl, imageWidth, imageHeight, bbox,
+          null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run");
     }
   }
 }

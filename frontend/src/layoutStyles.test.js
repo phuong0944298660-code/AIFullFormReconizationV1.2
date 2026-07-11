@@ -19,7 +19,8 @@ test('recognition result page keeps source pages and field evidence areas distin
   assert.match(css, /\.review-workspace\s*\{[^}]*grid-template-columns:\s*minmax\(520px, 58%\) minmax\(420px, 42%\)/s)
   assert.match(css, /\.recognized-materials-panel\s*\{[^}]*grid-column:\s*1 \/ -1/s)
   assert.match(css, /\.source-review-panel\s*\{[^}]*height:\s*calc\(100vh - 168px\)[^}]*min-height:\s*640px/s)
-  assert.match(css, /\.document-fields-panel\.locator-document-fields\s*\{[^}]*height:\s*calc\(100vh - 168px\)[^}]*min-height:\s*640px[^}]*overflow-y:\s*auto/s)
+  assert.match(css, /\.document-fields-panel\.locator-document-fields\s*\{[^}]*height:\s*calc\(100vh - 168px\)[^}]*min-height:\s*640px[^}]*overflow-y:\s*hidden/s)
+  assert.match(css, /\.locator-document-fields > \.document-group-list\s*\{[^}]*overflow-y:\s*auto/s)
   assert.match(css, /\.source-review-body\s*\{[^}]*grid-template-columns:\s*98px minmax\(0, 1fr\)[^}]*height:\s*auto/s)
   assert.match(css, /\.source-page-scroll\s*\{[^}]*overflow-y:\s*auto/s)
   assert.match(css, /\.locator-document-fields > \.panel-heading\s*\{[^}]*position:\s*sticky/s)
@@ -41,7 +42,7 @@ test('document field groups render above findings and support locator clicks', (
   assert.match(css, /\.review-main > \.compact-findings\s*\{[^}]*order:\s*2/s)
   assert.match(css, /\.review-main > \.fields-panel\s*\{[^}]*order:\s*3/s)
   assert.match(css, /\.locator-document-field-row\.active\s*\{/)
-  assert.match(css, /\.document-field-status small\s*\{/)
+  assert.match(css, /\.document-field-judge small\s*\{/)
 })
 
 test('standardized field cards render source evidence and normalized values', () => {
@@ -60,6 +61,40 @@ test('standardized field cards render source evidence and normalized values', ()
   assert.match(css, /\.value-diff-char\s*\{/)
   assert.doesNotMatch(app, /<span v-else>\{\{\s*source\.snapshotText\s*\}\}<\/span>/)
   assert.doesNotMatch(app, forbiddenPrototypeCopy)
+})
+
+test('judge score rendering preserves zero instead of showing pending', () => {
+  assert.doesNotMatch(app, /sourceConfidence\(item\) \?/)
+  assert.doesNotMatch(app, /sourceConfidence\(source\) \?/)
+  assert.match(app, /documentJudgeScoreText\(item\)/)
+  assert.match(app, /sourceScoreText\(source\)/)
+  assert.doesNotMatch(app, /averageFieldConfidence\(field\) \|\| '-'/)
+  assert.match(app, /averageFieldScoreText\(field\)/)
+})
+
+test('document field table keeps judge score separate from long review reasons', () => {
+  assert.match(app, /class="document-field-judge"/)
+  assert.match(app, /documentJudgeScoreText\(item\)/)
+  assert.match(app, /documentJudgeSummaryText\(item\)/)
+  assert.match(css, /\.document-field-row\s*\{[^}]*grid-template-columns:\s*minmax\(190px, 1\.08fr\) minmax\(0, 1\.45fr\) minmax\(96px, 0\.34fr\)[^}]*column-gap:\s*18px/s)
+  assert.match(css, /\.document-field-row > \*\s*\{[^}]*overflow-wrap:\s*anywhere[^}]*word-break:\s*normal/s)
+  assert.match(css, /\.document-field-judge\s*\{[^}]*min-width:\s*0[^}]*overflow:\s*hidden/s)
+  assert.match(css, /\.document-field-judge small\s*\{[^}]*overflow-wrap:\s*anywhere[^}]*white-space:\s*normal/s)
+})
+
+test('document field inspector stays within its scrolling panel and standard sources keep reasons inline', () => {
+  assert.match(app, /class="document-field-inspector"/)
+  assert.match(app, /selectedDocumentInspector/)
+  assert.match(app, /documentFieldSourceRows\.value\[0\]/)
+  assert.match(app, /class="standard-source-inspector"/)
+  assert.match(css, /\.document-fields-panel\.locator-document-fields\s*\{[^}]*grid-template-rows:\s*auto minmax\(0, 1fr\) auto/s)
+  assert.match(css, /\.locator-document-fields > \.document-group-list > \.document-group-card\s*\{[^}]*align-self:\s*start/s)
+  assert.match(css, /\.document-field-row\s*\{[^}]*grid-template-columns:\s*minmax\(190px, 1\.08fr\) minmax\(0, 1\.45fr\) minmax\(96px, 0\.34fr\)/s)
+  assert.doesNotMatch(css, /@media \(max-width: 1180px\) \{[\s\S]*?\.document-fields-panel\.locator-document-fields\s*,?[\s\S]*?\{[^}]*height:\s*auto/s)
+})
+
+test('unscored standard sources keep their reason out of the score pill', () => {
+  assert.match(app, /function sourceScoreText\(source\) \{\s*const score = fieldVerificationScore\(source\)\s*return score === null \? '—'/)
 })
 
 test('upload page supports application type selection while hiding mock scenario switching', () => {
@@ -163,6 +198,8 @@ test('frontend dev server defaults to the new copied-project port', () => {
 test('FDH backend polling does not timeout before the backend LLM request budget', () => {
   assert.match(app, /const FDH_JOB_POLL_INTERVAL_MS = 1000/)
   assert.match(app, /const FDH_JOB_POLL_LIMIT = 1500/)
+  assert.match(app, /const REVIEW_JOB_POLL_REQUEST_TIMEOUT_MS = 15000/)
+  assert.match(app, /timeoutMs:\s*REVIEW_JOB_POLL_REQUEST_TIMEOUT_MS/)
   assert.doesNotMatch(app, /attempt < 240/)
   assert.match(app, /识别任务仍在处理中/)
 })

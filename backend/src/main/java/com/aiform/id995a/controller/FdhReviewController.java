@@ -7,6 +7,7 @@ import com.aiform.id995a.fdh.FdhReviewJobStatusResponse;
 import com.aiform.id995a.fdh.FdhReviewResult;
 import java.io.IOException;
 import java.util.List;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/fdh")
@@ -45,7 +47,26 @@ public class FdhReviewController {
 
   @GetMapping("/review/jobs/{jobId}")
   public FdhReviewJobStatusResponse reviewJobStatus(@PathVariable String jobId) {
-    return reviewJobService.status(jobId);
+    try {
+      return reviewJobService.status(jobId);
+    } catch (ResponseStatusException exception) {
+      if (exception.getStatusCode() != HttpStatus.NOT_FOUND) {
+        throw exception;
+      }
+      // Jobs live in memory. Convert a restart-expired id into a terminal snapshot for polling clients.
+      String message = exception.getReason();
+      return new FdhReviewJobStatusResponse(
+          jobId,
+          "failed",
+          0,
+          0,
+          100,
+          "",
+          message,
+          message,
+          null
+      );
+    }
   }
 
   @DeleteMapping("/review/jobs/{jobId}")

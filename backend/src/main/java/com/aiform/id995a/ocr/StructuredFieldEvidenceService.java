@@ -12,6 +12,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.imageio.ImageIO;
@@ -27,14 +31,33 @@ public class StructuredFieldEvidenceService {
 
   private final FieldRegionOcrGateway fieldRegionOcrGateway;
   private final FieldLabelLocator fieldLabelLocator = new FieldLabelLocator();
+  private final FieldJudgeGateway fieldJudgeGateway;
+  private final FieldJudgeProperties fieldJudgeProperties;
+  private final FieldVerificationScorer fieldVerificationScorer;
 
   public StructuredFieldEvidenceService() {
     this(cropImageBytes -> List.of());
   }
 
-  @Autowired
   public StructuredFieldEvidenceService(FieldRegionOcrGateway fieldRegionOcrGateway) {
+    this(
+        fieldRegionOcrGateway,
+        (fieldKey, fieldLabel, expectedValue, valueType, snapshotDataUrl) ->
+            FieldJudgeObservation.unavailable("judge_disabled"),
+        new FieldJudgeProperties(false, "shadow", "", "", "qwen3.6-flash", 20, 85, 1)
+    );
+  }
+
+  @Autowired
+  public StructuredFieldEvidenceService(
+      FieldRegionOcrGateway fieldRegionOcrGateway,
+      FieldJudgeGateway fieldJudgeGateway,
+      FieldJudgeProperties fieldJudgeProperties
+  ) {
     this.fieldRegionOcrGateway = fieldRegionOcrGateway;
+    this.fieldJudgeGateway = fieldJudgeGateway;
+    this.fieldJudgeProperties = fieldJudgeProperties;
+    this.fieldVerificationScorer = new FieldVerificationScorer(fieldJudgeProperties.passThreshold());
   }
 
   public Map<Integer, List<StructuredFieldDetail>> buildFieldDetails(
@@ -50,9 +73,9 @@ public class StructuredFieldEvidenceService {
       List<FieldLabelDetection> labelDetections = detectPageLabels(page);
       List<FieldCandidate> candidates = new ArrayList<>();
       collectCandidates(pageData, List.of(), candidates);
-      List<PreparedField> preparedFields = candidates.stream()
-          .map(candidate -> prepareField(page, candidate, confidenceData, evidenceData, labelDetections))
-          .toList();
+      List<PreparedField> preparedFields = prepareFields(
+          page, candidates, confidenceData, evidenceData, labelDetections
+      );
       List<StructuredFieldDetail> details = new ArrayList<>();
       for (PreparedField preparedField : preparedFields) {
         details.add(toDetail(preparedField));
@@ -60,6 +83,85 @@ public class StructuredFieldEvidenceService {
       detailsByPage.put(page.page(), details);
     }
     return detailsByPage;
+  }
+
+  private List<PreparedField> prepareFields(
+      RenderedOcrPage page,
+      List<FieldCandidate> candidates,
+      JsonNode confidenceData,
+      JsonNode evidenceData,
+      List<FieldLabelDetection> labelDetections
+  ) {
+    if (!fieldJudgeProperties.enabled() || candidates.size() <= 1 || fieldJudgeProperties.concurrency() <= 1) {
+      return candidates.stream()
+          .map(candidate -> prepareFieldSafely(page, candidate, confidenceData, evidenceData, labelDetections))
+          .toList();
+    }
+    int concurrency = Math.min(fieldJudgeProperties.concurrency(), candidates.size());
+    ExecutorService executor = Executors.newFixedThreadPool(concurrency);
+    try {
+      List<Future<PreparedField>> futures = candidates.stream()
+          .map(candidate -> executor.submit(
+              () -> prepareFieldSafely(page, candidate, confidenceData, evidenceData, labelDetections)
+          ))
+          .toList();
+      List<PreparedField> results = new ArrayList<>(futures.size());
+      for (int index = 0; index < futures.size(); index += 1) {
+        try {
+          results.add(futures.get(index).get());
+        } catch (ExecutionException exception) {
+          results.add(failedPreparedField(page, candidates.get(index), confidenceData, evidenceData));
+        }
+      }
+      return List.copyOf(results);
+    } catch (InterruptedException exception) {
+      Thread.currentThread().interrupt();
+      return candidates.stream()
+          .map(candidate -> failedPreparedField(page, candidate, confidenceData, evidenceData))
+          .toList();
+    } finally {
+      executor.shutdownNow();
+    }
+  }
+
+  private PreparedField prepareFieldSafely(
+      RenderedOcrPage page,
+      FieldCandidate candidate,
+      JsonNode confidenceData,
+      JsonNode evidenceData,
+      List<FieldLabelDetection> labelDetections
+  ) {
+    try {
+      return prepareField(page, candidate, confidenceData, evidenceData, labelDetections);
+    } catch (RuntimeException exception) {
+      return failedPreparedField(page, candidate, confidenceData, evidenceData);
+    }
+  }
+
+  private PreparedField failedPreparedField(
+      RenderedOcrPage page,
+      FieldCandidate candidate,
+      JsonNode confidenceData,
+      JsonNode evidenceData
+  ) {
+    String pageKey = "page_" + page.page();
+    JsonNode evidence = lookupMetadata(evidenceData, candidate.path(), pageKey);
+    double confidence = confidence(evidence, confidenceData, candidate.path(), candidate.value(), pageKey);
+    String label = label(evidence, candidate.path());
+    String displayValue = displayValue(candidate.path(), label, candidate.value());
+    FieldJudgeObservation observation = FieldJudgeObservation.unavailable("field_processing_failed");
+    FieldVerification verification = fieldJudgeProperties.enabled()
+        ? fieldVerificationScorer.score(valueText(candidate.value()), observation)
+        : new FieldVerification(null, "not_run", "judge_disabled", "");
+    if (fieldJudgeProperties.enabled() && !fieldJudgeProperties.enforce()) {
+      verification = new FieldVerification(null, "shadow", verification.reasonCode(), verification.reason());
+    }
+    return new PreparedField(
+        page.page(), candidate.path(), label, candidate.value(), displayValue, confidence,
+        List.of(), new CropResult(new byte[0], ""), valueText(candidate.value()), List.of(),
+        List.of(), List.of(), List.of(), List.of(), FieldEvidenceRegion.notFound("field_processing_failed"),
+        observation, verification
+    );
   }
 
   private PreparedField prepareField(
@@ -72,17 +174,32 @@ public class StructuredFieldEvidenceService {
     String pageKey = "page_" + page.page();
     JsonNode evidence = lookupMetadata(evidenceData, candidate.path(), pageKey);
     double confidence = confidence(evidence, confidenceData, candidate.path(), candidate.value(), pageKey);
-    List<Integer> valueBbox = parseBbox(evidence, page.imageWidth(), page.imageHeight());
-    CropResult crop = crop(page, valueBbox);
+    List<Integer> recognitionBbox = parseValueBbox(evidence, page.imageWidth(), page.imageHeight());
     String label = label(evidence, candidate.path());
-    List<Integer> labelBbox = fieldLabelLocator.locate(label, labelDetections);
     String displayValue = displayValue(candidate.path(), label, candidate.value());
     String rawValueText = valueText(candidate.value());
     String valueText = valueText(candidate.value(), displayValue);
+    List<Integer> labelBbox = fieldLabelLocator.locate(label, labelDetections);
+    List<Integer> valueBbox = recognitionBbox;
+    List<Integer> evidenceBbox = List.of();
+    List<Integer> displayBbox = labelBbox;
+    FieldEvidenceRegion region = labelRegion(labelBbox, labelDetections);
+    CropResult crop = crop(page, valueBbox, labelBbox);
+    FieldJudgeObservation judgeObservation = judge(
+        candidate, label, valueText, crop, valueBbox
+    );
+    FieldVerification verification = fieldJudgeProperties.enabled()
+        ? fieldVerificationScorer.score(valueText, judgeObservation)
+        : new FieldVerification(null, "not_run", "judge_disabled", "");
+    if (fieldJudgeProperties.enabled() && !fieldJudgeProperties.enforce()) {
+      verification = new FieldVerification(
+          verification.score(), "shadow", verification.reasonCode(), verification.reason()
+      );
+    }
     List<FieldCharacterEvidence> characters = characters(
         valueText.equals(rawValueText) ? evidence : NullNode.getInstance(),
         valueText,
-        valueBbox
+        valueBbox.isEmpty() ? recognitionBbox : valueBbox
     );
     return new PreparedField(
         page.page(),
@@ -91,11 +208,70 @@ public class StructuredFieldEvidenceService {
         candidate.value(),
         displayValue,
         confidence,
-        labelBbox,
+        displayBbox,
         crop,
         valueText,
-        characters
+        characters,
+        recognitionBbox,
+        labelBbox,
+        valueBbox,
+        evidenceBbox,
+        region,
+        judgeObservation,
+        verification
     );
+  }
+
+  private FieldJudgeObservation judge(
+      FieldCandidate candidate,
+      String label,
+      String expectedValue,
+      CropResult crop,
+      List<Integer> valueBbox
+  ) {
+    if (!fieldJudgeProperties.enabled()) {
+      return FieldJudgeObservation.unavailable("judge_disabled");
+    }
+    if (valueBbox.isEmpty()) {
+      return FieldJudgeObservation.unavailable("value_bbox_missing");
+    }
+    if (crop.dataUrl().isBlank()) {
+      return FieldJudgeObservation.unavailable("value_crop_failed");
+    }
+    return fieldJudgeGateway.judge(
+        String.join(".", candidate.path()),
+        label,
+        expectedValue,
+        valueType(candidate.value()),
+        crop.dataUrl()
+    );
+  }
+
+  private FieldEvidenceRegion labelRegion(
+      List<Integer> labelBbox,
+      List<FieldLabelDetection> labelDetections
+  ) {
+    if (labelBbox.isEmpty()) {
+      return FieldEvidenceRegion.notFound("label_not_found");
+    }
+    double score = labelDetections.stream()
+        .filter(detection -> detection != null && labelBbox.equals(detection.bbox()))
+        .mapToDouble(FieldLabelDetection::confidence)
+        .findFirst()
+        .orElse(0);
+    return new FieldEvidenceRegion(
+        labelBbox, List.of(), List.of(), "located", "label_ocr", score, ""
+    );
+  }
+
+  private String valueType(JsonNode value) {
+    if (value != null && value.isBoolean()) {
+      return "boolean";
+    }
+    if (value != null && value.isNumber()) {
+      return "number";
+    }
+    return "text";
   }
 
   private List<FieldLabelDetection> detectPageLabels(RenderedOcrPage page) {
@@ -123,8 +299,44 @@ public class StructuredFieldEvidenceService {
         "",
         0,
         "not_run",
-        prepared.characters()
+        prepared.characters(),
+        prepared.confidence(),
+        prepared.recognitionBbox(),
+        prepared.labelBbox(),
+        prepared.valueBbox(),
+        prepared.evidenceBbox(),
+        prepared.region().status(),
+        prepared.region().method(),
+        prepared.region().locationScore(),
+        prepared.region().reason(),
+        prepared.judgeObservation().status(),
+        prepared.judgeObservation().observedValue(),
+        prepared.judgeObservation().matchType(),
+        prepared.verification().score(),
+        prepared.verification().status(),
+        localizedVerificationReason(prepared.verification(), prepared.judgeObservation()),
+        fieldJudgeProperties.enabled() ? "field_judge" : "recognition_confidence"
     );
+  }
+
+  private String localizedVerificationReason(
+      FieldVerification verification,
+      FieldJudgeObservation observation
+  ) {
+    String english = verification.reason().isBlank() ? verification.reasonCode() : verification.reason();
+    String traditionalChinese = observation.reasonZhHant();
+    if (traditionalChinese.isBlank()) {
+      return english;
+    }
+    return "{\"en\":\"" + jsonEscape(english)
+        + "\",\"zh-Hant\":\"" + jsonEscape(traditionalChinese) + "\"}";
+  }
+
+  private String jsonEscape(String value) {
+    return value.replace("\\", "\\\\")
+        .replace("\"", "\\\"")
+        .replace("\n", "\\n")
+        .replace("\r", "\\r");
   }
 
   private void collectCandidates(JsonNode node, List<String> path, List<FieldCandidate> candidates) {
@@ -237,8 +449,8 @@ public class StructuredFieldEvidenceService {
     return 82;
   }
 
-  private List<Integer> parseBbox(JsonNode evidence, int imageWidth, int imageHeight) {
-    JsonNode bbox = firstExisting(evidence, "bbox", "value_bbox", "field_bbox", "region", "box");
+  private List<Integer> parseValueBbox(JsonNode evidence, int imageWidth, int imageHeight) {
+    JsonNode bbox = evidence == null ? NullNode.getInstance() : evidence.path("value_bbox");
     if (bbox.isMissingNode() || bbox.isNull()) {
       return List.of();
     }
@@ -300,8 +512,10 @@ public class StructuredFieldEvidenceService {
     return List.of(left, top, right, bottom);
   }
 
-  private CropResult crop(RenderedOcrPage page, List<Integer> bbox) {
-    FieldCropper.CropResult crop = FieldCropper.crop(page, bbox, FieldCropper.CropKind.SNAPSHOT);
+  private CropResult crop(RenderedOcrPage page, List<Integer> bbox, List<Integer> labelBbox) {
+    FieldCropper.CropResult crop = FieldCropper.crop(
+        page, bbox, FieldCropper.CropKind.SNAPSHOT, labelBbox
+    );
     return new CropResult(crop.bytes(), crop.dataUrl());
   }
 
@@ -449,8 +663,11 @@ public class StructuredFieldEvidenceService {
   }
 
   private String valueText(JsonNode value) {
-    if (value == null || value.isNull() || value.isMissingNode() || value.isBoolean()) {
+    if (value == null || value.isNull() || value.isMissingNode()) {
       return "";
+    }
+    if (value.isBoolean()) {
+      return Boolean.toString(value.asBoolean());
     }
     return value.asText("");
   }
@@ -552,7 +769,14 @@ public class StructuredFieldEvidenceService {
       List<Integer> bbox,
       CropResult crop,
       String valueText,
-      List<FieldCharacterEvidence> characters
+      List<FieldCharacterEvidence> characters,
+      List<Integer> recognitionBbox,
+      List<Integer> labelBbox,
+      List<Integer> valueBbox,
+      List<Integer> evidenceBbox,
+      FieldEvidenceRegion region,
+      FieldJudgeObservation judgeObservation,
+      FieldVerification verification
   ) {}
 
   private record CropResult(byte[] bytes, String dataUrl) {}

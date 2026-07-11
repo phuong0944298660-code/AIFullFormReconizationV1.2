@@ -21,6 +21,12 @@ import {
   TEMPLATE_STATUS_LEGEND
 } from './verificationTemplate.js'
 import { verificationNotice } from './verificationNotice.js'
+import {
+  averageFieldVerificationScore,
+  fieldVerificationScore,
+  sourceEvidenceBbox
+} from './ocrPresentation.js'
+import { judgeDisplayState, localizedJudgeReason } from './judgePresentation.js'
 
 const LANGUAGES = [
   { id: 'en', label: 'English' },
@@ -78,7 +84,13 @@ const UI_TEXT = {
     field: 'Field',
     filledOrRecognisedValue: 'Completed content / recognised value',
     status: 'Status',
-    valueConfidence: 'Value',
+    valueConfidence: 'Judge score',
+    judgePending: 'Judge pending',
+    judgeObserved: 'Judge read',
+    judgeReason: 'Review reason',
+    llmValueBboxMissing: 'LLM did not provide a value bbox',
+    judgeNotRequired: 'No adjudication required',
+    judgeCallFailed: 'Judge call failed',
     normalizedFieldsTitle: 'Standardised Field Verification',
     normalizedFieldsHint: 'Fields are grouped by standard key. Click a field or source to locate the source evidence on the left.',
     fieldStats: 'Field statistics',
@@ -91,7 +103,7 @@ const UI_TEXT = {
     onlyReview: 'Manual review only',
     onlyRequired: 'Required fields only',
     required: 'Required',
-    overallConfidence: 'Overall confidence',
+    overallConfidence: 'Average judge score',
     sources: 'sources',
     locatorConfidence: 'Location',
     notLocated: 'Not located',
@@ -128,7 +140,7 @@ const UI_TEXT = {
     normalized: 'Normalised',
     cropMissing: 'Original crop not available',
     recognisedValue: 'Recognised value',
-    confidence: 'Confidence',
+    confidence: 'Judge score',
     noUsableEvidence: 'No usable field evidence available',
     workflowFdh: 'Foreign Domestic Helper Entry Visa Review',
     workflowStudent: 'IANG Application by a Recent Graduate Staying in Hong Kong',
@@ -217,7 +229,13 @@ const UI_TEXT = {
     field: '字段',
     filledOrRecognisedValue: '填写内容 / 识别值',
     status: '状态',
-    valueConfidence: '值',
+    valueConfidence: '裁判评分',
+    judgePending: '裁判未完成',
+    judgeObserved: '裁判识别',
+    judgeReason: '复核原因',
+    llmValueBboxMissing: 'LLM 未提供值框',
+    judgeNotRequired: '无需裁决',
+    judgeCallFailed: '裁判调用未成功',
     normalizedFieldsTitle: '标准化字段核验',
     normalizedFieldsHint: '字段按统一 key 聚合；点击字段或来源可定位左侧原文证据。',
     fieldStats: '字段统计',
@@ -230,7 +248,7 @@ const UI_TEXT = {
     onlyReview: '仅看待人工审核',
     onlyRequired: '仅看必填字段',
     required: '必填',
-    overallConfidence: '综合置信度',
+    overallConfidence: '平均裁判评分',
     sources: '条来源',
     locatorConfidence: '定位',
     notLocated: '未定位',
@@ -267,7 +285,7 @@ const UI_TEXT = {
     normalized: '归一结果',
     cropMissing: '未取得原始裁剪',
     recognisedValue: '识别值',
-    confidence: '置信度',
+    confidence: '裁判评分',
     noUsableEvidence: '未取得可用字段证据',
     workflowFdh: '外籍家庭佣工入境审核',
     workflowStudent: 'IANG 应届毕业生在港首次申请',
@@ -365,6 +383,7 @@ let verificationSequence = 0
 const FDH_JOB_POLL_INTERVAL_MS = 1000
 const FDH_JOB_POLL_LIMIT = 1500
 const REVIEW_JOB_START_TIMEOUT_MS = 60000
+const REVIEW_JOB_POLL_REQUEST_TIMEOUT_MS = 15000
 
 const APPLICATION_TYPE_TEXT = {
   iang_recent_in_hk: {
@@ -1941,6 +1960,13 @@ const documentFieldSourceRows = computed(() => {
           fieldName: item.label || '',
           value: item.value || '',
           confidence: item.confidence || 0,
+          verificationScore: item.verificationScore ?? null,
+          verificationStatus: item.verificationStatus || 'not_run',
+          verificationReason: item.verificationReason || '',
+          verificationReasonZhHant: item.verificationReasonZhHant || '',
+          verificationReasonEn: item.verificationReasonEn || '',
+          judgeObservedValue: item.judgeObservedValue || '',
+          evidenceBbox: item.evidenceBbox || [],
           materialId: group.materialId || '',
           pageNo: Number(item.pageNo) || Number(page.pageNo) || 1,
           imageWidth: item.imageWidth || 0,
@@ -1976,6 +2002,10 @@ const locatorSourceRows = computed(() => [
 
 const selectedFieldSource = computed(() => {
   return locatorSourceRows.value.find((row) => row.key === selectedFieldSourceKey.value) || null
+})
+
+const selectedDocumentInspector = computed(() => {
+  return selectedFieldSource.value || documentFieldSourceRows.value[0] || null
 })
 
 const selectedLocatorText = computed(() => {
@@ -2093,16 +2123,49 @@ function selectDocumentField(group, page, item) {
 }
 
 function sourceBbox(source) {
-  if (!Array.isArray(source?.bbox) || source.bbox.length !== 4) return []
-  const values = source.bbox.map((value) => Number(value))
+  const values = sourceEvidenceBbox(source)
   return values.every((value) => Number.isFinite(value)) && values[2] > values[0] && values[3] > values[1]
     ? values
     : []
 }
 
 function sourceConfidence(source) {
-  const confidence = Number(source?.confidence)
-  return Number.isFinite(confidence) ? Math.max(0, Math.min(100, Math.round(confidence))) : 0
+  return fieldVerificationScore(source) ?? 0
+}
+
+function sourceScoreText(source) {
+  const score = fieldVerificationScore(source)
+  return score === null ? '—' : `${score}%`
+}
+
+function documentJudgeScoreText(item) {
+  const score = fieldVerificationScore(item)
+  return score === null ? '—' : `${score}%`
+}
+
+function documentJudgeDisplayState(item) {
+  return judgeDisplayState(item)
+}
+
+function documentJudgeSummaryText(item) {
+  const score = fieldVerificationScore(item)
+  const state = documentJudgeDisplayState(item)
+  if (score === null) return t(state.reasonKey)
+  return statusLabel(state.status)
+}
+
+function documentJudgeReasonText(item) {
+  const state = documentJudgeDisplayState(item)
+  if (state.reasonKey) return t(state.reasonKey)
+  const fallbackReason = localizedJudgeReason(item?.verificationReason, currentLanguage.value)
+  if (currentLanguage.value === 'zh') {
+    return item?.verificationReasonZhHant || fallbackReason || t('judgeCallFailed')
+  }
+  return item?.verificationReasonEn || fallbackReason || t('judgeCallFailed')
+}
+
+function documentFieldStatus(item) {
+  return documentJudgeDisplayState(item).status
 }
 
 function locatorConfidence(source) {
@@ -2110,11 +2173,9 @@ function locatorConfidence(source) {
   return Number.isFinite(confidence) ? Math.max(0, Math.min(100, Math.round(confidence))) : 0
 }
 
-function averageFieldConfidence(field) {
-  const sources = field?.sources || []
-  if (!sources.length) return 0
-  const total = sources.reduce((sum, source) => sum + sourceConfidence(source), 0)
-  return Math.round(total / sources.length)
+function averageFieldScoreText(field) {
+  const score = averageFieldVerificationScore(field?.sources || [])
+  return score === null ? '-' : `${score}%`
 }
 
 function bboxStyle(row, page) {
@@ -2251,6 +2312,13 @@ const reviewJsonPayload = computed(() => {
         fieldName: source.fieldName,
         value: source.value,
         confidence: source.confidence,
+        verificationScore: source.verificationScore ?? null,
+        verificationStatus: source.verificationStatus || 'not_run',
+        verificationReason: source.verificationReason || '',
+        verificationReasonZhHant: source.verificationReasonZhHant || '',
+        verificationReasonEn: source.verificationReasonEn || '',
+        judgeObservedValue: source.judgeObservedValue || '',
+        evidenceBbox: source.evidenceBbox || [],
         materialId: source.materialId || '',
         pageNo: source.pageNo || 0,
         imageWidth: source.imageWidth || 0,
@@ -2545,7 +2613,10 @@ async function pollFdhJob(jobId) {
   let latest = jobStatus.value
   for (let attempt = 0; attempt < FDH_JOB_POLL_LIMIT; attempt += 1) {
     await delay(FDH_JOB_POLL_INTERVAL_MS)
-    latest = await requestJson(`/api/fdh/review/jobs/${jobId}`)
+    // This limits only one stalled status request; it does not limit the recognition job itself.
+    latest = await requestJson(`/api/fdh/review/jobs/${jobId}`, {
+      timeoutMs: REVIEW_JOB_POLL_REQUEST_TIMEOUT_MS
+    })
     jobStatus.value = mergeJobStatus(latest)
     latest = jobStatus.value
     if (['completed', 'failed', 'canceled'].includes(latest.status)) {
@@ -2649,9 +2720,8 @@ function templateSourceValue(source) {
 }
 
 function templateSourceConfidence(source) {
-  const confidence = Number(source?.confidence)
-  if (!Number.isFinite(confidence)) return '-'
-  return `${Math.max(0, Math.min(100, Math.round(confidence)))}%`
+  const score = fieldVerificationScore(source)
+  return score === null ? (source?.verificationReason || t('judgePending')) : `${score}%`
 }
 
 function decisionLabel(decision) {
@@ -3200,21 +3270,25 @@ function verificationLineStatus(line) {
                       <div class="document-field-row document-field-head">
                         <span>{{ t('field') }}</span>
                         <span>{{ t('filledOrRecognisedValue') }}</span>
-                        <span>{{ t('status') }}</span>
+                        <span>{{ t('valueConfidence') }}</span>
                       </div>
                       <button
                         v-for="item in page.fields"
                         :key="documentFieldKey(group, page, item)"
                         type="button"
                         class="document-field-row locator-document-field-row"
-                        :class="[item.status, { active: documentFieldIsActive(group, page, item) }]"
+                        :class="[documentFieldStatus(item), { active: documentFieldIsActive(group, page, item) }]"
                         @click="selectDocumentField(group, page, item)"
                       >
                         <span>{{ item.label }}</span>
                         <strong>{{ item.value || t('unrecognised') }}</strong>
-                        <span class="document-field-status">
-                          <small v-if="sourceConfidence(item)">{{ t('valueConfidence') }} {{ sourceConfidence(item) }}%</small>
-                          <span class="status-badge" :class="item.status">{{ statusLabel(item.status) }}</span>
+                        <span
+                          class="document-field-judge"
+                          :class="documentJudgeDisplayState(item).status"
+                          :title="documentJudgeReasonText(item)"
+                        >
+                          <strong>{{ documentJudgeScoreText(item) }}</strong>
+                          <small>{{ documentJudgeSummaryText(item) }}</small>
                         </span>
                       </button>
                     </div>
@@ -3222,6 +3296,10 @@ function verificationLineStatus(line) {
                 </div>
               </article>
             </div>
+            <aside v-if="selectedDocumentInspector" class="document-field-inspector">
+              <strong>{{ t('judgeReason') }} · {{ selectedDocumentInspector.source.fieldName }}</strong>
+              <span>{{ documentJudgeReasonText(selectedDocumentInspector.source) }}</span>
+            </aside>
           </section>
 
           <section class="fields-panel">
@@ -3256,7 +3334,7 @@ function verificationLineStatus(line) {
                       <span>{{ field.category }}</span>
                       <h3>{{ field.label }}</h3>
                       <code>{{ field.key }}</code>
-                      <small class="field-confidence">{{ t('overallConfidence') }} {{ averageFieldConfidence(field) || '-' }}% · {{ field.sources.length }} {{ t('sources') }}</small>
+                      <small class="field-confidence">{{ t('overallConfidence') }} {{ averageFieldScoreText(field) }} · {{ field.sources.length }} {{ t('sources') }}</small>
                     </div>
                     <div class="field-card-actions">
                       <span v-if="field.required" class="required-pill">{{ t('required') }}</span>
@@ -3276,6 +3354,7 @@ function verificationLineStatus(line) {
                       <span class="source-evidence-name">
                         <strong>{{ source.documentName }} · {{ source.section }}</strong>
                         <small>{{ source.fieldName }}</small>
+                        <small v-if="source.judgeObservedValue">{{ t('judgeObserved') }}: {{ source.judgeObservedValue }}</small>
                       </span>
                       <strong class="source-evidence-value">
                         <template
@@ -3286,9 +3365,16 @@ function verificationLineStatus(line) {
                           <span v-else>{{ segment.text }}</span>
                         </template>
                       </strong>
-                      <span class="source-confidence-pill">{{ t('valueConfidence') }} {{ sourceConfidence(source) }}%</span>
+                      <span class="source-confidence-pill">{{ t('valueConfidence') }} {{ sourceScoreText(source) }}</span>
                       <span class="source-confidence-pill" :class="{ muted: !locatorConfidence(source) }">
                         {{ locatorConfidence(source) ? `${t('locatorConfidence')} ${locatorConfidence(source)}%` : t('notLocated') }}
+                      </span>
+                      <span
+                        v-if="selectedFieldSourceKey === fieldSourceKey(field, source, index) && source.verificationReason"
+                        class="standard-source-inspector"
+                      >
+                        <strong>{{ t('judgeReason') }}</strong>
+                        <span>{{ documentJudgeReasonText(source) }}</span>
                       </span>
                     </button>
                     <div v-if="!field.sources.length" class="source-evidence-empty">

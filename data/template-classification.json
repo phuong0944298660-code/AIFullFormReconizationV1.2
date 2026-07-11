@@ -8,7 +8,7 @@
     "confidence" : 90,
     "structureHash" : "fec483b166b46dce",
     "firstSeenAt" : "2026-05-25 15:14:07",
-    "lastSeenAt" : "2026-07-03 15:50:05"
+    "lastSeenAt" : "2026-07-11 12:38:31"
   }, {
     "filename" : "陈丽萍-A.pdf",
     "templateId" : "id988a_2024_06",
@@ -18,7 +18,7 @@
     "confidence" : 92,
     "structureHash" : "280f6f677211b755",
     "firstSeenAt" : "2026-05-25 15:14:18",
-    "lastSeenAt" : "2026-07-02 20:12:19"
+    "lastSeenAt" : "2026-07-11 12:38:58"
   }, {
     "filename" : "陈丽萍-B.pdf",
     "templateId" : "id988b_2024_06",
@@ -158,7 +158,7 @@
     "confidence" : 92,
     "structureHash" : "ec393313f82b3f1c",
     "firstSeenAt" : "2026-05-25 15:16:01",
-    "lastSeenAt" : "2026-06-02 15:19:25"
+    "lastSeenAt" : "2026-07-10 21:23:46"
   }, {
     "filename" : "周咏诗-B-V6.pdf",
     "templateId" : "id988b_2024_06",
@@ -248,7 +248,7 @@
     "confidence" : 65,
     "structureHash" : "d6e30a3e1804e519",
     "firstSeenAt" : "2026-06-23 16:29:46",
-    "lastSeenAt" : "2026-07-10 11:40:21"
+    "lastSeenAt" : "2026-07-10 15:02:52"
   }, {
     "filename" : "��ҵ֤��.pdf",
     "templateId" : "unknown_1p_923d4a81",
@@ -319,5 +319,15 @@
     "structureHash" : "1c2d0dff00e6be1e",
     "firstSeenAt" : "2026-07-02 16:59:45",
     "lastSeenAt" : "2026-07-02 20:27:53"
+  }, {
+    "filename" : "S-IANG-01-ID990A.pdf",
+    "templateId" : "id990a_2025_01",
+    "footerId" : "ID 990A (01/2025)",
+    "pageCount" : 10,
+    "matchSource" : "pdf_text_footer",
+    "confidence" : 98,
+    "structureHash" : "00056c994ea53d36",
+    "firstSeenAt" : "2026-07-10 15:06:10",
+    "lastSeenAt" : "2026-07-11 12:29:33"
   } ]
 }

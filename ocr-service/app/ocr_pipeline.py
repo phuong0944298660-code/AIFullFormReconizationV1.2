@@ -130,21 +130,25 @@ def extract_lines_from_ocr_response(payload: Any) -> list[dict[str, Any]]:
         return []
     texts = _as_list(result.get("rec_texts")) or []
     scores = _as_list(result.get("rec_scores")) or []
+    detection_scores = _as_list(result.get("dt_scores")) or []
     polygons = _as_list(result.get("rec_polys")) or _as_list(result.get("dt_polys")) or []
     lines: list[dict[str, Any]] = []
-    for index, text in enumerate(texts):
+    for index, polygon in enumerate(polygons):
+        text = texts[index] if index < len(texts) else ""
         normalized_text = str(text or "").strip()
-        if not normalized_text or index >= len(polygons):
-            continue
-        bbox = _polygon_bbox(polygons[index])
+        bbox = _polygon_bbox(polygon)
         if not bbox:
             continue
         score = scores[index] if index < len(scores) else 0.0
-        lines.append({
+        detection_score = detection_scores[index] if index < len(detection_scores) else (score if normalized_text else 0.5)
+        line = {
             "text": normalized_text,
             "confidence": _clamp(score),
+            "detection_confidence": _clamp(detection_score),
+            "text_status": "readable" if normalized_text else "unreadable",
             "bbox": bbox,
-        })
+        }
+        lines.append(line)
     return lines
 
 

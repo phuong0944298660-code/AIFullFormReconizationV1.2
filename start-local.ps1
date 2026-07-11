@@ -165,7 +165,7 @@ if (-not $env:LLM_API_KEY -and -not $env:DASHSCOPE_API_KEY) {
   throw "Set LLM_API_KEY or DASHSCOPE_API_KEY, or create llm.local.cmd."
 }
 
-$shouldStartSidecar = $WithSidecar -and -not $NoSidecar
+$shouldStartSidecar = -not $NoSidecar
 $env:SERVER_PORT = [string]$BackendPort
 $env:FRONTEND_PORT = [string]$FrontendPort
 $env:VITE_BACKEND_ORIGIN = "http://127.0.0.1:$BackendPort"
@@ -338,6 +338,6 @@ Write-Host "Backend : http://127.0.0.1:$BackendPort"
 if ($shouldStartSidecar) {
   Write-Host "Field OCR sidecar: http://127.0.0.1:$FieldOcrPort (ready=$sidecarReady)"
 } else {
-  Write-Host "Field OCR sidecar: disabled by default (use -WithSidecar to start it)"
+  Write-Host "Field OCR sidecar: disabled by -NoSidecar"
 }
 Write-Host "State: $StatePath"
