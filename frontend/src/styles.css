@@ -861,6 +861,7 @@ svg {
 }
 
 .locator-document-fields > .document-group-list {
+  display: block;
   min-height: 0;
   overflow-y: auto;
   padding: 0 16px 16px;
@@ -868,6 +869,7 @@ svg {
 
 .locator-document-fields > .document-group-list > .document-group-card {
   align-self: start;
+  margin-bottom: 10px;
 }
 
 .recognized-materials-panel {
@@ -987,20 +989,23 @@ svg {
   padding: 10px;
   display: grid;
   align-content: start;
+  grid-auto-rows: max-content;
   gap: 8px;
 }
 
 .source-page-thumb {
+  height: auto;
   min-height: 70px;
   border: 1px solid #d8e0eb;
   border-radius: 7px;
   background: #fff;
   color: #0f172a;
   display: grid;
-  align-content: center;
+  align-content: start;
   gap: 3px;
   padding: 8px;
   text-align: center;
+  overflow-wrap: anywhere;
 }
 
 .source-page-thumb.active {
@@ -1171,7 +1176,8 @@ svg {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface-muted);
-  overflow: hidden;
+  overflow: visible;
+  height: auto;
 }
 
 .document-group-card > header {
@@ -1197,6 +1203,7 @@ svg {
 }
 
 .document-page-list {
+  display: block;
   padding: 12px;
 }
 
@@ -1204,7 +1211,12 @@ svg {
   border: 1px solid #d8e0eb;
   border-radius: 8px;
   background: #fff;
-  overflow: hidden;
+  overflow: visible;
+  height: auto;
+}
+
+.document-page-card + .document-page-card {
+  margin-top: 10px;
 }
 
 .document-page-card h3 {

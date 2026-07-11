@@ -93,6 +93,15 @@ test('document field inspector stays within its scrolling panel and standard sou
   assert.doesNotMatch(css, /@media \(max-width: 1180px\) \{[\s\S]*?\.document-fields-panel\.locator-document-fields\s*,?[\s\S]*?\{[^}]*height:\s*auto/s)
 })
 
+test('document groups and source thumbnails expand to their complete content', () => {
+  assert.match(css, /\.locator-document-fields > \.document-group-list\s*\{[^}]*display:\s*block[^}]*overflow-y:\s*auto/s)
+  assert.match(css, /\.document-group-card\s*\{[^}]*overflow:\s*visible[^}]*height:\s*auto/s)
+  assert.match(css, /\.document-page-list\s*\{[^}]*display:\s*block/s)
+  assert.match(css, /\.document-page-card\s*\{[^}]*overflow:\s*visible[^}]*height:\s*auto/s)
+  assert.match(css, /\.source-page-thumbs\s*\{[^}]*grid-auto-rows:\s*max-content/s)
+  assert.match(css, /\.source-page-thumb\s*\{[^}]*height:\s*auto[^}]*align-content:\s*start/s)
+})
+
 test('unscored standard sources keep their reason out of the score pill', () => {
   assert.match(app, /function sourceScoreText\(source\) \{\s*const score = fieldVerificationScore\(source\)\s*return score === null \? '—'/)
 })
