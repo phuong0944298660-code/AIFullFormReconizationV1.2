@@ -337,6 +337,19 @@ class FdhReviewAssemblerTest {
   }
 
   @Test
+  void documentFieldGroupsKeepEveryUploadedPageWhenOnlySomePagesContainFields() throws Exception {
+    FdhReviewResult result = assembler.assemble("entry_visa", List.of(id988a()));
+
+    FdhReviewResult.DocumentFieldGroup group = result.documentFieldGroups().stream()
+        .filter(item -> item.materialId().equals("id988a"))
+        .findFirst()
+        .orElseThrow();
+
+    assertThat(group.pages()).extracting(FdhReviewResult.DocumentFieldPage::pageNo)
+        .containsExactly(1, 2, 3, 4, 5);
+  }
+
+  @Test
   void hkIdentityCardNoYesWithNumberPasses() throws Exception {
     FdhReviewResult result = assembler.assemble(
         "entry_visa",

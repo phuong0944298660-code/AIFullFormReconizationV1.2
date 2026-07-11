@@ -137,7 +137,7 @@ public class FdhReviewAssembler {
           .forEach(pageNumbers::add);
     }
     pageNumbers.addAll(valuesByPage.keySet());
-    if (pageNumbers.isEmpty() && document.pageCount() > 0) {
+    if (document.pageCount() > 0) {
       for (int page = 1; page <= document.pageCount(); page += 1) {
         pageNumbers.add(page);
       }
