@@ -1,5 +1,6 @@
 package com.aiform.id995a.fdh;
 
+import com.aiform.id995a.ocr.ParallelRecognitionOutput;
 import java.util.List;
 
 public record FdhReviewResult(
@@ -325,6 +326,20 @@ public record FdhReviewResult(
     ) {
       this(label, value, status, confidence, pageNo, imageWidth, imageHeight, bbox, locatorConfidence,
           null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run");
+    }
+
+    public DocumentField(
+        String label,
+        String value,
+        String status,
+        double confidence,
+        int pageNo,
+        int imageWidth,
+        int imageHeight,
+        List<Integer> bbox,
+        double locatorConfidence
+    ) {
+      this(label, value, status, confidence, pageNo, imageWidth, imageHeight, bbox, locatorConfidence, "", "", "", "", List.of());
     }
 
     public DocumentField {

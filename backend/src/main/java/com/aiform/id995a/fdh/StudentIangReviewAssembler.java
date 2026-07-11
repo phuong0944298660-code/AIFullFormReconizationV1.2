@@ -3,6 +3,7 @@ package com.aiform.id995a.fdh;
 import com.aiform.id995a.ocr.DocumentTemplate;
 import com.aiform.id995a.ocr.OcrDemoResponse;
 import com.aiform.id995a.ocr.OcrPage;
+import com.aiform.id995a.ocr.ParallelRecognitionOutput;
 import com.aiform.id995a.ocr.StructuredFieldDetail;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Clock;
@@ -975,7 +976,12 @@ public class StudentIangReviewAssembler {
         value.snapshotDataUrl(),
         value.imageWidth(),
         value.imageHeight(),
-        value.bbox()
+        value.bbox(),
+        value.suggestedValue(),
+        value.issue(),
+        value.modelAgreement(),
+        value.conflictType(),
+        value.modelOutputs()
     ));
   }
 
@@ -1039,6 +1045,9 @@ public class StudentIangReviewAssembler {
   }
 
   private String documentFieldStatus(String materialId, ExtractedValue value) {
+    if ("disagree".equals(value.modelAgreement())) {
+      return "review";
+    }
     if ("paymentStatus".equals(materialId) && isIncompletePayment(value.value())) {
       return "fail";
     }
@@ -1380,6 +1389,29 @@ public class StudentIangReviewAssembler {
     ) {
       this(document, path, label, value, page, confidence, snapshotDataUrl, imageWidth, imageHeight, bbox,
           null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run");
+    }
+
+    private ExtractedValue(
+        FdhReviewDocument document,
+        String path,
+        String label,
+        String value,
+        int page,
+        double confidence,
+        String snapshotDataUrl,
+        int imageWidth,
+        int imageHeight,
+        List<Integer> bbox
+    ) {
+      this(document, path, label, value, page, confidence, snapshotDataUrl, imageWidth, imageHeight, bbox, "", "", "", "", List.of());
+    }
+
+    private ExtractedValue {
+      suggestedValue = suggestedValue == null ? "" : suggestedValue;
+      issue = issue == null ? "" : issue;
+      modelAgreement = modelAgreement == null ? "" : modelAgreement;
+      conflictType = conflictType == null ? "" : conflictType;
+      modelOutputs = modelOutputs == null ? List.of() : List.copyOf(modelOutputs);
     }
   }
 }

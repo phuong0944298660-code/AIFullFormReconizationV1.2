@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import {
   applicationTypes as fdhApplicationTypes,
   buildReviewResult as buildFdhReviewResult,
@@ -109,6 +109,10 @@ const UI_TEXT = {
     notLocated: 'Not located',
     noEvidence: 'No document evidence available',
     recommendedValue: 'Recommended value',
+    parallelRecognitionAlertTitle: 'Recognition discrepancy detected',
+    parallelRecognitionAlertBody: 'The following field has different parallel recognition values. The field is marked as pending review until a user confirms it.',
+    parallelRecognitionTitle: 'Recognition result comparison',
+    parallelRecognitionReason: 'Recognition results are inconsistent. Manual confirmation is required.',
     normalizedResult: 'Normalised result',
     originalNormalizedResult: 'Original normalised result',
     employmentExperience: 'Foreign Domestic Helper Employment Experience',
@@ -254,6 +258,10 @@ const UI_TEXT = {
     notLocated: '未定位',
     noEvidence: '未取得材料证据',
     recommendedValue: '建议采用值',
+    parallelRecognitionAlertTitle: '并行识别结果不一致',
+    parallelRecognitionAlertBody: '以下字段存在并行识别值不一致，状态已标记为待复核，需用户确认后采用。',
+    parallelRecognitionTitle: '识别结果对比',
+    parallelRecognitionReason: '并行识别结果不一致，需人工复核。',
     normalizedResult: '归一化结果',
     originalNormalizedResult: '原始归一结果',
     employmentExperience: '家庭佣工的工作经验',
@@ -377,6 +385,8 @@ const jobStatus = ref(null)
 const apiError = ref('')
 const dragActive = ref(false)
 const currentLanguage = ref('en')
+const showDemoResultFromUrl = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('demoResult') === '1'
+const focusParallelFromUrl = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('focusParallel') === '1'
 let uploadSequence = 0
 let uploadBatchSequence = 0
 let verificationSequence = 0
@@ -694,7 +704,29 @@ function localizedField(field) {
   return {
     ...field,
     ...text,
-    sources: (field?.sources || []).map(localizedSource)
+    issue: localizedFieldReviewText(field.issue, field),
+    suggestionReason: localizedFieldReviewText(field.suggestionReason, field),
+    sources: (field?.sources || []).map(localizedSource),
+    modelOutputs: (field?.modelOutputs || []).map(localizedModelOutput)
+  }
+}
+
+function localizedFieldReviewText(value, field = {}) {
+  if (currentLanguage.value === 'zh') return toTraditional(value)
+  if (field.conflictType === 'parallel_llm_disagreement' || field.modelAgreement === 'disagree') {
+    const suggestedValue = field.suggestedValue || field.normalizedValue || ''
+    return suggestedValue
+      ? `Recognition results are inconsistent. Recommended value: "${suggestedValue}". Manual confirmation is required.`
+      : 'Recognition results are inconsistent. Manual confirmation is required.'
+  }
+  return localizedTextValue(value)
+}
+
+function localizedModelOutput(output, index) {
+  if (currentLanguage.value === 'zh') return toTraditionalObject(output)
+  return {
+    ...output,
+    label: `Recognition result ${index === 0 ? 'A' : 'B'}`
   }
 }
 
@@ -772,7 +804,9 @@ function localizedDocumentFieldGroup(group) {
       title: localizedSection(page.title),
       fields: (page.fields || []).map((item) => ({
         ...item,
-        label: localizedFieldName(item.label)
+        label: localizedFieldName(item.label),
+        issue: localizedFieldReviewText(item.issue, item),
+        modelOutputs: (item.modelOutputs || []).map(localizedModelOutput)
       }))
     }))
   }
@@ -857,13 +891,23 @@ function localizedTemplateFieldRow(row) {
     ...fieldText,
     statusLabel: TEMPLATE_TEXT[row.status]?.en?.label || row.statusLabel,
     displayValue: localizedTextValue(row.displayValue),
-    note: localizedTextValue(row.note),
+    note: localizedTemplateNote(row),
     sources: (row.sources || []).map(localizedSource),
     conflicts: (row.conflicts || []).map((conflict) => ({
       ...conflict,
       sources: (conflict.sources || []).map(localizedSection)
     }))
   }
+}
+
+function localizedTemplateNote(row = {}) {
+  if (currentLanguage.value === 'zh') return toTraditional(row.note)
+  if (row.modelAgreement === 'disagree') {
+    return row.displayValue
+      ? `Recognition results are inconsistent. Recommended value: "${row.displayValue}". Manual confirmation is required.`
+      : 'Recognition results are inconsistent. Manual confirmation is required.'
+  }
+  return localizedTextValue(row.note)
 }
 
 function localizedMaterialStatusLabel(status) {
@@ -1790,6 +1834,19 @@ function buildActiveReviewResult() {
     : buildStudentReviewResult(selectedApplicationTypeId.value, selectedScenarioId.value)
 }
 
+if (showDemoResultFromUrl) {
+  uploadedFiles.value = buildActiveUploadedFiles()
+  reviewResult.value = buildActiveReviewResult()
+}
+
+onMounted(async () => {
+  if (!focusParallelFromUrl) return
+  await nextTick()
+  window.setTimeout(() => {
+    document.querySelector('.document-parallel-alert')?.scrollIntoView({ block: 'center', inline: 'nearest' })
+  }, 50)
+})
+
 const fieldAdjudications = computed(() => {
   const local = localFieldAdjudications(reviewResult.value || {})
   const merged = new Map(local.map((item) => [item.key, item]))
@@ -1844,6 +1901,10 @@ const employmentPeriods = computed(() => employmentPeriodsFromFields(filteredAll
 function employmentValue(field) {
   if (!field) return t('unrecognised')
   return localizedTextValue(field.suggestedValue || field.normalizedValue || t('unrecognised'))
+}
+
+function documentDisagreementFields(page) {
+  return (page?.fields || []).filter((field) => field.modelAgreement === 'disagree')
 }
 
 const blockingFindings = computed(() => {
@@ -3266,6 +3327,20 @@ function verificationLineStatus(line) {
                 <div class="document-page-list">
                   <section v-for="page in group.pages" :key="`${group.materialId}:${page.pageNo}`" class="document-page-card">
                     <h3>{{ pageLabel(page.pageNo) }} · {{ page.title }}</h3>
+                    <div v-if="documentDisagreementFields(page).length" class="document-parallel-alert">
+                      <div>
+                        <strong>{{ t('parallelRecognitionAlertTitle') }}</strong>
+                        <p>{{ t('parallelRecognitionAlertBody') }}</p>
+                      </div>
+                      <div class="document-parallel-alert-list">
+                        <span
+                          v-for="field in documentDisagreementFields(page)"
+                          :key="`${group.materialId}:${page.pageNo}:parallel-alert:${field.label}`"
+                        >
+                          {{ field.label }} · {{ field.suggestedValue || field.value || t('unrecognised') }}
+                        </span>
+                      </div>
+                    </div>
                     <div class="document-field-table">
                       <div class="document-field-row document-field-head">
                         <span>{{ t('field') }}</span>

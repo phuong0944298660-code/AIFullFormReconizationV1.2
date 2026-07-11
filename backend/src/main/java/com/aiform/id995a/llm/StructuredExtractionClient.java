@@ -967,6 +967,7 @@ public class StructuredExtractionClient implements
     builder.append("Find printed field labels, filling areas, handwriting, typed values, checked boxes, signatures, and photo/upload areas by visual reasoning.\n");
     builder.append("Return a compact result. Prioritize applicant-filled text, selected checkboxes, signatures, photos, and major visible blank fields. Do not enumerate every empty grid cell, every unchecked option, template instruction, explanatory paragraph, barcode, or page footer.\n");
     builder.append("Use nearby printed labels as JSON keys, normalized to lower_snake_case English where possible. Preserve Chinese or English field values exactly when visible.\n");
+    appendIangId990aInstructions(builder, filename);
     appendIangEducationProofInstructions(builder, filename);
     builder.append("Rules:\n");
     builder.append("- Include source_file and total_pages at the top level.\n");
@@ -1005,6 +1006,30 @@ public class StructuredExtractionClient implements
     builder.append("source_file: ").append(filename == null || filename.isBlank() ? "uploaded-document" : filename).append('\n');
     builder.append("total_pages: ").append(totalPages).append('\n');
     return builder.toString();
+  }
+
+  private void appendIangId990aInstructions(StringBuilder builder, String filename) {
+    if (!isIangId990aFilename(filename)) {
+      return;
+    }
+    builder.append("IANG ID 990A application form guidance:\n");
+    builder.append("- This appears to be an IANG ID 990A application form. The first five official pages contain applicant-filled fields; inspect handwritten text, typed text, selected checkboxes, signatures, and declaration dates on those pages.\n");
+    builder.append("- On page 1 / Personal Particulars, actively extract these fields when visible: name_in_chinese, maiden_surname, surname_in_english, given_names_in_english, alias, sex, date_of_birth, place_of_birth, nationality_place_of_domicile, marital_relationship_status, hk_identity_card_no, mainland_identity_card_no, travel_document_type, travel_document_no, place_of_issue, date_of_issue, date_of_expiry, email_address, contact_telephone_no, present_country_territory_of_domicile, length_of_residence_years, length_of_residence_months, permanent_residence_acquired, completed_undergraduate_or_higher_qualification, currently_staying_in_hong_kong, permitted_to_remain_until, and status.\n");
+    builder.append("- On Page 2, actively extract these canonical fields when visible: domicile_address, address_of_current_employer, name_of_current_employer, employer_1_name, employer_1_address, employer_1_period_from, employer_1_period_to, employer_2_name, employer_2_address, employer_2_period_from, and employer_2_period_to. If the page has an employment history table, keep each row as employer_N_name, employer_N_address, employer_N_period_from, employer_N_period_to, top to bottom.\n");
+    builder.append("- On Page 3 and Page 4, actively extract each visible application/supporting detail with stable lower_snake_case keys from the printed field label. Keep repeated table rows as row_N_<field> only when no document-specific canonical key is available.\n");
+    builder.append("- On Page 5, actively extract declaration_date and signature_of_applicant when visible, plus any selected declaration checkboxes or applicant-filled contact/reference fields using stable lower_snake_case keys.\n");
+    builder.append("- Use these exact canonical key names for the above fields whenever the printed label matches, even if the label wording is shortened, bilingual, or appears inside a table. Do not rename them to aliases such as travel_doc_no, given_names_en, employer_address, or current_employer_address.\n");
+    builder.append("- For ID 990A checkbox groups, return the selected option text under the question field, not one boolean per option. For example, return sex as Male or Female; completed_undergraduate_or_higher_qualification as Yes or No; currently_staying_in_hong_kong as Yes or No; status as Student, Employment, Residence/Dependant, Visitor, or Others.\n");
+    builder.append("- If a selected checkbox is visible beside Chinese and English option text, use the bilingual selected option value when it is compact and clear, for example \"是 Yes\". Do not return Not recognised when the selected option can be visually read.\n");
+    builder.append("- For travel document no., mainland identity card no., phone numbers, email addresses, dates, and names, transcribe only the visible applicant-filled characters. Do not infer missing characters from the field label or from another field.\n");
+    builder.append("- On declaration/signature areas, extract declaration_date and signature_of_applicant when visible; if the signature text is unreadable but a signature mark exists, use \"illegible_signature\".\n");
+  }
+
+  private boolean isIangId990aFilename(String filename) {
+    String normalized = filename == null ? "" : filename.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "");
+    return normalized.contains("id990a")
+        || normalized.contains("990a")
+        || normalized.contains("iang");
   }
 
   private void appendIangEducationProofInstructions(StringBuilder builder, String filename) {

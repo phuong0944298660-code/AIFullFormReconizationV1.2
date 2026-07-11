@@ -142,7 +142,8 @@ public class StructuredFieldEvidenceService {
       RenderedOcrPage page,
       FieldCandidate candidate,
       JsonNode confidenceData,
-      JsonNode evidenceData
+      JsonNode evidenceData,
+      JsonNode parallelRecognitionData
   ) {
     String pageKey = "page_" + page.page();
     JsonNode evidence = lookupMetadata(evidenceData, candidate.path(), pageKey);
@@ -201,6 +202,7 @@ public class StructuredFieldEvidenceService {
         valueText,
         valueBbox.isEmpty() ? recognitionBbox : valueBbox
     );
+    JsonNode parallelRecognition = lookupMetadata(parallelRecognitionData, candidate.path(), pageKey);
     return new PreparedField(
         page.page(),
         candidate.path(),

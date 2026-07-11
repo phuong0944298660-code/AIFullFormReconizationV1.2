@@ -3,6 +3,7 @@ package com.aiform.id995a.fdh;
 import com.aiform.id995a.ocr.DocumentTemplate;
 import com.aiform.id995a.ocr.OcrDemoResponse;
 import com.aiform.id995a.ocr.OcrPage;
+import com.aiform.id995a.ocr.ParallelRecognitionOutput;
 import com.aiform.id995a.ocr.StructuredFieldDetail;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Clock;
@@ -194,6 +195,9 @@ public class FdhReviewAssembler {
   }
 
   private String documentFieldStatus(ExtractedValue value, boolean multipleApplicationTypeRows) {
+    if ("disagree".equals(value.modelAgreement())) {
+      return "review";
+    }
     if (value.value().isBlank()) {
       return "review";
     }

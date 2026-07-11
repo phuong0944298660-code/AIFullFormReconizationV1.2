@@ -34,6 +34,41 @@ public record StructuredFieldDetail(
     String scoreSource
 ) {
 
+  public StructuredFieldDetail(
+      int page,
+      String path,
+      String label,
+      JsonNode value,
+      String displayValue,
+      double confidence,
+      List<Integer> bbox,
+      String snapshotDataUrl,
+      String ocrText,
+      double ocrConfidence,
+      String ocrStatus,
+      List<FieldCharacterEvidence> characters
+  ) {
+    this(
+        page,
+        path,
+        label,
+        value,
+        displayValue,
+        confidence,
+        bbox,
+        snapshotDataUrl,
+        ocrText,
+        ocrConfidence,
+        ocrStatus,
+        characters,
+        "",
+        "",
+        "",
+        "",
+        List.of()
+    );
+  }
+
   public StructuredFieldDetail {
     path = path == null ? "" : path;
     label = label == null || label.isBlank() ? path : label;

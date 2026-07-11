@@ -58,6 +58,132 @@
 
 启动脚本会从 `llm.local.cmd` 读取本地模型凭据，也会读取可选的 `baidu-ocr.local.cmd`。不要提交真实 API key 或本地凭据文件。
 
+## 本地服务启动排障经验
+
+前端识别卡在 `1%` 并报 `Request timed out` 时，优先怀疑旧进程、旧 jar 或后端任务创建入口没有及时返回；这通常不是 LLM 识别阶段本身慢。
+
+排查顺序：
+- 先检查 `18083` / `5197` 实际监听进程，不要只相信 `tmp/local-services.json` 里的 PID；状态文件可能记录旧 PID 或已退出进程。
+- 修改后端 Java 代码后，如果本地服务使用 `.\start-local.ps1 -SkipBuild` 启动，必须先重新打包 jar，否则页面仍运行旧逻辑。
+- 重新打包命令：
+
+```powershell
+cd backend
+mvn -DskipTests package
+```
+
+- 如果打包时报 jar 无法 rename、replace 或被占用，先停止 `18083` 上的 Java 进程，再重新 package。
+- 重启服务前建议清理 `18083` / `5197` 的旧监听进程，然后再执行：
+
+```powershell
+.\start-local.ps1 -SkipBuild
+```
+
+- 启动后必须验证后端、模型配置和前端：
+
+```powershell
+Invoke-WebRequest -UseBasicParsing http://127.0.0.1:18083/api/health
+Invoke-RestMethod http://127.0.0.1:18083/api/llm/models
+Invoke-WebRequest -UseBasicParsing http://127.0.0.1:5197/
+```
+
+- 如果前端仍卡在 `1%`，用同一文件直连后端测试 job 创建是否能快速返回：
+
+```powershell
+curl.exe -sS -X POST http://127.0.0.1:18083/api/fdh/review/jobs `
+  -F "files=@tmp\test.pdf;type=application/pdf" `
+  -F "applicationTypeId=entry_visa"
+```
+
+正常应在 1 秒内返回 `jobId`。如果直连也超时，问题在后端服务、端口进程、旧 jar 或 multipart 入口，不在前端轮询。
+
+并行 LLM / 字段对比逻辑修改后，不能只跑测试或 `mvn test`；需要重新 `mvn -DskipTests package` 并重启后端，否则前端不会看到新的 `review` 报警逻辑。
+
+并行 LLM 识别的控制变量约束：
+- 主链路和并行分路必须视为同一条识别流水线跑两次，唯一允许的变量是使用的 LLM model/profile。
+- 两路必须使用同一套结构化提取入口、提示词构造规则、页面输入、模板检测结果、字段 evidence 约定、二次裁剪补识别、普通字段 crop review、地址字段 crop review、checkbox/declaration crop review、声明页 footer 恢复、涂改过滤、模板 metadata 注入和比对前归一逻辑。
+- 学生 IANG 与 FDH 两大场景新增或修改任何场景化提示词、模板恢复规则、字段后处理或归一规则时，必须同步适用于主链路和并行分路；不要只增强主模型路径。
+- 并行比对只应反映模型识别差异，不应混入链路差异。如果发现一边大量 `Not recognised`，先排查两路是否使用了不同的 prompt、后处理、模板信息或归一流程，再判断是否是模型能力差异。
+- 前端展示可隐藏模型名称，但后端调试和测试必须能证明两路除模型 profile 外处理步骤一致。
+
+## 服务器 Docker 部署
+
+当前演示服务器：
+- 地址：`192.168.30.205`
+- 项目目录：`/opt/Immd`
+- Git 来源：`http://192.168.5.221:8081/yuezaixin/immd.git`
+- 部署分支：`master`
+
+服务器 Docker 服务：
+- 前端：`http://192.168.30.205:5197`
+- 后端：`http://192.168.30.205:18083`
+- Docker Compose 默认不启动 `ocr-service`，并设置 `FIELD_OCR_ENABLED=false`。
+- `frontend/nginx.conf` 需要保留 `client_max_body_size 150m;`，否则较大的 PDF 上传会被 nginx 拦截并返回 `413 Request Entity Too Large`。
+
+首次拉取：
+
+```bash
+mkdir -p /opt/Immd
+cd /opt/Immd
+git clone -b master http://192.168.5.221:8081/yuezaixin/immd.git .
+```
+
+更新代码：
+
+```bash
+cd /opt/Immd
+git fetch origin
+git checkout master
+git pull origin master
+```
+
+服务器 `.env` 必须写入真实模型凭据，不要提交 `.env` 或在聊天中暴露 API key。至少需要：
+
+```bash
+LLM_BASE_URL=https://apie.zhisuaninfo.com/v1
+LLM_MODEL=Qwen3.6-27b
+LLM_API_KEY=replace-with-real-key
+DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+DASHSCOPE_MODEL=qwen3.6-35b-a3b
+DASHSCOPE_API_KEY=replace-with-real-key
+DASHSCOPE_ENABLE_THINKING=true
+```
+
+启动或重建：
+
+```bash
+cd /opt/Immd
+docker compose up -d --build
+```
+
+只重启已构建服务：
+
+```bash
+cd /opt/Immd
+docker compose up -d --force-recreate backend frontend
+```
+
+检查：
+
+```bash
+docker compose ps
+curl http://127.0.0.1:18083/api/health
+docker exec baidu-full-page-ocr-backend printenv | grep -E 'LLM_|DASHSCOPE_|FIELD_OCR' | sed -E 's/(API_KEY=).+/\1***MASKED***/'
+```
+
+如果页面能上传但识别结果只有 `Source file` / `Total pages`，优先检查 `LLM_API_KEY` 是否仍是占位符、模型服务是否返回 `401` / `403` / `timeout`：
+
+```bash
+docker compose logs backend --tail=300 | grep -Ei 'llm|extraction|error|fallback|401|403|timeout|model'
+```
+
+停止：
+
+```bash
+cd /opt/Immd
+docker compose down
+```
+
 ## 学生 / IANG Demo 规则
 
 学生 IANG demo 是当前默认首屏流程，面向“IANG 应届毕业生在港首次申请”材料核验。
