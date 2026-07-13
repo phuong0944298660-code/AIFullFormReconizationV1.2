@@ -119,12 +119,16 @@ public class FdhReviewAssembler {
   }
 
   private List<FdhReviewResult.DocumentFieldPage> documentFieldPages(FdhReviewDocument document) {
+    int pageLimit = recognisedPageLimit(document);
     Map<Integer, List<ExtractedValue>> valuesByPage = new LinkedHashMap<>();
     for (ExtractedValue value : flatten(document)) {
       if (!shouldDisplayExtractedValue(value)) {
         continue;
       }
-      valuesByPage.computeIfAbsent(documentFieldPageNo(value), ignored -> new ArrayList<>()).add(value);
+      int pageNo = documentFieldPageNo(value);
+      if (pageNo <= pageLimit) {
+        valuesByPage.computeIfAbsent(pageNo, ignored -> new ArrayList<>()).add(value);
+      }
     }
     boolean multipleApplicationTypeRows = hasMultipleApplicationTypeRows(document);
 
@@ -133,15 +137,10 @@ public class FdhReviewAssembler {
     if (response != null && response.pages() != null) {
       response.pages().stream()
           .map(OcrPage::page)
-          .filter(page -> page > 0)
+          .filter(page -> page > 0 && page <= pageLimit)
           .forEach(pageNumbers::add);
     }
     pageNumbers.addAll(valuesByPage.keySet());
-    if (document.pageCount() > 0) {
-      for (int page = 1; page <= document.pageCount(); page += 1) {
-        pageNumbers.add(page);
-      }
-    }
 
     return pageNumbers.stream()
         .map(pageNo -> new FdhReviewResult.DocumentFieldPage(
@@ -152,6 +151,15 @@ public class FdhReviewAssembler {
                 .toList()
         ))
         .toList();
+  }
+
+  private int recognisedPageLimit(FdhReviewDocument document) {
+    String templateId = document.template() == null ? "" : document.template().templateId();
+    return switch (templateId) {
+      case "id988a_2024_06", "id407_2016_11" -> 4;
+      case "id988b_2024_06" -> 3;
+      default -> Integer.MAX_VALUE;
+    };
   }
 
   private int documentFieldPageNo(ExtractedValue value) {

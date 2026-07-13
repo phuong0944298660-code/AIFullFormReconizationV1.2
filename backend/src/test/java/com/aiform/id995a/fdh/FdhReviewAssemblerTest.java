@@ -337,16 +337,24 @@ class FdhReviewAssemblerTest {
   }
 
   @Test
-  void documentFieldGroupsKeepEveryUploadedPageWhenOnlySomePagesContainFields() throws Exception {
-    FdhReviewResult result = assembler.assemble("entry_visa", List.of(id988a()));
+  void documentFieldGroupsOnlyShowPagesParticipatingInRecognition() throws Exception {
+    FdhReviewDocument id988a = withRecognizedPages(id988a(), List.of(1, 2, 3, 4));
+    FdhReviewDocument id988b = withRecognizedPages(id988bWithExtraFields(), List.of(1, 2, 3));
+    FdhReviewResult result = assembler.assemble("entry_visa", List.of(id988a, id988b));
 
-    FdhReviewResult.DocumentFieldGroup group = result.documentFieldGroups().stream()
+    FdhReviewResult.DocumentFieldGroup id988aGroup = result.documentFieldGroups().stream()
         .filter(item -> item.materialId().equals("id988a"))
         .findFirst()
         .orElseThrow();
+    FdhReviewResult.DocumentFieldGroup id988bGroup = result.documentFieldGroups().stream()
+        .filter(item -> item.materialId().equals("id988b"))
+        .findFirst()
+        .orElseThrow();
 
-    assertThat(group.pages()).extracting(FdhReviewResult.DocumentFieldPage::pageNo)
-        .containsExactly(1, 2, 3, 4, 5);
+    assertThat(id988aGroup.pages()).extracting(FdhReviewResult.DocumentFieldPage::pageNo)
+        .containsExactly(1, 2, 3, 4);
+    assertThat(id988bGroup.pages()).extracting(FdhReviewResult.DocumentFieldPage::pageNo)
+        .containsExactly(1, 2, 3);
   }
 
   @Test
@@ -1010,6 +1018,42 @@ class FdhReviewAssemblerTest {
         new DocumentTemplate(templateId, footerId, pages, 98, "test", templateId),
         response(filename, pages, json),
         materialId
+    );
+  }
+
+  private FdhReviewDocument withRecognizedPages(FdhReviewDocument document, List<Integer> pageNumbers) {
+    OcrDemoResponse original = document.ocrResult();
+    List<OcrPage> pages = pageNumbers.stream()
+        .map(pageNo -> new OcrPage(
+            pageNo,
+            "data:image/png;base64,AAA=",
+            100,
+            100,
+            "",
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of()
+        ))
+        .toList();
+    OcrDemoResponse response = new OcrDemoResponse(
+        original.filename(),
+        original.model(),
+        original.pageCount(),
+        pages,
+        original.extractedFields(),
+        original.engineStatus(),
+        original.structuredData(),
+        original.rawStructuredText()
+    );
+    return new FdhReviewDocument(
+        document.filename(),
+        document.contentType(),
+        document.pageCount(),
+        document.template(),
+        response,
+        document.materialId(),
+        document.officialPageNumbers()
     );
   }
 
