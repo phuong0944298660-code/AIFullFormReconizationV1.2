@@ -66,6 +66,9 @@ class StructuredExtractionClientTest {
     assertThat(payload.toString()).contains("official_page_no");
     assertThat(payload.toString()).contains("MANDATORY: when you recognize any field value");
     assertThat(payload.toString()).contains("do not output a field value unless you also output its field bbox");
+    assertThat(payload.toString()).contains("copy label verbatim from the printed page in its original language and script");
+    assertThat(payload.toString()).contains("Traditional Chinese must remain Traditional Chinese");
+    assertThat(payload.toString()).contains("JSON field keys may remain stable lower_snake_case English");
     assertThat(payload.toString()).contains("self-check");
     assertThat(payload.toString()).contains("char_confidences");
     assertThat(payload.toString()).contains("no_applicant_input");

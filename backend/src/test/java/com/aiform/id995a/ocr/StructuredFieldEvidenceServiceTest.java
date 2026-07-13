@@ -191,6 +191,90 @@ class StructuredFieldEvidenceServiceTest {
   }
 
   @Test
+  void usesStructuredFieldPathWhenLlmEvidenceLabelIsOnlyAChoiceValue() throws Exception {
+    FakeFieldRegionOcrGateway gateway = new FakeFieldRegionOcrGateway();
+    gateway.pageDetections = List.of(
+        new FieldLabelDetection("水電供應", 98, List.of(8, 12, 140, 28))
+    );
+    StructuredFieldEvidenceService service = new StructuredFieldEvidenceService(gateway);
+    JsonNode structuredData = objectMapper.readTree("""
+        {
+          "page_1": {"水電供應": "有"},
+          "_field_evidence": {"page_1": {"水電供應": {
+            "label": "有",
+            "value_bbox": [150, 12, 180, 28]
+          }}}
+        }
+        """);
+
+    StructuredFieldDetail detail = service.buildFieldDetails(structuredData, List.of(renderedPage()))
+        .get(1)
+        .get(0);
+
+    assertThat(detail.label()).isEqualTo("有");
+    assertThat(detail.labelBbox()).containsExactly(8, 12, 140, 28);
+  }
+
+  @Test
+  void usesStructuredFieldPathWhenLlmEvidenceLabelRepeatsTheRecognizedValue() throws Exception {
+    FakeFieldRegionOcrGateway gateway = new FakeFieldRegionOcrGateway();
+    gateway.pageDetections = List.of(
+        new FieldLabelDetection("Signature of applicant", 98, List.of(8, 12, 140, 28))
+    );
+    StructuredFieldEvidenceService service = new StructuredFieldEvidenceService(gateway);
+    JsonNode structuredData = objectMapper.readTree("""
+        {
+          "page_1": {"signature_of_applicant": "CSY"},
+          "_field_evidence": {"page_1": {"signature_of_applicant": {
+            "label": "CSY",
+            "value_bbox": [150, 12, 180, 28]
+          }}}
+        }
+        """);
+
+    StructuredFieldDetail detail = service.buildFieldDetails(structuredData, List.of(renderedPage()))
+        .get(1)
+        .get(0);
+
+    assertThat(detail.label()).isEqualTo("CSY");
+    assertThat(detail.labelBbox()).containsExactly(8, 12, 140, 28);
+  }
+
+  @Test
+  void replacesId407ConnectorEvidenceLabelsWithSemanticLocatorLabels() throws Exception {
+    FakeFieldRegionOcrGateway gateway = new FakeFieldRegionOcrGateway();
+    gateway.pageDetections = List.of(
+        new FieldLabelDetection("本合約由", 98, List.of(8, 12, 80, 28)),
+        new FieldLabelDetection("4月20日訂立", 98, List.of(8, 80, 120, 98)),
+        new FieldLabelDetection("家庭庸工合約號碼", 98, List.of(8, 150, 150, 168))
+    );
+    StructuredFieldEvidenceService service = new StructuredFieldEvidenceService(gateway);
+    JsonNode structuredData = objectMapper.readTree("""
+        {
+          "page_1": {
+            "傭工": "Siti Nurhaliza",
+            "合同訂立日期": "2026年4月20日",
+            "傭工合約號碼": "RFH-CON-IDN-26-0612"
+          },
+          "_field_evidence": {"page_1": {
+            "傭工": {"label": "和", "value_bbox": [90, 12, 180, 28]},
+            "合同訂立日期": {"label": "於", "value_bbox": [130, 80, 190, 98]},
+            "傭工合約號碼": {"label": "號碼", "value_bbox": [160, 150, 195, 168]}
+          }}
+        }
+        """);
+
+    List<StructuredFieldDetail> details = service.buildFieldDetails(structuredData, List.of(renderedPage())).get(1);
+
+    assertThat(details).extracting(StructuredFieldDetail::labelBbox)
+        .containsExactly(
+            List.of(8, 12, 80, 28),
+            List.of(8, 80, 120, 98),
+            List.of(8, 150, 150, 168)
+        );
+  }
+
+  @Test
   void buildsLlmFieldDetailsWithoutCallingOcrGateway() throws Exception {
     FakeFieldRegionOcrGateway gateway = new FakeFieldRegionOcrGateway();
     StructuredFieldEvidenceService service = new StructuredFieldEvidenceService();

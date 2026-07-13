@@ -132,6 +132,46 @@ class FdhReviewJobServiceTest {
   }
 
   @Test
+  void completedJobIsReleasedAfterItsTerminalResultIsRead() throws Exception {
+    BaiduOcrPageRenderer renderer = mock(BaiduOcrPageRenderer.class);
+    TemplateDetectionService templateDetectionService = mock(TemplateDetectionService.class);
+    OcrDemoService ocrDemoService = mock(OcrDemoService.class);
+    FdhReviewJobService service = new FdhReviewJobService(
+        renderer,
+        templateDetectionService,
+        ocrDemoService,
+        new FdhReviewAssembler(5100, 1236, Clock.systemUTC())
+    );
+
+    when(renderer.render(anyString(), anyString(), any())).thenReturn(renderedPages(4));
+    when(templateDetectionService.detect(anyString(), anyString(), any(), anyList()))
+        .thenReturn(template("id407_2016_11", "ID 407 (11/2016)", 4));
+    when(ocrDemoService.recognizeRenderedForFdhReview(
+        anyString(),
+        anyList(),
+        any(ExtractionProgressListener.class),
+        any(),
+        any(DocumentTemplate.class)
+    )).thenAnswer(invocation -> response(invocation.getArgument(0), invocation.getArgument(4)));
+
+    FdhReviewJobStatusResponse started = service.start(
+        "entry_visa",
+        List.of(file("ID407.pdf")),
+        null
+    );
+    FdhReviewJobStatusResponse completed = waitForCompletion(service, started.jobId());
+
+    assertThat(completed.status()).isEqualTo("completed");
+    assertThat(completed.result()).isNotNull();
+
+    Field jobsField = FdhReviewJobService.class.getDeclaredField("jobs");
+    jobsField.setAccessible(true);
+    @SuppressWarnings("unchecked")
+    Map<String, Object> jobs = (Map<String, Object>) jobsField.get(service);
+    assertThat(jobs).doesNotContainKey(started.jobId());
+  }
+
+  @Test
   void statusFailsAJobWhoseWorkerFinishedBeforeReachingATerminalState() throws Exception {
     FdhReviewJobService service = new FdhReviewJobService(
         mock(BaiduOcrPageRenderer.class),
@@ -1062,11 +1102,11 @@ class FdhReviewJobServiceTest {
   private FdhReviewJobStatusResponse waitForCompletion(FdhReviewJobService service, String jobId) throws Exception {
     FdhReviewJobStatusResponse status = service.status(jobId);
     for (int attempt = 0; attempt < 30; attempt += 1) {
-      status = service.status(jobId);
       if ("completed".equals(status.status()) || "failed".equals(status.status())) {
         return status;
       }
       Thread.sleep(25);
+      status = service.status(jobId);
     }
     return status;
   }

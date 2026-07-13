@@ -143,7 +143,11 @@ public class FdhReviewJobService {
       );
     }
     state.markFailedIfWorkerEnded();
-    return state.snapshot();
+    FdhReviewJobStatusResponse snapshot = state.snapshot();
+    if (state.isTerminal()) {
+      jobs.remove(jobId, state);
+    }
+    return snapshot;
   }
 
   public FdhReviewJobStatusResponse cancel(String jobId) {

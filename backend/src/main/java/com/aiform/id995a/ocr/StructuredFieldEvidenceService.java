@@ -184,7 +184,8 @@ public class StructuredFieldEvidenceService {
     String displayValue = displayValue(candidate.path(), label, candidate.value());
     String rawValueText = valueText(candidate.value());
     String valueText = valueText(candidate.value(), displayValue);
-    FieldLabelLocation labelLocation = fieldLabelLocator.locate(label, labelDetections, recognitionBbox);
+    String locatorLabel = locatorLabel(label, candidate.path(), candidate.value());
+    FieldLabelLocation labelLocation = fieldLabelLocator.locate(locatorLabel, labelDetections, recognitionBbox);
     List<Integer> labelBbox = labelLocation.bbox();
     List<Integer> valueBbox = recognitionBbox;
     List<Integer> evidenceBbox = List.of();
@@ -641,6 +642,21 @@ public class StructuredFieldEvidenceService {
   private String label(JsonNode evidence, List<String> path) {
     String label = firstExisting(evidence, "label", "field_label", "name").asText("");
     return label.isBlank() ? humanize(path.isEmpty() ? "field" : path.get(path.size() - 1)) : label;
+  }
+
+  private String locatorLabel(String label, List<String> path, JsonNode value) {
+    String normalized = label == null ? "" : label.trim().toLowerCase(Locale.ROOT);
+    String normalizedValue = valueText(value).trim().toLowerCase(Locale.ROOT);
+    if ("和".equals(normalized)) {
+      return "佣工姓名";
+    }
+    if ((List.of("有", "沒有", "没有", "yes", "no", "true", "false").contains(normalized)
+        || List.of("於", "于", "號碼", "号码").contains(normalized)
+        || (!normalized.isBlank() && normalized.equals(normalizedValue)))
+        && path != null && !path.isEmpty()) {
+      return humanize(path.get(path.size() - 1));
+    }
+    return label;
   }
 
   private String displayValue(List<String> path, String label, JsonNode value) {
