@@ -237,23 +237,9 @@ function buildFields() {
       normalizedValue: 'CA3273201',
       suggestedValue: 'CA3273201',
       status: 'review',
-      correctionApplied: true,
-      modelAgreement: 'disagree',
-      conflictType: 'parallel_llm_disagreement',
-      suggestionReason: '并行识别结果不一致，建议采用“CA3273201”，该字段需人工复核确认。',
-      issue: '并行识别结果不一致，需人工复核。',
-      modelOutputs: [
-        {
-          label: '识别结果 A',
-          value: 'CA3273201',
-          confidence: 91
-        },
-        {
-          label: '识别结果 B',
-          value: 'CA3273207',
-          confidence: 86
-        }
-      ],
+      correctionApplied: false,
+      suggestionReason: '跨材料值不一致，建议采用“CA3273201”，该字段需人工复核确认。',
+      issue: '申请表与旅行证件的号码不一致，需人工复核。',
       sources: [
         source('ID 990A', '第 2 页 Travel document', 'Travel document no.', 'CA3273201', 91),
         source('港澳通行证', '资料页', 'Permit no.', 'CA3273207', 86)
@@ -367,25 +353,7 @@ function buildDocumentFieldGroups() {
         page(2, '个人资料及旅行证件', [
           ['英文姓名', 'ZHAO HANGYU', 'pass'],
           ['香港身份证号码', 'F539325(2)', 'pass'],
-          ['旅行证件号码', 'CA3273201', 'review', {
-            suggestedValue: 'CA3273201',
-            confidence: 91,
-            modelAgreement: 'disagree',
-            conflictType: 'parallel_llm_disagreement',
-            issue: '并行识别结果不一致，建议采用“CA3273201”，该字段需人工复核确认。',
-            modelOutputs: [
-              {
-                label: '识别结果 A',
-                value: 'CA3273201',
-                confidence: 91
-              },
-              {
-                label: '识别结果 B',
-                value: 'CA3273207',
-                confidence: 86
-              }
-            ]
-          }],
+          ['旅行证件号码', 'CA3273201', 'pass', { confidence: 91 }],
           ['出生日期', '03/08/1981', 'pass'],
           ['性别', 'Female', 'pass']
         ]),

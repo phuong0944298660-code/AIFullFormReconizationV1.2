@@ -7,12 +7,12 @@ import org.springframework.stereotype.Service;
 @Service
 public class TemplateClassificationService {
 
-  private final BaiduOcrPageRenderer pageRenderer;
+  private final DocumentPageRenderer pageRenderer;
   private final TemplateDetectionService templateDetectionService;
   private final TemplateClassificationLogService templateClassificationLogService;
 
   public TemplateClassificationService(
-      BaiduOcrPageRenderer pageRenderer,
+      DocumentPageRenderer pageRenderer,
       TemplateDetectionService templateDetectionService,
       TemplateClassificationLogService templateClassificationLogService
   ) {

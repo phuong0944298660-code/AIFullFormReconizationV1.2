@@ -1,7 +1,7 @@
 package com.aiform.id995a.fdh;
 
 import com.aiform.id995a.llm.ExtractionProgressListener;
-import com.aiform.id995a.ocr.BaiduOcrPageRenderer;
+import com.aiform.id995a.ocr.DocumentPageRenderer;
 import com.aiform.id995a.ocr.DocumentTemplate;
 import com.aiform.id995a.ocr.OcrDemoResponse;
 import com.aiform.id995a.ocr.OcrDemoService;
@@ -12,8 +12,10 @@ import com.fasterxml.jackson.databind.node.MissingNode;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -38,7 +40,7 @@ public class FdhReviewJobService {
   private static final Logger log = LoggerFactory.getLogger(FdhReviewJobService.class);
   private static final int DEFAULT_FILE_CONCURRENCY = 2;
 
-  private final BaiduOcrPageRenderer pageRenderer;
+  private final DocumentPageRenderer pageRenderer;
   private final TemplateDetectionService templateDetectionService;
   private final OcrDemoService ocrDemoService;
   private final FdhReviewAssembler reviewAssembler;
@@ -50,7 +52,7 @@ public class FdhReviewJobService {
 
   @Autowired
   public FdhReviewJobService(
-      BaiduOcrPageRenderer pageRenderer,
+      DocumentPageRenderer pageRenderer,
       TemplateDetectionService templateDetectionService,
       OcrDemoService ocrDemoService,
       FdhReviewAssembler reviewAssembler,
@@ -68,7 +70,7 @@ public class FdhReviewJobService {
   }
 
   FdhReviewJobService(
-      BaiduOcrPageRenderer pageRenderer,
+      DocumentPageRenderer pageRenderer,
       TemplateDetectionService templateDetectionService,
       OcrDemoService ocrDemoService,
       FdhReviewAssembler reviewAssembler
@@ -85,7 +87,7 @@ public class FdhReviewJobService {
   }
 
   FdhReviewJobService(
-      BaiduOcrPageRenderer pageRenderer,
+      DocumentPageRenderer pageRenderer,
       TemplateDetectionService templateDetectionService,
       OcrDemoService ocrDemoService,
       FdhReviewAssembler reviewAssembler,
@@ -756,6 +758,7 @@ public class FdhReviewJobService {
     private String error = "";
     private FdhReviewResult result;
     private Future<?> future;
+    private final Map<String, Integer> fileProgressPercent = new LinkedHashMap<>();
 
     private JobState(String jobId, String applicationTypeId, int totalFiles) {
       this.jobId = jobId;
@@ -803,7 +806,8 @@ public class FdhReviewJobService {
       }
       status = "running";
       activeFilename = filename == null ? "" : filename;
-      advanceProgressTo(progressFor(processedFiles, totalFiles, 10));
+      fileProgressPercent.putIfAbsent(activeFilename, 0);
+      advanceProgressTo(Math.max(10, aggregateFileProgress()));
       message = stage + "：" + activeFilename;
     }
 
@@ -814,7 +818,8 @@ public class FdhReviewJobService {
       status = "running";
       processedFiles = Math.max(processedFiles, processed);
       activeFilename = filename == null ? "" : filename;
-      advanceProgressTo(progressFor(processedFiles, totalFiles, 0));
+      fileProgressPercent.put(activeFilename, 100);
+      advanceProgressTo(aggregateFileProgress());
       message = "已完成 " + processedFiles + " / " + totalFiles + " 份材料识别。";
     }
 
@@ -825,7 +830,8 @@ public class FdhReviewJobService {
       status = "running";
       processedFiles = Math.min(totalFiles, processedFiles + 1);
       activeFilename = filename == null ? "" : filename;
-      advanceProgressTo(progressFor(processedFiles, totalFiles, 0));
+      fileProgressPercent.put(activeFilename, 100);
+      advanceProgressTo(aggregateFileProgress());
       message = "已完成 " + processedFiles + " / " + totalFiles + " 份材料识别。";
     }
 
@@ -924,7 +930,11 @@ public class FdhReviewJobService {
       }
       status = "running";
       activeFilename = filename == null ? "" : filename;
-      advanceProgressTo(progressForPage(processedFiles, totalFiles, page, pageCount));
+      int safePageCount = Math.max(1, pageCount);
+      int safePage = Math.max(1, Math.min(safePageCount, page));
+      int pageProgress = (int) Math.floor(safePage * 100.0 / safePageCount);
+      fileProgressPercent.merge(activeFilename, pageProgress, Math::max);
+      advanceProgressTo(aggregateFileProgress());
       message = stage + "：" + activeFilename;
     }
 
@@ -934,7 +944,8 @@ public class FdhReviewJobService {
       }
       status = "running";
       activeFilename = filename == null ? "" : filename;
-      advanceProgressTo(progressForPostProcessing(processedFiles, totalFiles, stepProgress));
+      fileProgressPercent.merge(activeFilename, Math.max(0, Math.min(100, stepProgress)), Math::max);
+      advanceProgressTo(aggregateFileProgress());
       message = stage + "：" + activeFilename;
     }
 
@@ -968,6 +979,14 @@ public class FdhReviewJobService {
 
     private void advanceProgressTo(int candidate) {
       progress = Math.max(progress, Math.max(0, Math.min(100, candidate)));
+    }
+
+    private int aggregateFileProgress() {
+      if (totalFiles <= 0) {
+        return 0;
+      }
+      int combinedPercent = fileProgressPercent.values().stream().mapToInt(Integer::intValue).sum();
+      return Math.max(0, Math.min(90, (int) Math.floor(combinedPercent * 90.0 / (totalFiles * 100.0))));
     }
 
     private int progressFor(int processed, int total, int activeOffset) {

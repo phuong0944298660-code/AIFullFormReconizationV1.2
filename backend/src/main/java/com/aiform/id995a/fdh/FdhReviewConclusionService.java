@@ -147,7 +147,10 @@ public class FdhReviewConclusionService {
 
     HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
     LlmRawExchangeRecorder.record(
+        "primary-llm",
         "review-conclusion",
+        "Generate review conclusion and field adjudication suggestions",
+        properties.model(),
         request.uri(),
         requestBody,
         response.statusCode(),

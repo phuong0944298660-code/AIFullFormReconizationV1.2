@@ -10,7 +10,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.aiform.id995a.llm.ExtractionProgressListener;
-import com.aiform.id995a.ocr.BaiduOcrPageRenderer;
+import com.aiform.id995a.ocr.DocumentPageRenderer;
 import com.aiform.id995a.ocr.DocumentTemplate;
 import com.aiform.id995a.ocr.OcrDemoResponse;
 import com.aiform.id995a.ocr.OcrDemoService;
@@ -48,7 +48,7 @@ class FdhReviewJobServiceTest {
   @Test
   void asyncJobWorkersUseTheApplicationClassLoader() throws Exception {
     FdhReviewJobService service = new FdhReviewJobService(
-        mock(BaiduOcrPageRenderer.class),
+        mock(DocumentPageRenderer.class),
         mock(TemplateDetectionService.class),
         mock(OcrDemoService.class),
         new FdhReviewAssembler(5100, 1236, Clock.systemUTC())
@@ -71,7 +71,7 @@ class FdhReviewJobServiceTest {
 
   @Test
   void asyncJobRunsMaterialClassificationLlmExtractionAndRules() throws Exception {
-    BaiduOcrPageRenderer renderer = mock(BaiduOcrPageRenderer.class);
+    DocumentPageRenderer renderer = mock(DocumentPageRenderer.class);
     TemplateDetectionService templateDetectionService = mock(TemplateDetectionService.class);
     OcrDemoService ocrDemoService = mock(OcrDemoService.class);
     FdhReviewAssembler assembler = new FdhReviewAssembler(
@@ -133,7 +133,7 @@ class FdhReviewJobServiceTest {
 
   @Test
   void completedJobIsReleasedAfterItsTerminalResultIsRead() throws Exception {
-    BaiduOcrPageRenderer renderer = mock(BaiduOcrPageRenderer.class);
+    DocumentPageRenderer renderer = mock(DocumentPageRenderer.class);
     TemplateDetectionService templateDetectionService = mock(TemplateDetectionService.class);
     OcrDemoService ocrDemoService = mock(OcrDemoService.class);
     FdhReviewJobService service = new FdhReviewJobService(
@@ -174,7 +174,7 @@ class FdhReviewJobServiceTest {
   @Test
   void statusFailsAJobWhoseWorkerFinishedBeforeReachingATerminalState() throws Exception {
     FdhReviewJobService service = new FdhReviewJobService(
-        mock(BaiduOcrPageRenderer.class),
+        mock(DocumentPageRenderer.class),
         mock(TemplateDetectionService.class),
         mock(OcrDemoService.class),
         new FdhReviewAssembler(5100, 1236, Clock.systemUTC())
@@ -209,7 +209,7 @@ class FdhReviewJobServiceTest {
 
   @Test
   void reportsPageLevelProgressWhileCurrentFileIsStillRunning() throws Exception {
-    BaiduOcrPageRenderer renderer = mock(BaiduOcrPageRenderer.class);
+    DocumentPageRenderer renderer = mock(DocumentPageRenderer.class);
     TemplateDetectionService templateDetectionService = mock(TemplateDetectionService.class);
     OcrDemoService ocrDemoService = mock(OcrDemoService.class);
     FdhReviewJobService service = new FdhReviewJobService(
@@ -280,8 +280,36 @@ class FdhReviewJobServiceTest {
   }
 
   @Test
+  void parallelFileProgressAdvancesAfterSinglePageFileReachesHalfwayPoint() throws Exception {
+    Class<?> stateType = Class.forName("com.aiform.id995a.fdh.FdhReviewJobService$JobState");
+    Constructor<?> constructor = stateType.getDeclaredConstructor(String.class, String.class, int.class);
+    constructor.setAccessible(true);
+    Object state = constructor.newInstance("job-1", "iang_recent_in_hk", 2);
+
+    Method markPageProgress = stateType.getDeclaredMethod(
+        "markPageProgress",
+        String.class,
+        int.class,
+        int.class,
+        String.class
+    );
+    Method snapshot = stateType.getDeclaredMethod("snapshot");
+    markPageProgress.setAccessible(true);
+    snapshot.setAccessible(true);
+
+    markPageProgress.invoke(state, "graduation-proof.pdf", 1, 1, "Completed page 1");
+    int halfwayProgress = ((FdhReviewJobStatusResponse) snapshot.invoke(state)).progress();
+
+    markPageProgress.invoke(state, "ID990A.pdf", 2, 5, "Completed page 2");
+    int combinedProgress = ((FdhReviewJobStatusResponse) snapshot.invoke(state)).progress();
+
+    assertThat(halfwayProgress).isEqualTo(45);
+    assertThat(combinedProgress).isGreaterThan(halfwayProgress);
+  }
+
+  @Test
   void iangRecentGraduateJobAssemblesStudentMaterialsAndLimitsId990aByOfficialPageNumbers() throws Exception {
-    BaiduOcrPageRenderer renderer = mock(BaiduOcrPageRenderer.class);
+    DocumentPageRenderer renderer = mock(DocumentPageRenderer.class);
     TemplateDetectionService templateDetectionService = mock(TemplateDetectionService.class);
     OcrDemoService ocrDemoService = mock(OcrDemoService.class);
     FdhOfficialPageNumberDetector officialPageNumberDetector = mock(FdhOfficialPageNumberDetector.class);
@@ -488,7 +516,7 @@ class FdhReviewJobServiceTest {
 
   @Test
   void iangRecentGraduateJobFailsId990aWhenOfficialPageNumberIsMissing() throws Exception {
-    BaiduOcrPageRenderer renderer = mock(BaiduOcrPageRenderer.class);
+    DocumentPageRenderer renderer = mock(DocumentPageRenderer.class);
     TemplateDetectionService templateDetectionService = mock(TemplateDetectionService.class);
     OcrDemoService ocrDemoService = mock(OcrDemoService.class);
     FdhOfficialPageNumberDetector officialPageNumberDetector = mock(FdhOfficialPageNumberDetector.class);
@@ -534,7 +562,7 @@ class FdhReviewJobServiceTest {
 
   @Test
   void iangRecentGraduateDocumentFieldsUseConciseEducationAndPaymentFieldLists() throws Exception {
-    BaiduOcrPageRenderer renderer = mock(BaiduOcrPageRenderer.class);
+    DocumentPageRenderer renderer = mock(DocumentPageRenderer.class);
     TemplateDetectionService templateDetectionService = mock(TemplateDetectionService.class);
     OcrDemoService ocrDemoService = mock(OcrDemoService.class);
     FdhOfficialPageNumberDetector officialPageNumberDetector = mock(FdhOfficialPageNumberDetector.class);
@@ -583,7 +611,7 @@ class FdhReviewJobServiceTest {
 
   @Test
   void iangRecentGraduateEducationFieldsDoNotUseCertificationParagraphAsUniversityOrProgramme() throws Exception {
-    BaiduOcrPageRenderer renderer = mock(BaiduOcrPageRenderer.class);
+    DocumentPageRenderer renderer = mock(DocumentPageRenderer.class);
     TemplateDetectionService templateDetectionService = mock(TemplateDetectionService.class);
     OcrDemoService ocrDemoService = mock(OcrDemoService.class);
     FdhOfficialPageNumberDetector officialPageNumberDetector = mock(FdhOfficialPageNumberDetector.class);
@@ -629,7 +657,7 @@ class FdhReviewJobServiceTest {
 
   @Test
   void iangRecentGraduateEducationStandardFieldsAcceptCertificateSpecificKeys() throws Exception {
-    BaiduOcrPageRenderer renderer = mock(BaiduOcrPageRenderer.class);
+    DocumentPageRenderer renderer = mock(DocumentPageRenderer.class);
     TemplateDetectionService templateDetectionService = mock(TemplateDetectionService.class);
     OcrDemoService ocrDemoService = mock(OcrDemoService.class);
     FdhOfficialPageNumberDetector officialPageNumberDetector = mock(FdhOfficialPageNumberDetector.class);
@@ -677,7 +705,7 @@ class FdhReviewJobServiceTest {
 
   @Test
   void iangRecentGraduateStandardFieldSourcesDoNotExposeSnapshotsForSpeed() throws Exception {
-    BaiduOcrPageRenderer renderer = mock(BaiduOcrPageRenderer.class);
+    DocumentPageRenderer renderer = mock(DocumentPageRenderer.class);
     TemplateDetectionService templateDetectionService = mock(TemplateDetectionService.class);
     OcrDemoService ocrDemoService = mock(OcrDemoService.class);
     FdhOfficialPageNumberDetector officialPageNumberDetector = mock(FdhOfficialPageNumberDetector.class);
@@ -726,7 +754,7 @@ class FdhReviewJobServiceTest {
 
   @Test
   void iangRecentGraduateDocumentFieldsHideBooleanDeclarationClauses() throws Exception {
-    BaiduOcrPageRenderer renderer = mock(BaiduOcrPageRenderer.class);
+    DocumentPageRenderer renderer = mock(DocumentPageRenderer.class);
     TemplateDetectionService templateDetectionService = mock(TemplateDetectionService.class);
     OcrDemoService ocrDemoService = mock(OcrDemoService.class);
     FdhOfficialPageNumberDetector officialPageNumberDetector = mock(FdhOfficialPageNumberDetector.class);
@@ -785,7 +813,7 @@ class FdhReviewJobServiceTest {
 
   @Test
   void limitsMultipleUploadedMaterialsToTwoParallelExtractions() throws Exception {
-    BaiduOcrPageRenderer renderer = mock(BaiduOcrPageRenderer.class);
+    DocumentPageRenderer renderer = mock(DocumentPageRenderer.class);
     TemplateDetectionService templateDetectionService = mock(TemplateDetectionService.class);
     OcrDemoService ocrDemoService = mock(OcrDemoService.class);
     FdhReviewJobService service = new FdhReviewJobService(
@@ -854,7 +882,7 @@ class FdhReviewJobServiceTest {
 
   @Test
   void skipsNonFillableOfficialPagesForExtractionButKeepsOriginalMaterialPageCount() throws Exception {
-    BaiduOcrPageRenderer renderer = mock(BaiduOcrPageRenderer.class);
+    DocumentPageRenderer renderer = mock(DocumentPageRenderer.class);
     TemplateDetectionService templateDetectionService = mock(TemplateDetectionService.class);
     OcrDemoService ocrDemoService = mock(OcrDemoService.class);
     FdhReviewJobService service = new FdhReviewJobService(
@@ -910,7 +938,7 @@ class FdhReviewJobServiceTest {
 
   @Test
   void usesDetectedOfficialPageNumbersForMissingMiddlePageAndNonFillablePageSkipping() throws Exception {
-    BaiduOcrPageRenderer renderer = mock(BaiduOcrPageRenderer.class);
+    DocumentPageRenderer renderer = mock(DocumentPageRenderer.class);
     TemplateDetectionService templateDetectionService = mock(TemplateDetectionService.class);
     OcrDemoService ocrDemoService = mock(OcrDemoService.class);
     FdhOfficialPageNumberDetector officialPageNumberDetector = mock(FdhOfficialPageNumberDetector.class);
@@ -955,7 +983,7 @@ class FdhReviewJobServiceTest {
               ))
               .toList(),
           List.of(),
-          new EngineStatus("test", false, List.of()),
+          new EngineStatus("test", List.of()),
           objectMapper.readTree("""
               {
                 "page_1": {"employer_particulars": {"employer_name": "CHAN TAI MAN"}},
@@ -985,7 +1013,7 @@ class FdhReviewJobServiceTest {
 
   @Test
   void startsExtractionWithoutSeparateOfficialPageNumberRecognition() throws Exception {
-    BaiduOcrPageRenderer renderer = mock(BaiduOcrPageRenderer.class);
+    DocumentPageRenderer renderer = mock(DocumentPageRenderer.class);
     TemplateDetectionService templateDetectionService = mock(TemplateDetectionService.class);
     OcrDemoService ocrDemoService = mock(OcrDemoService.class);
     FdhOfficialPageNumberDetector officialPageNumberDetector = mock(FdhOfficialPageNumberDetector.class);
@@ -1028,7 +1056,7 @@ class FdhReviewJobServiceTest {
 
   @Test
   void continuesWhenOfficialPageNumberRecognitionConnectionCloses() throws Exception {
-    BaiduOcrPageRenderer renderer = mock(BaiduOcrPageRenderer.class);
+    DocumentPageRenderer renderer = mock(DocumentPageRenderer.class);
     TemplateDetectionService templateDetectionService = mock(TemplateDetectionService.class);
     OcrDemoService ocrDemoService = mock(OcrDemoService.class);
     FdhOfficialPageNumberDetector officialPageNumberDetector = mock(FdhOfficialPageNumberDetector.class);
@@ -1069,7 +1097,7 @@ class FdhReviewJobServiceTest {
 
   @Test
   void reportsUserFacingMessageWhenRequiredExtractionLlmConnectionCloses() throws Exception {
-    BaiduOcrPageRenderer renderer = mock(BaiduOcrPageRenderer.class);
+    DocumentPageRenderer renderer = mock(DocumentPageRenderer.class);
     TemplateDetectionService templateDetectionService = mock(TemplateDetectionService.class);
     OcrDemoService ocrDemoService = mock(OcrDemoService.class);
     FdhReviewJobService service = new FdhReviewJobService(
@@ -1207,7 +1235,7 @@ class FdhReviewJobServiceTest {
             List.of()
         )),
         List.of(),
-        new EngineStatus("test", false, List.of()),
+        new EngineStatus("test", List.of()),
         objectMapper.readTree(json),
         ""
     );
@@ -1354,7 +1382,7 @@ class FdhReviewJobServiceTest {
             ))
             .toList(),
         List.of(),
-        new EngineStatus("test", false, List.of()),
+        new EngineStatus("test", List.of()),
         objectMapper.readTree(json),
         ""
     );
@@ -1453,7 +1481,7 @@ class FdhReviewJobServiceTest {
             pageCount,
             pages,
             List.of(),
-            new EngineStatus("test", false, List.of()),
+            new EngineStatus("test", List.of()),
             objectMapper.readTree(json),
             ""
         ),

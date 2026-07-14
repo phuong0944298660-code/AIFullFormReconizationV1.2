@@ -23,7 +23,7 @@ class OcrJobServiceTest {
 
   @Test
   void cancelInterruptsRunningJobAndReportsCanceledStatus() throws Exception {
-    BaiduOcrPageRenderer renderer = mock(BaiduOcrPageRenderer.class);
+    DocumentPageRenderer renderer = mock(DocumentPageRenderer.class);
     OcrDemoService demoService = mock(OcrDemoService.class);
     TemplateDetectionService templateDetectionService = mock(TemplateDetectionService.class);
     CountDownLatch recognitionStarted = new CountDownLatch(1);
@@ -67,7 +67,7 @@ class OcrJobServiceTest {
 
   @Test
   void reportsPostProcessingProgressBeforeFinalResult() throws Exception {
-    BaiduOcrPageRenderer renderer = mock(BaiduOcrPageRenderer.class);
+    DocumentPageRenderer renderer = mock(DocumentPageRenderer.class);
     OcrDemoService demoService = mock(OcrDemoService.class);
     TemplateDetectionService templateDetectionService = mock(TemplateDetectionService.class);
     CountDownLatch postProcessingStarted = new CountDownLatch(1);
@@ -106,7 +106,7 @@ class OcrJobServiceTest {
               2,
               List.of(),
               List.of(),
-              new EngineStatus("local", false, List.of()),
+              new EngineStatus("local", List.of()),
               objectMapper.createObjectNode(),
               ""
           );

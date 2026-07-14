@@ -19,14 +19,14 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class OcrJobService {
 
-  private final BaiduOcrPageRenderer pageRenderer;
+  private final DocumentPageRenderer pageRenderer;
   private final OcrDemoService ocrDemoService;
   private final TemplateDetectionService templateDetectionService;
   private final ConcurrentMap<String, OcrJobState> jobs = new ConcurrentHashMap<>();
   private final ExecutorService executor = Executors.newCachedThreadPool();
 
   public OcrJobService(
-      BaiduOcrPageRenderer pageRenderer,
+      DocumentPageRenderer pageRenderer,
       OcrDemoService ocrDemoService,
       TemplateDetectionService templateDetectionService
   ) {

@@ -18,7 +18,7 @@ public record FieldJudgeProperties(
     mode = blank(mode) ? "shadow" : mode.trim();
     baseUrl = baseUrl == null ? "" : baseUrl.trim();
     apiKey = apiKey == null ? "" : apiKey.trim();
-    model = blank(model) ? "qwen3.6-flash" : model.trim();
+    model = blank(model) ? "Qwen3.6-Flash" : model.trim();
     timeoutSeconds = Math.max(2, timeoutSeconds);
     passThreshold = Math.max(0, Math.min(100, passThreshold));
     concurrency = Math.max(1, concurrency);

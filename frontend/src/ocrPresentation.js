@@ -60,14 +60,11 @@ export function pageStructuredFieldCount(response, pageNumber) {
 }
 
 export function fieldVerificationScore(field) {
-  if (field && Object.hasOwn(field, 'verificationScore')) {
-    const score = Number(field.verificationScore)
-    return field.verificationScore !== null && Number.isFinite(score)
-      ? Math.max(0, Math.min(100, Math.round(score)))
-      : null
-  }
-  const legacy = Number(field?.confidence)
-  return Number.isFinite(legacy) ? Math.max(0, Math.min(100, Math.round(legacy))) : null
+  if (!field || !Object.hasOwn(field, 'verificationScore')) return null
+  const score = Number(field.verificationScore)
+  return field.verificationScore !== null && Number.isFinite(score)
+    ? Math.max(0, Math.min(100, Math.round(score)))
+    : null
 }
 
 export function averageFieldVerificationScore(sources = []) {

@@ -159,10 +159,9 @@ function Wait-Http([string]$Name, [string]$Url, [int]$Seconds) {
 
 Repair-PathEnvironment
 Import-CmdSetFile (Join-Path $Root "llm.local.cmd")
-Import-CmdSetFile (Join-Path $Root "baidu-ocr.local.cmd")
 
-if (-not $env:LLM_API_KEY -and -not $env:DASHSCOPE_API_KEY) {
-  throw "Set LLM_API_KEY or DASHSCOPE_API_KEY, or create llm.local.cmd."
+if (-not $env:LLM_API_KEY) {
+  throw "Set LLM_API_KEY or create llm.local.cmd."
 }
 
 $shouldStartSidecar = -not $NoSidecar

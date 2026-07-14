@@ -1,5 +1,6 @@
 package com.aiform.id995a.ocr;
 
+import com.aiform.id995a.llm.LlmRawExchangeRecorder;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.ByteArrayOutputStream;
@@ -45,6 +46,19 @@ public class LocalFieldRegionOcrClient implements FieldRegionOcrGateway {
 
     try {
       HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+      LlmRawExchangeRecorder.record(
+          "ppocr-tiny",
+          "page-detect",
+          "Locate field label text and labelBbox on one rendered page",
+          "PP-OCRv6 Tiny",
+          request.uri(),
+          objectMapper.createObjectNode()
+              .put("image_count", 1)
+              .put("image_bytes", pageImageBytes.length)
+              .toString(),
+          response.statusCode(),
+          response.body()
+      );
       if (response.statusCode() < 200 || response.statusCode() >= 300) {
         return List.of();
       }
@@ -107,6 +121,23 @@ public class LocalFieldRegionOcrClient implements FieldRegionOcrGateway {
 
     try {
       HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+      long totalBytes = cropImageBytes.stream()
+          .filter(java.util.Objects::nonNull)
+          .mapToLong(bytes -> bytes.length)
+          .sum();
+      LlmRawExchangeRecorder.record(
+          "ppocr-tiny",
+          "crop-recognize-batch",
+          "Recognize text in " + cropImageBytes.size() + " cropped field value image(s)",
+          "PP-OCRv6 Tiny",
+          request.uri(),
+          objectMapper.createObjectNode()
+              .put("image_count", cropImageBytes.size())
+              .put("total_image_bytes", totalBytes)
+              .toString(),
+          response.statusCode(),
+          response.body()
+      );
       if (response.statusCode() < 200 || response.statusCode() >= 300) {
         return unavailableResults(cropImageBytes, "http_" + response.statusCode());
       }

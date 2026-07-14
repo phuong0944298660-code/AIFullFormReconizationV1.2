@@ -270,7 +270,7 @@ class FdhReviewAssemblerTest {
     // structuredData JSON 里同字段同值：flattenJson 路本会再造一条无截图、小写 label 的副本。
     OcrDemoResponse response = new OcrDemoResponse(
         "ID988A.pdf", "test", 1, List.of(page), List.of(),
-        new EngineStatus("test", false, List.of()),
+        new EngineStatus("test", List.of()),
         objectMapper.readTree("{\"page_1\":{\"place_of_birth\":\"Kampong Cham\"}}"),
         ""
     );
@@ -304,7 +304,7 @@ class FdhReviewAssemblerTest {
     );
     OcrDemoResponse response = new OcrDemoResponse(
         "ID988A.pdf", "test", 1, List.of(page), List.of(),
-        new EngineStatus("test", false, List.of()),
+        new EngineStatus("test", List.of()),
         objectMapper.readTree("{\"page_1\":{\"personal_particulars\":{\"travel_document_no\":\"C8923745\"}}}"),
         ""
     );
@@ -932,7 +932,7 @@ class FdhReviewAssemblerTest {
         1,
         List.of(page),
         List.of(),
-        new EngineStatus("test", false, List.of()),
+        new EngineStatus("test", List.of()),
         objectMapper.readTree("""
             {
               "page_1": {
@@ -967,7 +967,7 @@ class FdhReviewAssemblerTest {
         List.of(highConfidenceMismatch, lowConfidenceExact)
     );
     OcrDemoResponse response = new OcrDemoResponse(
-        "support.pdf", "test", 1, List.of(page), List.of(), new EngineStatus("test", false, List.of()),
+        "support.pdf", "test", 1, List.of(page), List.of(), new EngineStatus("test", List.of()),
         objectMapper.readTree("{\"page_1\":{\"custom_high\":\"HIGH\",\"custom_low\":\"LOW\"}}"), ""
     );
     FdhReviewDocument document = new FdhReviewDocument(
@@ -1074,7 +1074,7 @@ class FdhReviewAssemblerTest {
             List.of()
         )),
         List.of(),
-        new EngineStatus("test", false, List.of()),
+        new EngineStatus("test", List.of()),
         objectMapper.readTree(json),
         ""
     );

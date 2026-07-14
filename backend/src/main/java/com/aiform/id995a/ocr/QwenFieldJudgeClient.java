@@ -1,5 +1,6 @@
 package com.aiform.id995a.ocr;
 
+import com.aiform.id995a.llm.LlmRawExchangeRecorder;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -72,17 +73,15 @@ public class QwenFieldJudgeClient implements FieldJudgeGateway {
     try {
       concurrencyLimit.acquire();
       permitAcquired = true;
+      String requestBody = objectMapper.writeValueAsString(buildPayload(
+          fieldKey, fieldLabel, expectedValue, valueType, snapshotDataUrl
+      ));
       HttpRequest request = HttpRequest.newBuilder()
           .uri(URI.create(trimTrailingSlash(properties.baseUrl()) + "/chat/completions"))
           .timeout(Duration.ofSeconds(properties.timeoutSeconds()))
           .header("Authorization", "Bearer " + properties.apiKey())
           .header("Content-Type", "application/json")
-          .POST(HttpRequest.BodyPublishers.ofString(
-              objectMapper.writeValueAsString(buildPayload(
-                  fieldKey, fieldLabel, expectedValue, valueType, snapshotDataUrl
-              )),
-              StandardCharsets.UTF_8
-          ))
+          .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
           .build();
       for (int attempt = 1; attempt <= 2; attempt += 1) {
         HttpResponse<String> response;
@@ -90,6 +89,16 @@ public class QwenFieldJudgeClient implements FieldJudgeGateway {
           response = httpClient.send(
               request,
               HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8)
+          );
+          LlmRawExchangeRecorder.record(
+              "field-judge",
+              "value-bbox-adjudication",
+              "Read valueBbox crop and compare field " + fieldKey + " (" + fieldLabel + ") with structured value",
+              properties.model(),
+              request.uri(),
+              requestBody,
+              response.statusCode(),
+              response.body()
           );
         } catch (IOException exception) {
           if (attempt == 2) {

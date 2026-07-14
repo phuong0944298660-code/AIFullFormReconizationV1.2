@@ -113,7 +113,6 @@ public class StructuredExtractionClient implements
       ObjectNode combined = objectMapper.createObjectNode();
       combined.put("source_file", filename == null || filename.isBlank() ? "uploaded-document" : filename);
       combined.put("total_pages", pages.size());
-      ObjectNode combinedConfidence = combined.putObject("_confidence");
       ObjectNode combinedEvidence = combined.putObject("_field_evidence");
       ObjectNode combinedPageErrors = combined.putObject("_page_errors");
       StringBuilder rawText = new StringBuilder();
@@ -129,7 +128,6 @@ public class StructuredExtractionClient implements
           hasAnyPageFields = true;
         }
         combined.set(pageKey, pageData);
-        mergeMetadataPage(combinedConfidence, pageExtraction.response().data().path("_confidence"), pageKey);
         mergeMetadataPage(combinedEvidence, pageExtraction.response().data().path("_field_evidence"), pageKey);
         mergeMetadataPage(combinedPageErrors, pageExtraction.response().data().path("_page_errors"), pageKey);
         rawText.append("/* ").append(pageKey).append(" */\n").append(pageExtraction.response().rawText()).append('\n');
@@ -256,7 +254,8 @@ public class StructuredExtractionClient implements
     try {
       ExtractionResponse response = sendExtractionRequest(
           buildRequestPayload(filename, List.of(page), retryAfterEmptyResponse, totalPages, profile),
-          profile
+          profile,
+          "Extract structured fields and valueBbox from document page " + page.page()
       );
       progressListener.pageAttemptCompleted(page.page(), attempt, reason, elapsedMillisSince(startedAt));
       return response;
@@ -299,7 +298,8 @@ public class StructuredExtractionClient implements
     try {
       ExtractionResponse response = sendExtractionRequest(
           buildFieldCropTranscriptionPayload(filename, crops, profile),
-          profile
+          profile,
+          "Transcribe " + crops.size() + " cropped field value image(s)"
       );
       return parseFieldCropTranscriptionResults(response.data(), crops);
     } catch (InterruptedException exception) {
@@ -339,7 +339,8 @@ public class StructuredExtractionClient implements
       try {
         ExtractionResponse response = sendExtractionRequest(
             buildFieldRegionLocationPayload(filename, page, entry.getValue(), profile),
-            profile
+            profile,
+            "Locate missing valueBbox for " + entry.getValue().size() + " field(s) on page " + entry.getKey()
         );
         located.putAll(parseFieldRegionLocations(response.data(), entry.getKey(), entry.getValue()));
       } catch (InterruptedException exception) {
@@ -465,7 +466,8 @@ public class StructuredExtractionClient implements
     try {
       ExtractionResponse response = sendExtractionRequest(
           buildOfficialPageNumberPayload(filename, template, pages, profile),
-          profile
+          profile,
+          "Recognize official form page numbers for " + pages.size() + " page(s)"
       );
       return parseOfficialPageNumberResults(response.data());
     } catch (InterruptedException exception) {
@@ -491,7 +493,8 @@ public class StructuredExtractionClient implements
     try {
       ExtractionResponse response = sendExtractionRequest(
           buildApplicationTypeSelectionPayload(filename, page, template, profile),
-          profile
+          profile,
+          "Recognize selected application type on page " + page.page()
       );
       return parseApplicationTypeSelectionResults(response.data());
     } catch (InterruptedException exception) {
@@ -547,7 +550,7 @@ public class StructuredExtractionClient implements
     builder.append("Locate the whole Application Type table yourself. Do not rely on upload order, OCR text, fixed coordinates, or previous extracted JSON.\n");
     builder.append("For each of the four printed checkboxes in section 1, decide whether the checkbox is intentionally selected. Count a clear tick, check, cross, or deliberate mark inside/across the box as selected. Treat smudges, erasures, accidental ink, or unrelated strokes as not selected.\n");
     builder.append("Return every option, including unselected options. Do not infer the selected option from the homepage or from other fields.\n");
-    builder.append("Return JSON only in this schema: {\"options\":[{\"key\":\"entry_to_hong_kong_to_take_up_employment_as_a_domestic_helper_from_abroad\",\"value\":\"entry visa\",\"selected\":true,\"confidence\":0-100,\"evidence\":\"short visual evidence\"}]}.\n");
+    builder.append("Return JSON only in this schema: {\"options\":[{\"key\":\"entry_to_hong_kong_to_take_up_employment_as_a_domestic_helper_from_abroad\",\"value\":\"entry visa\",\"selected\":true,\"evidence\":\"short visual evidence\"}]}. Do not output a confidence score.\n");
     builder.append("Allowed options, in printed order:\n");
     builder.append("1. key=entry_to_hong_kong_to_take_up_employment_as_a_domestic_helper_from_abroad, value=entry visa, label=Entry to Hong Kong to take up employment as a domestic helper from abroad / 入境签证\n");
     builder.append("2. key=contract_renewal_entry_visa, value=entry visa, label=Contract renewal with the same employer or change of employer / 入境签证\n");
@@ -573,11 +576,14 @@ public class StructuredExtractionClient implements
     }
     List<ApplicationTypeSelectionRecognitionResult> values = new ArrayList<>();
     for (JsonNode item : results) {
+      JsonNode selectedNode = firstExisting(item, "selected", "checked", "is_selected", "isSelected");
       values.add(new ApplicationTypeSelectionRecognitionResult(
           firstExistingText(item, "key", "option_key", "optionKey", "field_key", "fieldKey"),
           firstExistingText(item, "value", "selected_value", "selectedValue"),
-          booleanValue(firstExisting(item, "selected", "checked", "is_selected", "isSelected")),
-          normalizeConfidence(item.path("confidence").asDouble(0)),
+          booleanValue(selectedNode),
+          item.has("confidence")
+              ? normalizeConfidence(item.path("confidence").asDouble(0))
+              : selectedNode.isMissingNode() ? 0 : 100,
           firstExistingText(item, "evidence", "reason", "visual_evidence")
       ));
     }
@@ -682,8 +688,8 @@ public class StructuredExtractionClient implements
     builder.append("Use visual reasoning over the whole page image. Locate the official form footer yourself; do not rely on upload order, provided page index, template coordinates, OCR text, or a fixed crop.\n");
     builder.append("For Hong Kong Immigration FDH forms, the footer normally contains a form id such as ID 988A, ID 988B, or ID 407, a version such as 06/2024 or 11/2016, and a printed page number near the footer area. The page number may appear at the bottom center, near the form footer, or near footer marks.\n");
     builder.append("Return only the printed official footer page number, not the uploaded page index, not a handwritten date, not a section number, not a barcode number, and not a page count inferred from sequence.\n");
-    builder.append("If the page number is not visible or ambiguous, set page_no to null and confidence below 60.\n");
-    builder.append("Return JSON only in this schema: {\"pages\":[{\"uploaded_page\":1,\"form_id\":\"ID 988B\",\"version\":\"06/2024\",\"page_no\":3,\"confidence\":0-100,\"evidence\":\"short visual evidence\"}]}.\n");
+    builder.append("If the page number is not visible or ambiguous, set page_no to null.\n");
+    builder.append("Return JSON only in this schema: {\"pages\":[{\"uploaded_page\":1,\"form_id\":\"ID 988B\",\"version\":\"06/2024\",\"page_no\":3,\"evidence\":\"short visual evidence\"}]}. Do not output a confidence score.\n");
     builder.append("The images are provided in this exact order; uploaded_page must be copied from the listed uploaded_page value.\n");
     builder.append("source_file: ").append(filename == null || filename.isBlank() ? "uploaded-document" : filename).append('\n');
     builder.append("expected_template_id: ").append(templateId).append('\n');
@@ -714,7 +720,9 @@ public class StructuredExtractionClient implements
           firstExistingText(item, "form_id", "formId", "document_id", "documentId"),
           firstExistingText(item, "version", "revision", "form_version", "formVersion"),
           pageNo,
-          normalizeConfidence(item.path("confidence").asDouble(0)),
+          item.has("confidence")
+              ? normalizeConfidence(item.path("confidence").asDouble(0))
+              : pageNo > 0 ? 100 : 0,
           firstExistingText(item, "evidence", "reason", "visual_evidence")
       ));
     }
@@ -816,8 +824,8 @@ public class StructuredExtractionClient implements
     builder.append("Preserve address number prefixes such as No, NO, no, N0 exactly as visible before digits. A visible NO88 must remain NO88; do not convert it to 168, 188, 88號, or any plausible street number.\n");
     builder.append("For address crops, read every visible applicant-filled address line inside the same field box from top to bottom; do not stop after the first line. Preserve lower lines with estate/building/floor/room text exactly when visible.\n");
     builder.append("For No/NO/no/N0 followed by digits in an address, copy every visible digit after No, including narrow trailing digits such as 3.\n");
-    builder.append("If characters are ambiguous, keep the visible ambiguous characters and lower confidence instead of replacing them with a likely value.\n");
-    builder.append("Return JSON only in this schema: {\"results\":[{\"page\":1,\"path\":\"field_path\",\"text\":\"exact visible value after excluding rejected marks\",\"address_number_fragment\":\"NO88 or blank\",\"excluded_marks\":[{\"text\":\"rejected mark\",\"reason\":\"smudged|crossed_out|erased|correction\"}],\"confidence\":0-100,\"status\":\"ok|unclear|blank\"}]}.\n");
+    builder.append("If characters are ambiguous, keep the visible ambiguous characters and set status to unclear instead of replacing them with a likely value.\n");
+    builder.append("Return JSON only in this schema: {\"results\":[{\"page\":1,\"path\":\"field_path\",\"text\":\"exact visible value after excluding rejected marks\",\"address_number_fragment\":\"NO88 or blank\",\"excluded_marks\":[{\"text\":\"rejected mark\",\"reason\":\"smudged|crossed_out|erased|correction\"}],\"status\":\"ok|unclear|blank\"}]}. Do not output a confidence score.\n");
     builder.append("source_file: ").append(filename == null || filename.isBlank() ? "uploaded-document" : filename).append('\n');
     builder.append("Crops are provided in this exact order:\n");
     for (int index = 0; index < crops.size(); index += 1) {
@@ -844,20 +852,32 @@ public class StructuredExtractionClient implements
     for (int index = 0; index < Math.min(results.size(), requests.size()); index += 1) {
       JsonNode item = results.get(index);
       FieldCropTranscriptionRequest request = requests.get(index);
+      String status = item.path("status").asText("ok");
+      double internalQuality = item.has("confidence")
+          ? normalizeConfidence(item.path("confidence").asDouble(0))
+          : switch (status.toLowerCase(Locale.ROOT)) {
+            case "ok", "blank" -> 100;
+            case "unclear" -> 50;
+            default -> 0;
+          };
       values.add(new FieldCropTranscriptionResult(
           item.path("page").asInt(request.page()),
           item.path("path").asText(request.path()),
           firstExistingText(item, "text", "transcription", "value"),
           firstExistingText(item, "address_number_fragment", "number_fragment", "fragment"),
-          normalizeConfidence(item.path("confidence").asDouble(0)),
-          item.path("status").asText("ok"),
+          internalQuality,
+          status,
           item.path("excluded_marks")
       ));
     }
     return List.copyOf(values);
   }
 
-  private ExtractionResponse sendExtractionRequest(JsonNode payload, LlmModelProfile profile) throws IOException, InterruptedException {
+  private ExtractionResponse sendExtractionRequest(
+      JsonNode payload,
+      LlmModelProfile profile,
+      String purpose
+  ) throws IOException, InterruptedException {
     String requestBody = objectMapper.writeValueAsString(payload);
     HttpRequest request = HttpRequest.newBuilder()
         .uri(URI.create(trimTrailingSlash(profile.baseUrl()) + "/chat/completions"))
@@ -870,7 +890,10 @@ public class StructuredExtractionClient implements
 
     HttpResponse<String> response = sendWithTransientTransportRetry(request);
     LlmRawExchangeRecorder.record(
+        "primary-llm",
         "structured-extraction",
+        purpose,
+        profile.model(),
         request.uri(),
         requestBody,
         response.statusCode(),
@@ -961,7 +984,7 @@ public class StructuredExtractionClient implements
     builder.append("Analyze these full-page form images directly and output one JSON object.\n");
     if (pages.size() == 1) {
       builder.append("The attached image is page_").append(pages.get(0).page()).append(" of ").append(totalPages)
-          .append(". Return only this page's page_").append(pages.get(0).page()).append(" fields, plus source_file, total_pages, _confidence, and _field_evidence.\n");
+          .append(". Return only this page's page_").append(pages.get(0).page()).append(" fields, plus source_file, total_pages, and _field_evidence.\n");
     }
     builder.append("Do not use a predefined field list, manual annotations, template coordinate boxes, ROI crops, or OCR output.\n");
     builder.append("Find printed field labels, filling areas, handwriting, typed values, checked boxes, signatures, and photo/upload areas by visual reasoning.\n");
@@ -972,16 +995,15 @@ public class StructuredExtractionClient implements
     builder.append("Rules:\n");
     builder.append("- Include source_file and total_pages at the top level.\n");
     builder.append("- Group page content under page_1, page_2, etc.\n");
-    builder.append("- Also include a top-level _official_page object keyed by page_N. For each attached page, visually read the official printed form footer and return {form_id, version, official_page_no, confidence, evidence}. If no official footer page number is visible, set official_page_no to null and confidence below 60. Do not infer this from upload order.\n");
-    builder.append("- Keep page field values as plain applicant-filled values or null. Also include a top-level _confidence object mirroring page/field paths with integer confidence scores from 0 to 100.\n");
+    builder.append("- Also include a top-level _official_page object keyed by page_N. For each attached page, visually read the official printed form footer and return {form_id, version, official_page_no, evidence}. If no official footer page number is visible, set official_page_no to null. Do not infer this from upload order, and do not output a confidence score.\n");
+    builder.append("- Keep page field values as plain applicant-filled values or null. Do not output field confidence scores; value verification is handled by a separate judge model.\n");
     builder.append("- Also include a top-level _field_evidence object mirroring page/field paths. MANDATORY: when you recognize any field value under page_N, you MUST recognize and return that field's matching _field_evidence.page_N.<exact_field_path> entry at the same time, with label and value_bbox as normalized {x,y,width,height} coordinates of that filled area on the page image. A non-null field without a value_bbox is incomplete; do not output a field value unless you also output its field bbox.\n");
     builder.append("- In every _field_evidence entry, copy label verbatim from the printed page in its original language and script. Traditional Chinese must remain Traditional Chinese, Simplified Chinese must remain Simplified Chinese, and English must remain English. Never translate, simplify, traditionalize, paraphrase, or replace the printed label with the JSON key or the filled value. JSON field keys may remain stable lower_snake_case English for downstream processing.\n");
     builder.append("- Before returning, self-check: for every non-null field value you output under each page_N, verify a matching _field_evidence.page_N.<exact_field_path>.value_bbox exists; if any is missing, add it before finalizing.\n");
     builder.append("- _field_evidence.page_N must be keyed by exact page_N field paths. Never put label/value_bbox directly under _field_evidence.page_N as one whole-page evidence object.\n");
     builder.append("- Example: {\"page_2\":{\"present_address\":\"Flat 7\"},\"_field_evidence\":{\"page_2\":{\"present_address\":{\"label\":\"Present address\",\"value_bbox\":{\"x\":0.20,\"y\":0.10,\"width\":0.55,\"height\":0.09}}}}}.\n");
-    builder.append("- For filled handwritten, typed, or signature text, include char_confidences only for ambiguous, low-confidence, smudged, crossed-out, erased, or correction characters: [{char,index,confidence,status,reason,bbox}], where bbox is normalized inside the field value_bbox. Do not list every character when the value is clear; field value_bbox is enough.\n");
     builder.append("- Each leaf field value must be the applicant-filled value; if a major visible field is blank, use null.\n");
-    builder.append("- For handwritten or typed applicant-filled values, copy only visible characters exactly as written. Do not correct, complete, normalize, or infer handwritten values from common knowledge, official addresses, names, phone/email patterns, or surrounding context. 禁止纠正、补全、规范化、按常识推断手写值. If a character or digit is unclear, keep the ambiguous visible text as-is with low confidence and char_confidences; do not replace it with a plausible value.\n");
+    builder.append("- For handwritten or typed applicant-filled values, copy only visible characters exactly as written. Do not correct, complete, normalize, or infer handwritten values from common knowledge, official addresses, names, phone/email patterns, or surrounding context. 禁止纠正、补全、规范化、按常识推断手写值. If a character or digit is unclear, keep the ambiguous visible text as-is; do not replace it with a plausible value.\n");
     builder.append("- For email addresses, copy the visible local part and domain literally. Do not normalize or correct unusual domain text: visible mial, hotmial, yahooo, or similar nonstandard sequences must remain exactly as written, not mail, hotmail, gmail, yahoo, or another common provider.\n");
     builder.append("- For employment contract numbers and other serial/reference numbers, transcribe visible uppercase letters and digits exactly. Carefully distinguish F from T by strokes: vertical left stem plus top and middle horizontal strokes means F, not T. Do not assume the prefix from the form type or nearby printed contract text.\n");
     builder.append("- For Hong Kong FDH forms ID 988A and ID 988B, always extract the handwritten employment contract number / D.H. Contract No. from Undertaking paragraphs when visible, even when it is embedded inside Chinese or English paragraph text. Use the key employment_contract_no for this filled value.\n");

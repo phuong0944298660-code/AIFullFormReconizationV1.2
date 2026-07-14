@@ -60,17 +60,19 @@ class StructuredExtractionClientTest {
     assertThat(payload.toString()).contains("Do not use a predefined field list");
     assertThat(payload.toString()).contains("For signatures, transcribe the visible handwritten signature text");
     assertThat(payload.toString()).contains("Do not return present for signatures");
-    assertThat(payload.toString()).contains("top-level _confidence object");
+    assertThat(payload.toString()).doesNotContain("top-level _confidence object");
     assertThat(payload.toString()).contains("top-level _field_evidence object");
     assertThat(payload.toString()).contains("top-level _official_page object");
     assertThat(payload.toString()).contains("official_page_no");
+    assertThat(payload.toString()).doesNotContain("official_page_no, confidence");
     assertThat(payload.toString()).contains("MANDATORY: when you recognize any field value");
     assertThat(payload.toString()).contains("do not output a field value unless you also output its field bbox");
     assertThat(payload.toString()).contains("copy label verbatim from the printed page in its original language and script");
     assertThat(payload.toString()).contains("Traditional Chinese must remain Traditional Chinese");
     assertThat(payload.toString()).contains("JSON field keys may remain stable lower_snake_case English");
     assertThat(payload.toString()).contains("self-check");
-    assertThat(payload.toString()).contains("char_confidences");
+    assertThat(payload.toString()).doesNotContain("char_confidences");
+    assertThat(payload.toString()).doesNotContain("plus source_file, total_pages, _confidence");
     assertThat(payload.toString()).contains("no_applicant_input");
     assertThat(payload.toString()).contains("such as 有/没有");
     assertThat(payload.toString()).contains("{\\\"pillow\\\":\\\"没有\\\"}");
@@ -196,11 +198,12 @@ class StructuredExtractionClientTest {
 
     assertThat(result.model()).isEqualTo("Qwen3.6-35B-A3B");
     assertThat(result.data().at("/page_1/travel_document_no").asText()).isEqualTo("PH88342115");
+    assertThat(result.data().has("_confidence")).isFalse();
     assertThat(result.rawText()).contains("travel_document_no");
   }
 
   @Test
-  void usesSelectedModelProfileForDashScopeCompatibleRequest() throws Exception {
+  void usesSelectedPrimaryModelProfileForCompatibleRequest() throws Exception {
     StubHttpClient httpClient = new StubHttpClient(jsonResponse("{\"page_1\":{\"surname_en\":\"CHAN\"}}"));
     StructuredExtractionClient client = new StructuredExtractionClient(
         new LlmProperties(true, "https://apie.zhisuaninfo.com/v1", "local-key", "Qwen3.6-35B-A3B", 4096, 60, 4),
@@ -208,13 +211,13 @@ class StructuredExtractionClientTest {
         objectMapper
     );
     LlmModelProfile profile = new LlmModelProfile(
-        "dashscope-qwen3.6-35b-a3b",
-        "云原生模型",
-        "qwen3.6-35b-a3b",
-        "DashScope OpenAI-compatible",
-        "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        "dashscope-key",
-        true,
+        "local-qwen3.6-35b-a3b",
+        "本地模型",
+        "Qwen3.6-35B-A3B",
+        "OpenAI-compatible primary gateway",
+        "https://apie.zhisuaninfo.com/v1",
+        "profile-key",
+        false,
         false,
         ""
     );
@@ -231,19 +234,19 @@ class StructuredExtractionClientTest {
         profile
     );
 
-    assertThat(payload.path("model").asText()).isEqualTo("qwen3.6-35b-a3b");
-    assertThat(payload.path("enable_thinking").asBoolean()).isTrue();
-    assertThat(payload.path("chat_template_kwargs").path("enable_thinking").asBoolean()).isTrue();
-    assertThat(result.model()).isEqualTo("qwen3.6-35b-a3b");
+    assertThat(payload.path("model").asText()).isEqualTo("Qwen3.6-35B-A3B");
+    assertThat(payload.path("enable_thinking").asBoolean()).isFalse();
+    assertThat(payload.path("chat_template_kwargs").path("enable_thinking").asBoolean()).isFalse();
+    assertThat(result.model()).isEqualTo("Qwen3.6-35B-A3B");
     assertThat(httpClient.lastRequest().uri().toString())
-        .isEqualTo("https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions");
-    assertThat(httpClient.lastRequest().headers().firstValue("Authorization")).contains("Bearer dashscope-key");
+        .isEqualTo("https://apie.zhisuaninfo.com/v1/chat/completions");
+    assertThat(httpClient.lastRequest().headers().firstValue("Authorization")).contains("Bearer profile-key");
   }
 
   @Test
   void transcribesFieldCropsWithExactAddressNumberInstructions() throws Exception {
     StubHttpClient httpClient = new StubHttpClient(jsonResponse("""
-        {"results":[{"page":1,"path":"correspondence_address","text":"香港中環德輔道中NO88號國金中心二期2802室","address_number_fragment":"NO88","confidence":92,"status":"ok"}]}
+        {"results":[{"page":1,"path":"correspondence_address","text":"香港中環德輔道中NO88號國金中心二期2802室","address_number_fragment":"NO88","status":"ok"}]}
         """));
     StructuredExtractionClient client = new StructuredExtractionClient(
         new LlmProperties(true, "https://apie.zhisuaninfo.com/v1", "test-key", "Qwen3.6-35B-A3B", 4096, 60, 4),
@@ -279,6 +282,7 @@ class StructuredExtractionClientTest {
     assertThat(results).hasSize(1);
     assertThat(results.get(0).text()).isEqualTo("香港中環德輔道中NO88號國金中心二期2802室");
     assertThat(results.get(0).addressNumberFragment()).isEqualTo("NO88");
+    assertThat(results.get(0).confidence()).isEqualTo(100);
     assertThat(payload.path("messages").get(1).path("content").get(1).path("image_url").path("url").asText())
         .isEqualTo("data:image/jpeg;base64,crop123");
     assertThat(requestText).contains("Transcribe only the visible applicant-filled value");
@@ -304,6 +308,8 @@ class StructuredExtractionClientTest {
     assertThat(requestText).contains("Exclude smudged, crossed-out, erased, or correction marks");
     assertThat(requestText).contains("excluded_marks");
     assertThat(requestText).contains("current_first_pass_value");
+    assertThat(requestText).doesNotContain("lower confidence");
+    assertThat(requestText).doesNotContain("\"confidence\":0-100");
   }
 
   @Test
@@ -585,8 +591,8 @@ class StructuredExtractionClientTest {
   void recognizesOfficialFooterPageNumbersWithLowDetailDownscaledFullPageImages() throws Exception {
     StubHttpClient httpClient = new StubHttpClient(jsonResponse("""
         {"pages":[
-          {"uploaded_page":1,"form_id":"ID 988B","version":"06/2024","page_no":1,"confidence":98,"evidence":"footer number 1"},
-          {"uploaded_page":2,"form_id":"ID 988B","version":"06/2024","page_no":3,"confidence":96,"evidence":"footer number 3"}
+          {"uploaded_page":1,"form_id":"ID 988B","version":"06/2024","page_no":1,"evidence":"footer number 1"},
+          {"uploaded_page":2,"form_id":"ID 988B","version":"06/2024","page_no":3,"evidence":"footer number 3"}
         ]}
         """));
     StructuredExtractionClient client = new StructuredExtractionClient(
@@ -619,8 +625,12 @@ class StructuredExtractionClientTest {
     String requestText = payload.toString();
     assertThat(results).extracting(OfficialPageNumberRecognitionResult::officialPageNumber)
         .containsExactly(1, 3);
+    assertThat(results).extracting(OfficialPageNumberRecognitionResult::confidence)
+        .containsExactly(100.0, 100.0);
     assertThat(requestText).contains("Identify the official printed footer page number");
     assertThat(requestText).contains("do not rely on upload order");
+    assertThat(requestText).doesNotContain("confidence below");
+    assertThat(requestText).doesNotContain("\"confidence\":0-100");
     JsonNode firstImage = payload.path("messages").get(1).path("content").get(1).path("image_url");
     JsonNode secondImage = payload.path("messages").get(1).path("content").get(2).path("image_url");
     assertThat(firstImage.path("detail").asText()).isEqualTo("low");
@@ -634,9 +644,9 @@ class StructuredExtractionClientTest {
   void recognizesId988aApplicationTypeSelectionsWithFullPageImage() throws Exception {
     StubHttpClient httpClient = new StubHttpClient(jsonResponse("""
         {"options":[
-          {"option_key":"entry_to_hong_kong_to_take_up_employment_as_a_domestic_helper_from_abroad","value":"entry visa","checked":"yes","confidence":97,"evidence":"first checkbox ticked"},
-          {"option_key":"contract_renewal_entry_visa","value":"entry visa","checked":false,"confidence":93,"evidence":"empty box"},
-          {"option_key":"complete_the_remaining_extended_period_of_the_current_contract","value":"Extension of Stay","checked":true,"confidence":95,"evidence":"last checkbox ticked"}
+          {"option_key":"entry_to_hong_kong_to_take_up_employment_as_a_domestic_helper_from_abroad","value":"entry visa","checked":"yes","evidence":"first checkbox ticked"},
+          {"option_key":"contract_renewal_entry_visa","value":"entry visa","checked":false,"evidence":"empty box"},
+          {"option_key":"complete_the_remaining_extended_period_of_the_current_contract","value":"Extension of Stay","checked":true,"evidence":"last checkbox ticked"}
         ]}
         """));
     StructuredExtractionClient client = new StructuredExtractionClient(
@@ -673,6 +683,9 @@ class StructuredExtractionClientTest {
         );
     assertThat(requestText).contains("Inspect only section 1, Application Type");
     assertThat(requestText).contains("Return every option, including unselected options");
+    assertThat(results).extracting(ApplicationTypeSelectionRecognitionResult::confidence)
+        .containsExactly(100.0, 100.0, 100.0);
+    assertThat(requestText).doesNotContain("\"confidence\":0-100");
     assertThat(payload.path("messages").get(1).path("content").get(1).path("image_url").path("url").asText())
         .isEqualTo("data:image/png;base64,page1");
   }

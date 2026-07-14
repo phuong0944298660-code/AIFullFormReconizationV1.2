@@ -8,6 +8,7 @@ import {
   pageStructuredFieldCount,
   structuredFieldRows,
   sourceEvidenceBbox,
+  fieldVerificationScore,
   averageFieldVerificationScore,
   pageFieldConclusion,
   documentFieldConclusion,
@@ -32,6 +33,13 @@ test('averageFieldVerificationScore keeps zero and ignores unscored sources', ()
   ]), 50)
   assert.equal(averageFieldVerificationScore([{ verificationScore: 0 }]), 0)
   assert.equal(averageFieldVerificationScore([{ verificationScore: null }]), null)
+})
+
+test('field score never falls back to the primary LLM confidence', () => {
+  assert.equal(fieldVerificationScore({ confidence: 82 }), null)
+  assert.equal(fieldVerificationScore({ recognitionConfidence: 97, confidence: 82 }), null)
+  assert.equal(fieldVerificationScore({ verificationScore: 90, confidence: 82 }), 90)
+  assert.equal(averageFieldVerificationScore([{ confidence: 82 }]), null)
 })
 
 test('visibleOcrLines removes locator tokens and replacement noise', () => {
@@ -528,10 +536,10 @@ test('crop placeholder is generic when LLM evidence has no snapshot', () => {
 
 test('pageFieldConclusion summarizes confidence distribution for the active page', () => {
   const conclusion = pageFieldConclusion([
-    { confidence: 92 },
-    { confidence: 86 },
-    { confidence: 78 },
-    { confidence: 61 }
+    { verificationScore: 92 },
+    { verificationScore: 86 },
+    { verificationScore: 78 },
+    { verificationScore: 61 }
   ])
 
   assert.equal(
@@ -546,15 +554,15 @@ test('documentFieldConclusion summarizes confidence distribution across all page
       {
         page: 1,
         structuredFields: [
-          { value: 'A', confidence: 95 },
-          { value: 'B', confidence: 88 }
+          { value: 'A', verificationScore: 95 },
+          { value: 'B', verificationScore: 88 }
         ]
       },
       {
         page: 2,
         structuredFields: [
-          { value: 'C', confidence: 84 },
-          { value: 'D', confidence: 63 }
+          { value: 'C', verificationScore: 84 },
+          { value: 'D', verificationScore: 63 }
         ]
       }
     ]

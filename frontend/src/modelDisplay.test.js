@@ -7,38 +7,33 @@ import {
 } from './modelDisplay.js'
 
 test('modelDisplayLabel maps configured model ids to concise display names', () => {
-  assert.equal(modelDisplayLabel({ id: 'local-qwen3.6-35b-a3b', label: 'Qwen3.6-35B-A3B 视觉结构化' }), '本地模型')
-  assert.equal(modelDisplayLabel({ id: 'dashscope-qwen3.6-35b-a3b', label: 'Qwen3.6-35B-A3B（官方原生）' }), '云原生模型')
+  assert.equal(modelDisplayLabel({ id: 'local-qwen3.6-35b-a3b', label: 'Qwen3.6-35B-A3B 视觉结构化' }), '主模型')
 })
 
 test('normalizeModelOptions replaces legacy backend labels before rendering', () => {
   assert.deepEqual(
     normalizeModelOptions([
-      { id: 'local-qwen3.6-35b-a3b', label: 'Qwen3.6-35B-A3B 视觉结构化' },
-      { id: 'dashscope-qwen3.6-35b-a3b', label: 'Qwen3.6-35B-A3B（官方原生）' }
+      { id: 'local-qwen3.6-35b-a3b', label: 'Qwen3.6-35B-A3B 视觉结构化' }
     ]).map((model) => model.label),
-    ['本地模型', '云原生模型']
+    ['主模型']
   )
 })
 
-test('normalizeModelOptions hides qwen3.6-plus from frontend selectors', () => {
+test('normalizeModelOptions keeps only the primary extraction model', () => {
   assert.deepEqual(
     normalizeModelOptions([
       { id: 'local-qwen3.6-35b-a3b', label: 'Local model' },
       { id: 'qwen3.6-plus', label: 'qwen3.6-plus' },
-      { id: 'dashscope-qwen3.6-35b-a3b', label: 'Cloud native model' }
+      { id: 'dashscope-qwen3.6-35b-a3b', label: 'Cloud native model' },
+      { id: 'parallel-qwen3.5-397b-a17b', label: 'Parallel model' }
     ]).map((model) => model.id),
-    ['local-qwen3.6-35b-a3b', 'dashscope-qwen3.6-35b-a3b']
+    ['local-qwen3.6-35b-a3b']
   )
 })
 
 test('extractionModeDisplayLabel maps legacy result status text', () => {
   assert.equal(
     extractionModeDisplayLabel({ engineStatus: { extractionMode: 'Qwen3.6-35B-A3B multimodal structured extraction' } }),
-    '本地模型'
-  )
-  assert.equal(
-    extractionModeDisplayLabel({ engineStatus: { extractionMode: 'qwen3.6-35b-a3b multimodal structured extraction' } }),
-    '云原生模型'
+    '主模型'
   )
 })

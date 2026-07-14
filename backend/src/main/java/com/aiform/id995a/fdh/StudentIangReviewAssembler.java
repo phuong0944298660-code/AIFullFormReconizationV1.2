@@ -3,7 +3,6 @@ package com.aiform.id995a.fdh;
 import com.aiform.id995a.ocr.DocumentTemplate;
 import com.aiform.id995a.ocr.OcrDemoResponse;
 import com.aiform.id995a.ocr.OcrPage;
-import com.aiform.id995a.ocr.ParallelRecognitionOutput;
 import com.aiform.id995a.ocr.StructuredFieldDetail;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Clock;
@@ -756,10 +755,7 @@ public class StudentIangReviewAssembler {
         detail == null ? List.of() : detail.evidenceBbox(),
         detail == null ? "not_run" : detail.locationStatus(),
         detail == null ? "" : detail.suggestedValue(),
-        detail == null ? "" : detail.issue(),
-        detail == null ? "" : detail.modelAgreement(),
-        detail == null ? "" : detail.conflictType(),
-        detail == null ? List.of() : detail.modelOutputs()
+        detail == null ? "" : detail.issue()
     ));
   }
 
@@ -983,10 +979,7 @@ public class StudentIangReviewAssembler {
         value.imageHeight(),
         value.bbox(),
         value.suggestedValue(),
-        value.issue(),
-        value.modelAgreement(),
-        value.conflictType(),
-        value.modelOutputs()
+        value.issue()
     ));
   }
 
@@ -1047,17 +1040,11 @@ public class StudentIangReviewAssembler {
         value.evidenceBbox(),
         value.locationStatus(),
         value.suggestedValue(),
-        value.issue(),
-        value.modelAgreement(),
-        value.conflictType(),
-        value.modelOutputs()
+        value.issue()
     );
   }
 
   private String documentFieldStatus(String materialId, ExtractedValue value) {
-    if ("disagree".equals(value.modelAgreement())) {
-      return "review";
-    }
     if ("paymentStatus".equals(materialId) && isIncompletePayment(value.value())) {
       return "fail";
     }
@@ -1372,10 +1359,7 @@ public class StudentIangReviewAssembler {
       List<Integer> evidenceBbox,
       String locationStatus,
       String suggestedValue,
-      String issue,
-      String modelAgreement,
-      String conflictType,
-      List<ParallelRecognitionOutput> modelOutputs
+      String issue
   ) {
     private ExtractedValue(
         FdhReviewDocument document,
@@ -1387,7 +1371,7 @@ public class StudentIangReviewAssembler {
         String snapshotDataUrl
     ) {
       this(document, path, label, value, page, confidence, snapshotDataUrl, 0, 0, List.of(),
-          null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run", "", "", "", "", List.of());
+          null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run", "", "");
     }
 
     private ExtractedValue(
@@ -1403,7 +1387,7 @@ public class StudentIangReviewAssembler {
         List<Integer> bbox
     ) {
       this(document, path, label, value, page, confidence, snapshotDataUrl, imageWidth, imageHeight, bbox,
-          null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run", "", "", "", "", List.of());
+          null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run", "", "");
     }
 
     private ExtractedValue(
@@ -1428,7 +1412,7 @@ public class StudentIangReviewAssembler {
     ) {
       this(document, path, label, value, page, confidence, snapshotDataUrl, imageWidth, imageHeight, bbox,
           verificationScore, verificationStatus, judgeObservedValue, verificationReason,
-          labelBbox, valueBbox, evidenceBbox, locationStatus, "", "", "", "", List.of());
+          labelBbox, valueBbox, evidenceBbox, locationStatus, "", "");
     }
 
     private ExtractedValue(
@@ -1443,22 +1427,16 @@ public class StudentIangReviewAssembler {
         int imageHeight,
         List<Integer> bbox,
         String suggestedValue,
-        String issue,
-        String modelAgreement,
-        String conflictType,
-        List<ParallelRecognitionOutput> modelOutputs
+        String issue
     ) {
       this(document, path, label, value, page, confidence, snapshotDataUrl, imageWidth, imageHeight, bbox,
           null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run",
-          suggestedValue, issue, modelAgreement, conflictType, modelOutputs);
+          suggestedValue, issue);
     }
 
     private ExtractedValue {
       suggestedValue = suggestedValue == null ? "" : suggestedValue;
       issue = issue == null ? "" : issue;
-      modelAgreement = modelAgreement == null ? "" : modelAgreement;
-      conflictType = conflictType == null ? "" : conflictType;
-      modelOutputs = modelOutputs == null ? List.of() : List.copyOf(modelOutputs);
     }
   }
 }

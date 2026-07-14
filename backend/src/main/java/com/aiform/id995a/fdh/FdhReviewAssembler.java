@@ -3,7 +3,6 @@ package com.aiform.id995a.fdh;
 import com.aiform.id995a.ocr.DocumentTemplate;
 import com.aiform.id995a.ocr.OcrDemoResponse;
 import com.aiform.id995a.ocr.OcrPage;
-import com.aiform.id995a.ocr.ParallelRecognitionOutput;
 import com.aiform.id995a.ocr.StructuredFieldDetail;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Clock;
@@ -203,9 +202,6 @@ public class FdhReviewAssembler {
   }
 
   private String documentFieldStatus(ExtractedValue value, boolean multipleApplicationTypeRows) {
-    if ("disagree".equals(value.modelAgreement())) {
-      return "review";
-    }
     if (value.value().isBlank()) {
       return "review";
     }
@@ -1914,12 +1910,7 @@ public class FdhReviewAssembler {
       List<Integer> labelBbox,
       List<Integer> valueBbox,
       List<Integer> evidenceBbox,
-      String locationStatus,
-      String suggestedValue,
-      String issue,
-      String modelAgreement,
-      String conflictType,
-      List<ParallelRecognitionOutput> modelOutputs
+      String locationStatus
   ) {
     private ExtractedValue(
         String path,
@@ -1930,7 +1921,7 @@ public class FdhReviewAssembler {
         String snapshotDataUrl
     ) {
       this(path, fieldName, section, value, confidence, snapshotDataUrl, 0, 0, 0, List.of(),
-          null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run", "", "", "", "", List.of());
+          null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run");
     }
 
     private ExtractedValue(
@@ -1946,32 +1937,7 @@ public class FdhReviewAssembler {
         List<Integer> bbox
     ) {
       this(path, fieldName, section, value, confidence, snapshotDataUrl, pageNo, imageWidth, imageHeight, bbox,
-          null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run", "", "", "", "", List.of());
-    }
-
-    private ExtractedValue(
-        String path,
-        String fieldName,
-        String section,
-        String value,
-        double confidence,
-        String snapshotDataUrl,
-        int pageNo,
-        int imageWidth,
-        int imageHeight,
-        List<Integer> bbox,
-        Integer verificationScore,
-        String verificationStatus,
-        String judgeObservedValue,
-        String verificationReason,
-        List<Integer> labelBbox,
-        List<Integer> valueBbox,
-        List<Integer> evidenceBbox,
-        String locationStatus
-    ) {
-      this(path, fieldName, section, value, confidence, snapshotDataUrl, pageNo, imageWidth, imageHeight, bbox,
-          verificationScore, verificationStatus, judgeObservedValue, verificationReason,
-          labelBbox, valueBbox, evidenceBbox, locationStatus, "", "", "", "", List.of());
+          null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run");
     }
 
     private String searchText() {

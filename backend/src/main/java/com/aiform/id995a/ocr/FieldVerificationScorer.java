@@ -52,7 +52,7 @@ public class FieldVerificationScorer {
     }
     return new FieldVerification(
         resultScore,
-        resultScore >= passThreshold ? "pass" : "review",
+        resultScore > passThreshold ? "pass" : "review",
         observation.matchType(),
         observation.reason()
     );

@@ -20,7 +20,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
-public class BaiduOcrPageRenderer {
+public class DocumentPageRenderer {
 
   public static final float DEFAULT_RENDER_DPI = 240f;
 
@@ -28,15 +28,15 @@ public class BaiduOcrPageRenderer {
   private final int maxImageLongSide;
 
   @Autowired
-  public BaiduOcrPageRenderer(
-      @Value("${ocr.baidu.pdf-dpi:240}") float renderDpi,
-      @Value("${ocr.baidu.max-image-long-side:0}") int maxImageLongSide
+  public DocumentPageRenderer(
+      @Value("${document-renderer.pdf-dpi:240}") float renderDpi,
+      @Value("${document-renderer.max-image-long-side:0}") int maxImageLongSide
   ) {
     this.renderDpi = Math.max(120f, renderDpi);
     this.maxImageLongSide = maxImageLongSide <= 0 ? 0 : Math.max(900, maxImageLongSide);
   }
 
-  public BaiduOcrPageRenderer(float renderDpi) {
+  public DocumentPageRenderer(float renderDpi) {
     this(renderDpi, 0);
   }
 

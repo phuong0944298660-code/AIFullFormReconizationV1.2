@@ -1,5 +1,7 @@
 package com.aiform.id995a.llm;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -12,6 +14,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public final class LlmRawExchangeRecorder {
   private static final AtomicInteger SEQUENCE = new AtomicInteger();
+  private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
   private LlmRawExchangeRecorder() {
   }
@@ -27,32 +30,101 @@ public final class LlmRawExchangeRecorder {
       int statusCode,
       String responseBody
   ) {
+    record("primary-llm", caller, caller, "", uri, requestBody, statusCode, responseBody);
+  }
+
+  public static void record(
+      String modelType,
+      String caller,
+      String purpose,
+      String model,
+      URI uri,
+      String requestBody,
+      int statusCode,
+      String responseBody
+  ) {
     if (!enabled()) {
       return;
     }
     try {
-      Path root = outputRoot();
-      Files.createDirectories(root);
-      int sequence = SEQUENCE.incrementAndGet();
-      String safeCaller = sanitize(caller);
-      String prefix = "%03d-%s".formatted(sequence, safeCaller);
-      Files.writeString(root.resolve(prefix + "-request.json"), value(requestBody), StandardCharsets.UTF_8);
-      Files.writeString(root.resolve(prefix + "-response.json"), value(responseBody), StandardCharsets.UTF_8);
-      Files.writeString(
-          root.resolve(prefix + "-meta.txt"),
-          """
-          timestamp=%s
-          caller=%s
-          uri=%s
-          status=%d
-          request_file=%s-request.json
-          response_file=%s-response.json
-          """.formatted(OffsetDateTime.now(), value(caller), uri, statusCode, prefix, prefix),
-          StandardCharsets.UTF_8
+      recordTo(
+          outputRoot(), modelType, caller, purpose, model, uri, requestBody, statusCode, responseBody
       );
     } catch (IOException ignored) {
-      // Raw LLM capture is diagnostic only; never fail the recognition flow because logging failed.
+      // Raw model capture is diagnostic only; never fail recognition because logging failed.
     }
+  }
+
+  static String recordTo(
+      Path root,
+      String modelType,
+      String caller,
+      String purpose,
+      String model,
+      URI uri,
+      String requestBody,
+      int statusCode,
+      String responseBody
+  ) throws IOException {
+    Files.createDirectories(root);
+    int sequence = SEQUENCE.incrementAndGet();
+    String safeModelType = sanitize(modelType);
+    String safeCaller = sanitize(caller);
+    String prefix = "%03d-%s-%s".formatted(sequence, safeModelType, safeCaller);
+    TokenUsage usage = tokenUsage(responseBody);
+    Files.writeString(root.resolve(prefix + "-request.json"), value(requestBody), StandardCharsets.UTF_8);
+    Files.writeString(root.resolve(prefix + "-response.json"), value(responseBody), StandardCharsets.UTF_8);
+    Files.writeString(
+        root.resolve(prefix + "-meta.txt"),
+        """
+        timestamp=%s
+        model_type=%s
+        model=%s
+        caller=%s
+        purpose=%s
+        uri=%s
+        status=%d
+        input_tokens=%s
+        output_tokens=%s
+        total_tokens=%s
+        request_file=%s-request.json
+        response_file=%s-response.json
+        """.formatted(
+            OffsetDateTime.now(), value(modelType), value(model), value(caller), value(purpose), uri, statusCode,
+            usage.inputTokens(), usage.outputTokens(), usage.totalTokens(), prefix, prefix
+        ),
+        StandardCharsets.UTF_8
+    );
+    return prefix;
+  }
+
+  private static TokenUsage tokenUsage(String responseBody) {
+    if (blank(responseBody)) {
+      return TokenUsage.unavailable();
+    }
+    try {
+      JsonNode usage = OBJECT_MAPPER.readTree(responseBody).path("usage");
+      return new TokenUsage(
+          tokenValue(usage, "prompt_tokens", "input_tokens"),
+          tokenValue(usage, "completion_tokens", "output_tokens"),
+          tokenValue(usage, "total_tokens")
+      );
+    } catch (IOException | RuntimeException ignored) {
+      return TokenUsage.unavailable();
+    }
+  }
+
+  private static String tokenValue(JsonNode usage, String... names) {
+    if (usage == null || !usage.isObject()) {
+      return "unavailable";
+    }
+    for (String name : names) {
+      JsonNode value = usage.path(name);
+      if (value.isIntegralNumber()) {
+        return value.asText();
+      }
+    }
+    return "unavailable";
   }
 
   private static Path outputRoot() {
@@ -85,5 +157,11 @@ public final class LlmRawExchangeRecorder {
 
   private static String value(String value) {
     return value == null ? "" : value;
+  }
+
+  private record TokenUsage(String inputTokens, String outputTokens, String totalTokens) {
+    private static TokenUsage unavailable() {
+      return new TokenUsage("unavailable", "unavailable", "unavailable");
+    }
   }
 }

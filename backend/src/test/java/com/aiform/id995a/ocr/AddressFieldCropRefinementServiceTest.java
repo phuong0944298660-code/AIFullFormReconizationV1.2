@@ -576,7 +576,7 @@ class AddressFieldCropRefinementServiceTest {
     if (!Files.exists(path)) {
       path = Path.of("docs", "5.12_full_tests", "陈丽萍-407.pdf");
     }
-    return new BaiduOcrPageRenderer(BaiduOcrPageRenderer.DEFAULT_RENDER_DPI, 0)
+    return new DocumentPageRenderer(DocumentPageRenderer.DEFAULT_RENDER_DPI, 0)
         .render(path.getFileName().toString(), "application/pdf", Files.readAllBytes(path))
         .get(0);
   }
@@ -592,11 +592,11 @@ class AddressFieldCropRefinementServiceTest {
 
   private LlmModelProfile modelProfile() {
     return new LlmModelProfile(
-        "dashscope-qwen3.6-plus",
-        "qwen3.6-plus",
-        "qwen3.6-plus",
-        "DashScope OpenAI-compatible",
-        "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "local-qwen3.6-35b-a3b",
+        "本地模型",
+        "Qwen3.6-35B-A3B",
+        "OpenAI-compatible primary gateway",
+        "https://apie.zhisuaninfo.com/v1",
         "test-key",
         true,
         false,

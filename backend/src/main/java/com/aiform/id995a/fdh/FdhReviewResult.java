@@ -1,6 +1,5 @@
 package com.aiform.id995a.fdh;
 
-import com.aiform.id995a.ocr.ParallelRecognitionOutput;
 import java.util.List;
 
 public record FdhReviewResult(
@@ -159,10 +158,7 @@ public record FdhReviewResult(
       List<Integer> evidenceBbox,
       String locationStatus,
       String suggestedValue,
-      String issue,
-      String modelAgreement,
-      String conflictType,
-      List<ParallelRecognitionOutput> modelOutputs
+      String issue
   ) {
 
     public FieldSource(
@@ -177,7 +173,7 @@ public record FdhReviewResult(
     ) {
       this(documentName, filename, section, fieldName, value, confidence, snapshotText, snapshotDataUrl,
           "", 0, 0, 0, List.of(), 0, null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run",
-          "", "", "", "", List.of());
+          "", "");
     }
 
     public FieldSource(
@@ -198,7 +194,7 @@ public record FdhReviewResult(
     ) {
       this(documentName, filename, section, fieldName, value, confidence, snapshotText, snapshotDataUrl,
           materialId, pageNo, imageWidth, imageHeight, bbox, locatorConfidence,
-          null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run", "", "", "", "", List.of());
+          null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run", "", "");
     }
 
     public FieldSource(
@@ -228,7 +224,7 @@ public record FdhReviewResult(
       this(documentName, filename, section, fieldName, value, confidence, snapshotText, snapshotDataUrl,
           materialId, pageNo, imageWidth, imageHeight, bbox, locatorConfidence,
           verificationScore, verificationStatus, judgeObservedValue, verificationReason,
-          labelBbox, valueBbox, evidenceBbox, locationStatus, "", "", "", "", List.of());
+          labelBbox, valueBbox, evidenceBbox, locationStatus, "", "");
     }
 
     public FieldSource {
@@ -256,6 +252,8 @@ public record FdhReviewResult(
       valueBbox = valueBbox == null ? List.of() : List.copyOf(valueBbox);
       evidenceBbox = evidenceBbox == null ? List.of() : List.copyOf(evidenceBbox);
       locationStatus = locationStatus == null || locationStatus.isBlank() ? "not_run" : locationStatus;
+      suggestedValue = suggestedValue == null ? "" : suggestedValue;
+      issue = issue == null ? "" : issue;
     }
   }
 
@@ -339,10 +337,7 @@ public record FdhReviewResult(
       List<Integer> evidenceBbox,
       String locationStatus,
       String suggestedValue,
-      String issue,
-      String modelAgreement,
-      String conflictType,
-      List<ParallelRecognitionOutput> modelOutputs
+      String issue
   ) {
 
     public DocumentField(
@@ -351,7 +346,7 @@ public record FdhReviewResult(
         String status
     ) {
       this(label, value, status, 0, 0, 0, 0, List.of(), 0,
-          null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run", "", "", "", "", List.of());
+          null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run", "", "");
     }
 
     public DocumentField(
@@ -366,7 +361,7 @@ public record FdhReviewResult(
         double locatorConfidence
     ) {
       this(label, value, status, confidence, pageNo, imageWidth, imageHeight, bbox, locatorConfidence,
-          null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run", "", "", "", "", List.of());
+          null, "not_run", "", "", List.of(), List.of(), List.of(), "not_run", "", "");
     }
 
     public DocumentField(
@@ -390,7 +385,7 @@ public record FdhReviewResult(
     ) {
       this(label, value, status, confidence, pageNo, imageWidth, imageHeight, bbox, locatorConfidence,
           verificationScore, verificationStatus, judgeObservedValue, verificationReason,
-          labelBbox, valueBbox, evidenceBbox, locationStatus, "", "", "", "", List.of());
+          labelBbox, valueBbox, evidenceBbox, locationStatus, "", "");
     }
 
     public DocumentField {
@@ -415,14 +410,6 @@ public record FdhReviewResult(
       locationStatus = locationStatus == null || locationStatus.isBlank() ? "not_run" : locationStatus;
       suggestedValue = suggestedValue == null ? "" : suggestedValue;
       issue = issue == null ? "" : issue;
-      modelAgreement = modelAgreement == null ? "" : modelAgreement;
-      conflictType = conflictType == null ? "" : conflictType;
-      modelOutputs = modelOutputs == null ? List.of() : List.copyOf(modelOutputs);
-      suggestedValue = suggestedValue == null ? "" : suggestedValue;
-      issue = issue == null ? "" : issue;
-      modelAgreement = modelAgreement == null ? "" : modelAgreement;
-      conflictType = conflictType == null ? "" : conflictType;
-      modelOutputs = modelOutputs == null ? List.of() : List.copyOf(modelOutputs);
     }
   }
 }

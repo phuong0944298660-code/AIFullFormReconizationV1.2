@@ -16,7 +16,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -26,7 +25,7 @@ public class OcrDemoService {
 
   private static final Logger log = LoggerFactory.getLogger(OcrDemoService.class);
 
-  private final BaiduOcrPageRenderer pageRenderer;
+  private final DocumentPageRenderer pageRenderer;
   private final StructuredExtractionGateway structuredExtractionGateway;
   private final StructuredFieldEvidenceService structuredFieldEvidenceService;
   private final AddressFieldCropRefinementService addressFieldCropRefinementService;
@@ -38,10 +37,9 @@ public class OcrDemoService {
   private final TemplateClassificationLogService templateClassificationLogService;
   private final LlmModelRegistry llmModelRegistry;
   private final FieldRegionLocationGateway fieldRegionLocationGateway;
-  private final ParallelStructuredExtractionService parallelStructuredExtractionService;
 
   public OcrDemoService(
-      BaiduOcrPageRenderer pageRenderer,
+      DocumentPageRenderer pageRenderer,
       StructuredExtractionGateway structuredExtractionGateway,
       StructuredFieldEvidenceService structuredFieldEvidenceService,
       AddressFieldCropRefinementService addressFieldCropRefinementService,
@@ -52,8 +50,7 @@ public class OcrDemoService {
       TemplateDetectionService templateDetectionService,
       TemplateClassificationLogService templateClassificationLogService,
       LlmModelRegistry llmModelRegistry,
-      FieldRegionLocationGateway fieldRegionLocationGateway,
-      ParallelStructuredExtractionService parallelStructuredExtractionService
+      FieldRegionLocationGateway fieldRegionLocationGateway
   ) {
     this.pageRenderer = pageRenderer;
     this.structuredExtractionGateway = structuredExtractionGateway;
@@ -67,7 +64,6 @@ public class OcrDemoService {
     this.templateClassificationLogService = templateClassificationLogService;
     this.llmModelRegistry = llmModelRegistry;
     this.fieldRegionLocationGateway = fieldRegionLocationGateway;
-    this.parallelStructuredExtractionService = parallelStructuredExtractionService;
   }
 
   public OcrDemoResponse recognize(String filename, String contentType, byte[] fileBytes) throws IOException {
@@ -145,12 +141,6 @@ public class OcrDemoService {
         : template;
     LlmModelProfile modelProfile = llmModelRegistry.resolve(modelId);
     ExtractionProgressListener listener = progressListener == null ? ExtractionProgressListener.NOOP : progressListener;
-    CompletableFuture<StructuredExtractionResult> parallelExtraction = parallelStructuredExtractionService.start(
-        normalizedFilename,
-        safePages,
-        refineFieldCrops,
-        resolvedTemplate
-    );
     StructuredExtractionResult extraction = refineFieldCrops
         ? structuredExtractionGateway.extract(normalizedFilename, safePages, listener, modelProfile)
         : structuredExtractionGateway.extractAllowingPartialPages(normalizedFilename, safePages, listener, modelProfile);
@@ -218,7 +208,6 @@ public class OcrDemoService {
         98
     );
     JsonNode finalStructuredData = withTemplateMetadata(structuredData, resolvedTemplate);
-    finalStructuredData = parallelStructuredExtractionService.merge(finalStructuredData, parallelExtraction);
     templateClassificationLogService.record(normalizedFilename, resolvedTemplate);
     Map<Integer, List<StructuredFieldDetail>> fieldDetailsByPage =
         structuredFieldEvidenceService.buildFieldDetails(finalStructuredData, safePages);
@@ -252,7 +241,6 @@ public class OcrDemoService {
         .toList();
     EngineStatus status = new EngineStatus(
         modelProfile.label(),
-        false,
         List.copyOf(statusMessages)
     );
     return new OcrDemoResponse(

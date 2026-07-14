@@ -18,6 +18,15 @@ class QwenFieldJudgeClientTest {
   private final ObjectMapper objectMapper = new ObjectMapper();
 
   @Test
+  void defaultsToGatewayRegisteredModelId() {
+    FieldJudgeProperties properties = new FieldJudgeProperties(
+        true, "enforce", "https://token.zhisuaninfo.com/v1", "test-key", "", 20, 80, 1
+    );
+
+    assertThat(properties.model()).isEqualTo("Qwen3.6-Flash");
+  }
+
+  @Test
   void sendsNonThinkingVisionRequestAndParsesStructuredObservation() throws Exception {
     AtomicReference<String> requestBody = new AtomicReference<>();
     HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -48,7 +57,7 @@ class QwenFieldJudgeClientTest {
       assertThat(observation.reasonZhHant()).isEqualTo("填寫值完全一致。");
 
       JsonNode request = objectMapper.readTree(requestBody.get());
-      assertThat(request.path("model").asText()).isEqualTo("qwen3.6-flash");
+      assertThat(request.path("model").asText()).isEqualTo("Qwen3.6-Flash");
       assertThat(request.path("enable_thinking").asBoolean()).isFalse();
       assertThat(request.path("temperature").asDouble()).isZero();
       assertThat(request.path("response_format").path("type").asText()).isEqualTo("json_object");
@@ -166,7 +175,7 @@ class QwenFieldJudgeClientTest {
         "shadow",
         "http://127.0.0.1:" + server.getAddress().getPort(),
         "test-key",
-        "qwen3.6-flash",
+        "Qwen3.6-Flash",
         2,
         85,
         1

@@ -15,13 +15,13 @@ import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.junit.jupiter.api.Test;
 
-class BaiduOcrPageRendererTest {
+class DocumentPageRendererTest {
 
   @Test
   void rendersJbig2ScannedPdfPagesWithVisibleContent() throws Exception {
     Path samplePdf = findSamplePdf();
 
-    BaiduOcrPageRenderer renderer = new BaiduOcrPageRenderer(120);
+    DocumentPageRenderer renderer = new DocumentPageRenderer(120);
     List<RenderedOcrPage> pages = renderer.render(
         samplePdf.getFileName().toString(),
         "application/pdf",
@@ -34,7 +34,7 @@ class BaiduOcrPageRendererTest {
 
   @Test
   void usesConservativeDefaultDpiWhenLongSideLimitIsDisabled() throws Exception {
-    BaiduOcrPageRenderer renderer = new BaiduOcrPageRenderer(BaiduOcrPageRenderer.DEFAULT_RENDER_DPI, 0);
+    DocumentPageRenderer renderer = new DocumentPageRenderer(DocumentPageRenderer.DEFAULT_RENDER_DPI, 0);
 
     List<RenderedOcrPage> pages = renderer.render(
         "letter.pdf",
@@ -49,7 +49,7 @@ class BaiduOcrPageRendererTest {
 
   @Test
   void keepsPdfAtConfiguredThreeHundredDpiWhenLongSideLimitIsDisabled() throws Exception {
-    BaiduOcrPageRenderer renderer = new BaiduOcrPageRenderer(300, 0);
+    DocumentPageRenderer renderer = new DocumentPageRenderer(300, 0);
 
     List<RenderedOcrPage> pages = renderer.render(
         "letter.pdf",

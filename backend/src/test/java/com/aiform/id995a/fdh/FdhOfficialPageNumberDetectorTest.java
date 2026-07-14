@@ -7,7 +7,6 @@ import com.aiform.id995a.llm.LlmModelRegistry;
 import com.aiform.id995a.llm.OfficialPageNumberRecognitionGateway;
 import com.aiform.id995a.llm.OfficialPageNumberRecognitionResult;
 import com.aiform.id995a.llm.LlmProperties;
-import com.aiform.id995a.llm.DashScopeProperties;
 import com.aiform.id995a.ocr.DocumentTemplate;
 import com.aiform.id995a.ocr.RenderedOcrPage;
 import java.io.IOException;
@@ -148,8 +147,7 @@ class FdhOfficialPageNumberDetectorTest {
 
   private LlmModelRegistry registry() {
     return new LlmModelRegistry(
-        new LlmProperties(true, "https://apie.zhisuaninfo.com/v1", "test-key", "Qwen3.6-35B-A3B", 4096, 60, 4),
-        new DashScopeProperties("", "", "", false)
+        new LlmProperties(true, "https://apie.zhisuaninfo.com/v1", "test-key", "Qwen3.6-35B-A3B", 4096, 60, 4)
     );
   }
 

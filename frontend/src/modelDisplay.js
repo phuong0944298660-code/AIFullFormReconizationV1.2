@@ -1,31 +1,23 @@
-export const LOCAL_MODEL_LABEL = '本地模型'
-export const CLOUD_NATIVE_MODEL_LABEL = '云原生模型'
-
+export const LOCAL_MODEL_LABEL = '主模型'
 const MODEL_LABELS_BY_ID = new Map([
-  ['local-qwen3.6-35b-a3b', LOCAL_MODEL_LABEL],
-  ['dashscope-qwen3.6-35b-a3b', CLOUD_NATIVE_MODEL_LABEL]
+  ['local-qwen3.6-35b-a3b', LOCAL_MODEL_LABEL]
 ])
 
 const LEGACY_LABELS = new Map([
   ['Qwen3.6-35B-A3B 视觉结构化', LOCAL_MODEL_LABEL],
-  ['Qwen3.6-35B-A3B（官方原生）', CLOUD_NATIVE_MODEL_LABEL],
   ['Qwen3.6-35B-A3B multimodal structured extraction', LOCAL_MODEL_LABEL],
-  ['qwen3.6-35b-a3b multimodal structured extraction', CLOUD_NATIVE_MODEL_LABEL],
-  ['Qwen3.6-35B-A3B', LOCAL_MODEL_LABEL],
-  ['qwen3.6-35b-a3b', CLOUD_NATIVE_MODEL_LABEL]
+  ['Qwen3.6-35B-A3B', LOCAL_MODEL_LABEL]
 ])
 
-const HIDDEN_MODEL_KEYS = new Set(['qwen3.6-plus'])
+const SUPPORTED_MODEL_IDS = new Set(['local-qwen3.6-35b-a3b'])
 
 function normalizedModelKey(value) {
   return String(value || '').trim().toLowerCase()
 }
 
 export function isHiddenModelOption(model) {
-  const values = typeof model === 'string'
-    ? [model]
-    : [model?.id, model?.model, model?.label, model?.name]
-  return values.some((value) => HIDDEN_MODEL_KEYS.has(normalizedModelKey(value)))
+  const id = typeof model === 'string' ? model : model?.id
+  return !SUPPORTED_MODEL_IDS.has(normalizedModelKey(id))
 }
 
 export function modelDisplayLabel(model, fallback = LOCAL_MODEL_LABEL) {

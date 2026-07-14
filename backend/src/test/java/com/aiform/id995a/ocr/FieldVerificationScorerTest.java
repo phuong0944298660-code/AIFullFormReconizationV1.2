@@ -57,6 +57,26 @@ class FieldVerificationScorerTest {
   }
 
   @Test
+  void requiresScoreStrictlyGreaterThanThresholdToPass() {
+    FieldVerificationScorer boundaryScorer = new FieldVerificationScorer(80);
+
+    FieldVerification result = boundaryScorer.score(
+        "Hong Kong Polytechnic University",
+        new FieldJudgeObservation(
+            "available",
+            "The Hong Kong Polytechnic University",
+            "semantic_equal",
+            "clear",
+            "complete",
+            "same institution"
+        )
+    );
+
+    assertEquals(80, result.score());
+    assertEquals("review", result.status());
+  }
+
+  @Test
   void rejectsContradictoryExactClaim() {
     FieldVerification result = scorer.score(
         "A123456(7)",

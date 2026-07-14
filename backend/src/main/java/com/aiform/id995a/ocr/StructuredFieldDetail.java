@@ -33,10 +33,7 @@ public record StructuredFieldDetail(
     String verificationReason,
     String scoreSource,
     String suggestedValue,
-    String issue,
-    String modelAgreement,
-    String conflictType,
-    List<ParallelRecognitionOutput> modelOutputs
+    String issue
 ) {
 
   public StructuredFieldDetail {
@@ -70,9 +67,6 @@ public record StructuredFieldDetail(
     scoreSource = clean(scoreSource, "recognition_confidence");
     suggestedValue = clean(suggestedValue, "");
     issue = clean(issue, "");
-    modelAgreement = clean(modelAgreement, "");
-    conflictType = clean(conflictType, "");
-    modelOutputs = modelOutputs == null ? List.of() : List.copyOf(modelOutputs);
   }
 
   public StructuredFieldDetail(
@@ -94,7 +88,7 @@ public record StructuredFieldDetail(
         ocrText, ocrConfidence, ocrStatus, characters,
         confidence, bbox, bbox, bbox, bbox,
         "legacy", "legacy", 0, "", "not_run", "", "", null, "not_run", "", "recognition_confidence",
-        "", "", "", "", List.of()
+        "", ""
     );
   }
 
@@ -112,16 +106,13 @@ public record StructuredFieldDetail(
       String ocrStatus,
       List<FieldCharacterEvidence> characters,
       String suggestedValue,
-      String issue,
-      String modelAgreement,
-      String conflictType,
-      List<ParallelRecognitionOutput> modelOutputs
+      String issue
   ) {
     this(page, path, label, value, displayValue, confidence, bbox, snapshotDataUrl,
         ocrText, ocrConfidence, ocrStatus, characters,
         confidence, bbox, bbox, bbox, bbox,
         "legacy", "legacy", 0, "", "not_run", "", "", null, "not_run", "", "recognition_confidence",
-        suggestedValue, issue, modelAgreement, conflictType, modelOutputs);
+        suggestedValue, issue);
   }
 
   public StructuredFieldDetail(
@@ -159,7 +150,7 @@ public record StructuredFieldDetail(
         recognitionConfidence, recognitionBbox, labelBbox, valueBbox, evidenceBbox,
         locationStatus, locationMethod, locationScore, locationReason, judgeStatus, judgeObservedValue,
         judgeMatchType, verificationScore, verificationStatus, verificationReason, scoreSource,
-        "", "", "", "", List.of());
+        "", "");
   }
 
   private static List<Integer> copy(List<Integer> value) {

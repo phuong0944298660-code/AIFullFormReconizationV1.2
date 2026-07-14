@@ -27,8 +27,9 @@
 当前 demo 范围：
 - 前端：Vue 3 + Vite，目录为 `frontend/`。
 - 后端：Java 17 + Spring Boot，目录为 `backend/`。
-- 识别与结构化提取：默认使用本地 OpenAI-compatible 多模态 LLM。
-- OCR sidecar：目录为 `ocr-service/`，本地启动默认自动启动；使用 `-NoSidecar` 可显式禁用。
+- 主识别与结构化提取：仅使用 `https://apie.zhisuaninfo.com/v1` 的 `Qwen3.6-35B-A3B`，负责页面结构化字段、值和 `valueBbox`；不请求或输出字段置信度，也不再存在第二条并行识别分路。
+- 字段名定位：`ocr-service/` 使用本地 PP-OCRv6 Tiny（det + rec）定位 `labelBbox`；重复字段名结合主模型 `valueBbox` 选择最近且几何关系合理的标签框。本地启动默认自动启动，使用 `-NoSidecar` 可显式禁用。
+- 字段裁判：仅使用 `https://token.zhisuaninfo.com/v1/chat/completions` 的精确模型 ID `Qwen3.6-Flash`（网关区分大小写）识别 `valueBbox` 裁剪图并给出一致性分数。
 - 当前默认演示流程：学生出入境 IANG 应届毕业生在港首次申请。
 - 可切换演示流程：FDH Entry Visa 外籍家庭佣工入境审核。
 - 主要用户流程：申请材料上传 -> 文档解析识别 -> 字段结构化提取与归一 -> 跨档智能校验 -> 自动生成审核结论。
@@ -56,7 +57,9 @@
 .\stop-local.ps1
 ```
 
-启动脚本会从 `llm.local.cmd` 读取本地模型凭据，也会读取可选的 `baidu-ocr.local.cmd`。不要提交真实 API key 或本地凭据文件。
+启动脚本会从 `llm.local.cmd` 读取主模型和字段裁判凭据。不要提交真实 API key 或本地凭据文件。
+
+模型调用原始日志通过 `LLM_RAW_LOG_DIR` 指定输出目录，或通过 `LLM_RAW_LOG_ENABLED=true` 启用默认输出目录。每次调用输出 request、response、meta 三个文件；文件名前缀按 `primary-llm`、`field-judge`、`ppocr-tiny` 区分模型。LLM 的 meta 记录调用用途以及网关返回的输入、输出和总 token；PP-OCRv6 Tiny 不使用 token，meta 中对应值为 `unavailable`，并在 request 摘要中记录图片数量和字节数。
 
 ## 本地服务启动排障经验
 
@@ -84,6 +87,7 @@ mvn -DskipTests package
 ```powershell
 Invoke-WebRequest -UseBasicParsing http://127.0.0.1:18083/api/health
 Invoke-RestMethod http://127.0.0.1:18083/api/llm/models
+Invoke-WebRequest -UseBasicParsing http://127.0.0.1:18092/health
 Invoke-WebRequest -UseBasicParsing http://127.0.0.1:5197/
 ```
 
@@ -97,14 +101,14 @@ curl.exe -sS -X POST http://127.0.0.1:18083/api/fdh/review/jobs `
 
 正常应在 1 秒内返回 `jobId`。如果直连也超时，问题在后端服务、端口进程、旧 jar 或 multipart 入口，不在前端轮询。
 
-并行 LLM / 字段对比逻辑修改后，不能只跑测试或 `mvn test`；需要重新 `mvn -DskipTests package` 并重启后端，否则前端不会看到新的 `review` 报警逻辑。
+字段定位或裁判逻辑修改后，不能只跑测试或 `mvn test`；需要重新 `mvn -DskipTests package` 并重启后端与 OCR sidecar，否则前端不会看到新的 `labelBbox`、裁判分数和 `review` 状态。
 
-并行 LLM 识别的控制变量约束：
-- 主链路和并行分路必须视为同一条识别流水线跑两次，唯一允许的变量是使用的 LLM model/profile。
-- 两路必须使用同一套结构化提取入口、提示词构造规则、页面输入、模板检测结果、字段 evidence 约定、二次裁剪补识别、普通字段 crop review、地址字段 crop review、checkbox/declaration crop review、声明页 footer 恢复、涂改过滤、模板 metadata 注入和比对前归一逻辑。
-- 学生 IANG 与 FDH 两大场景新增或修改任何场景化提示词、模板恢复规则、字段后处理或归一规则时，必须同步适用于主链路和并行分路；不要只增强主模型路径。
-- 并行比对只应反映模型识别差异，不应混入链路差异。如果发现一边大量 `Not recognised`，先排查两路是否使用了不同的 prompt、后处理、模板信息或归一流程，再判断是否是模型能力差异。
-- 前端展示可隐藏模型名称，但后端调试和测试必须能证明两路除模型 profile 外处理步骤一致。
+当前识别链路约束：
+- 主模型只运行一条完整结构化识别链路；不要重新引入第二模型整页识别或并行结果比对。
+- 主模型 `valueBbox` 用于裁判截图和 PP-OCRv6 Tiny 重复标签消歧；页面高亮使用 PP-OCRv6 Tiny 返回的 `labelBbox`，不使用值框作为字段名高亮框。
+- 字段裁判仅对申请人填写且存在可裁剪 `valueBbox` 的字段运行。无值框或结构化兜底字段显示 `LLM无valueBBox`；非申请人填写值显示 `无需裁决`；裁判请求失败显示 `裁判调用未成功`。
+- 裁判分数规则：完全一致且清晰 `100`；格式归一后一致 `90`；语义一致 `80`；截图不完整 `40`；无法辨认 `30`；明确不一致 `0-20`。只有分数严格大于 `80` 才通过，`80` 仍为 `review`。
+- 前端字段评分只展示裁判模型返回的 `verificationScore`，不得回退或混用主模型字段置信度、PP-OCR 定位置信度或其他内部质量分。
 
 ## 服务器 Docker 部署
 
@@ -117,7 +121,7 @@ curl.exe -sS -X POST http://127.0.0.1:18083/api/fdh/review/jobs `
 服务器 Docker 服务：
 - 前端：`http://192.168.30.205:5197`
 - 后端：`http://192.168.30.205:18083`
-- Docker Compose 默认不启动 `ocr-service`，并设置 `FIELD_OCR_ENABLED=false`。
+- Docker Compose 默认启动 `ocr-service`，并设置 `FIELD_OCR_ENABLED=true`；后端通过 `http://ocr-service:18092` 调用本地 PP-OCRv6 Tiny。
 - `frontend/nginx.conf` 需要保留 `client_max_body_size 150m;`，否则较大的 PDF 上传会被 nginx 拦截并返回 `413 Request Entity Too Large`。
 
 首次拉取：
@@ -141,12 +145,14 @@ git pull origin master
 
 ```bash
 LLM_BASE_URL=https://apie.zhisuaninfo.com/v1
-LLM_MODEL=Qwen3.6-27b
+LLM_MODEL=Qwen3.6-35B-A3B
 LLM_API_KEY=replace-with-real-key
-DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
-DASHSCOPE_MODEL=qwen3.6-35b-a3b
-DASHSCOPE_API_KEY=replace-with-real-key
-DASHSCOPE_ENABLE_THINKING=true
+FIELD_JUDGE_ENABLED=true
+FIELD_JUDGE_MODE=enforce
+FIELD_JUDGE_BASE_URL=https://token.zhisuaninfo.com/v1
+FIELD_JUDGE_MODEL=Qwen3.6-Flash
+FIELD_JUDGE_API_KEY=replace-with-real-key
+FIELD_JUDGE_PASS_THRESHOLD=80
 ```
 
 启动或重建：
@@ -160,7 +166,7 @@ docker compose up -d --build
 
 ```bash
 cd /opt/Immd
-docker compose up -d --force-recreate backend frontend
+docker compose up -d --force-recreate ocr-service backend frontend
 ```
 
 检查：
@@ -168,7 +174,8 @@ docker compose up -d --force-recreate backend frontend
 ```bash
 docker compose ps
 curl http://127.0.0.1:18083/api/health
-docker exec baidu-full-page-ocr-backend printenv | grep -E 'LLM_|DASHSCOPE_|FIELD_OCR' | sed -E 's/(API_KEY=).+/\1***MASKED***/'
+curl http://127.0.0.1:18092/health
+docker exec baidu-full-page-ocr-backend printenv | grep -E 'LLM_|FIELD_JUDGE_|FIELD_OCR' | sed -E 's/(API_KEY=).+/\1***MASKED***/'
 ```
 
 如果页面能上传但识别结果只有 `Source file` / `Total pages`，优先检查 `LLM_API_KEY` 是否仍是占位符、模型服务是否返回 `401` / `403` / `timeout`：
@@ -223,7 +230,7 @@ FDH demo 的最终通过 / 不通过范围：
 - 如果字段经历纠偏或裁定步骤，需要展示“建议采用值”，但字段状态仍保持为 `review`，除非对应流程明确允许语义一致自动通过。
 - 不要把经历纠偏的字段自动改成 `pass`。
 - 明显跨文件不一致应作为阻断或待复核问题，具体取决于置信度和差异严重程度。
-- 低置信度、不可读、或轻微 OCR 差异，应进入 `review`，不要自动通过。
+- 裁判低分、不可读或轻微 OCR 差异，应进入 `review`，不要自动通过。
 
 核验结果页是本 demo 的 Minutes 草拟能力：
 - 整体结论与案件摘要合并展示。

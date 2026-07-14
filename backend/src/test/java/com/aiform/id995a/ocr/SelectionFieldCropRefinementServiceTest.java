@@ -848,7 +848,7 @@ class SelectionFieldCropRefinementServiceTest {
           .findFirst()
           .orElseThrow();
     }
-    return new BaiduOcrPageRenderer(BaiduOcrPageRenderer.DEFAULT_RENDER_DPI, 0)
+    return new DocumentPageRenderer(DocumentPageRenderer.DEFAULT_RENDER_DPI, 0)
         .render(path.getFileName().toString(), "application/pdf", Files.readAllBytes(path))
         .get(0);
   }
@@ -858,7 +858,7 @@ class SelectionFieldCropRefinementServiceTest {
     if (!Files.exists(path)) {
       path = Path.of("docs", "5.12_full_tests", "黄晓兰A.pdf");
     }
-    return new BaiduOcrPageRenderer(BaiduOcrPageRenderer.DEFAULT_RENDER_DPI, 0)
+    return new DocumentPageRenderer(DocumentPageRenderer.DEFAULT_RENDER_DPI, 0)
         .render(path.getFileName().toString(), "application/pdf", Files.readAllBytes(path))
         .get(0);
   }
@@ -878,7 +878,7 @@ class SelectionFieldCropRefinementServiceTest {
           .findFirst()
           .orElseThrow();
     }
-    return new BaiduOcrPageRenderer(BaiduOcrPageRenderer.DEFAULT_RENDER_DPI, maxImageLongSide)
+    return new DocumentPageRenderer(DocumentPageRenderer.DEFAULT_RENDER_DPI, maxImageLongSide)
         .render(path.getFileName().toString(), "application/pdf", Files.readAllBytes(path))
         .get(0);
   }

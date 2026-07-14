@@ -1233,49 +1233,6 @@ svg {
   max-width: 100%;
 }
 
-.document-parallel-alert {
-  margin: 8px 10px 10px;
-  border: 1px solid #f5c26b;
-  border-radius: 8px;
-  background: #fffbeb;
-  display: grid;
-  gap: 8px;
-  padding: 10px;
-}
-
-.document-parallel-alert strong {
-  color: #78350f;
-  font-size: 13px;
-}
-
-.document-parallel-alert p {
-  margin-top: 2px;
-  color: #92400e;
-  font-size: 12px;
-  font-weight: 800;
-  line-height: 1.45;
-}
-
-.document-parallel-alert-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.document-parallel-alert-list span {
-  min-width: 0;
-  max-width: 100%;
-  border: 1px solid #f59e0b;
-  border-radius: 999px;
-  background: #fff;
-  color: #78350f;
-  padding: 5px 8px;
-  font-size: 12px;
-  font-weight: 900;
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-
 .document-field-row {
   width: 100%;
   min-width: 0;
@@ -2584,8 +2541,7 @@ svg {
   .template-status-legend,
   .upload-grid,
   .review-workspace,
-  .field-card-body,
-  .document-parallel-options {
+  .field-card-body {
     grid-template-columns: 1fr;
   }
 
@@ -2733,9 +2689,6 @@ svg {
     overflow: hidden;
   }
 
-  .document-parallel-alert,
-  .document-parallel-box,
-  .document-parallel-suggestion,
   .issue-box {
     overflow-wrap: anywhere;
     word-break: break-word;

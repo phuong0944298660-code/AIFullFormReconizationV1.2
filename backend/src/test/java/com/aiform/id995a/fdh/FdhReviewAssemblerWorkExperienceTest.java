@@ -144,7 +144,7 @@ class FdhReviewAssemblerWorkExperienceTest {
         5,
         List.of(page),
         List.of(),
-        new EngineStatus("test", false, List.of()),
+        new EngineStatus("test", List.of()),
         objectMapper.readTree("""
             {
               "page_2": {

@@ -73,16 +73,27 @@ public class LlmConclusionService {
         )
     );
 
+    String requestBody = objectMapper.writeValueAsString(payload);
     HttpRequest request = HttpRequest.newBuilder()
         .uri(URI.create(trimTrailingSlash(properties.baseUrl()) + "/chat/completions"))
         .version(HttpClient.Version.HTTP_1_1)
         .timeout(Duration.ofSeconds(Math.max(5, properties.timeoutSeconds())))
         .header("Authorization", "Bearer " + properties.apiKey())
         .header("Content-Type", "application/json")
-        .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(payload)))
+        .POST(HttpRequest.BodyPublishers.ofString(requestBody))
         .build();
 
     HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    LlmRawExchangeRecorder.record(
+        "primary-llm",
+        "rule-conclusion",
+        "Format deterministic rule findings into a review conclusion",
+        properties.model(),
+        request.uri(),
+        requestBody,
+        response.statusCode(),
+        response.body()
+    );
     if (response.statusCode() < 200 || response.statusCode() >= 300) {
       throw new IOException("LLM HTTP " + response.statusCode());
     }

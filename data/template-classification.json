@@ -138,7 +138,7 @@
     "confidence" : 92,
     "structureHash" : "c8bfd73f1fd64092",
     "firstSeenAt" : "2026-05-25 15:15:54",
-    "lastSeenAt" : "2026-06-18 14:10:40"
+    "lastSeenAt" : "2026-07-14 02:10:31"
   }, {
     "filename" : "罗颖欣-B-V8.pdf",
     "templateId" : "id988b_2024_06",
@@ -148,7 +148,7 @@
     "confidence" : 90,
     "structureHash" : "f87382bbd783611c",
     "firstSeenAt" : "2026-05-25 15:15:57",
-    "lastSeenAt" : "2026-06-18 14:10:06"
+    "lastSeenAt" : "2026-07-14 02:09:49"
   }, {
     "filename" : "周咏诗-A-V6(较为潦草，暂不作人工判断准确率).pdf",
     "templateId" : "id988a_2024_06",
@@ -166,9 +166,9 @@
     "pageCount" : 4,
     "matchSource" : "visual_layout_footer",
     "confidence" : 90,
-    "structureHash" : "f4db5a90a7c862bc",
+    "structureHash" : "a5b17035d8321f6c",
     "firstSeenAt" : "2026-05-25 15:16:04",
-    "lastSeenAt" : "2026-06-02 15:20:07"
+    "lastSeenAt" : "2026-07-14 17:24:47"
   }, {
     "filename" : "ID988A_06-2024.pdf",
     "templateId" : "id988a_2024_06",
@@ -211,14 +211,14 @@
     "lastSeenAt" : "2026-07-03 15:45:38"
   }, {
     "filename" : "毕业证明.pdf",
-    "templateId" : "unknown_1p_923d4a81",
+    "templateId" : "unknown_1p_8357a6ad",
     "footerId" : "",
     "pageCount" : 1,
     "matchSource" : "structure_hash",
     "confidence" : 65,
-    "structureHash" : "923d4a81d3c1141c",
+    "structureHash" : "8357a6adab449324",
     "firstSeenAt" : "2026-06-23 11:11:21",
-    "lastSeenAt" : "2026-07-07 17:59:41"
+    "lastSeenAt" : "2026-07-14 17:16:08"
   }, {
     "filename" : "ID990A_employment_professionals_applicant_iang.pdf",
     "templateId" : "id990a_2025_01",
@@ -326,8 +326,8 @@
     "pageCount" : 10,
     "matchSource" : "pdf_text_footer",
     "confidence" : 98,
-    "structureHash" : "00056c994ea53d36",
+    "structureHash" : "0c76a9f0cef6de11",
     "firstSeenAt" : "2026-07-10 15:06:10",
-    "lastSeenAt" : "2026-07-11 12:29:33"
+    "lastSeenAt" : "2026-07-14 17:41:04"
   } ]
 }

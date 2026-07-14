@@ -94,7 +94,7 @@ class TemplateDetectionServiceTest {
   void detectsActualKnownTemplateFamiliesWithoutUsingFilename() throws Exception {
     FakeFieldRegionOcrGateway fieldOcr = new FakeFieldRegionOcrGateway(List.of());
     TemplateDetectionService service = new TemplateDetectionService(fieldOcr, objectMapper);
-    BaiduOcrPageRenderer renderer = new BaiduOcrPageRenderer(160f);
+    DocumentPageRenderer renderer = new DocumentPageRenderer(160f);
 
     DocumentTemplate template988a = detectActual(service, renderer, fileContaining("A(P1"));
     DocumentTemplate template988b = detectActual(service, renderer, fileEndingWith("B.pdf"));
@@ -148,7 +148,7 @@ class TemplateDetectionServiceTest {
     );
   }
 
-  private DocumentTemplate detectActual(TemplateDetectionService service, BaiduOcrPageRenderer renderer, Path file)
+  private DocumentTemplate detectActual(TemplateDetectionService service, DocumentPageRenderer renderer, Path file)
       throws Exception {
     byte[] bytes = Files.readAllBytes(file);
     return service.detect(

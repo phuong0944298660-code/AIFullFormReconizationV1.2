@@ -7,20 +7,17 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.aiform.id995a.llm.DashScopeProperties;
 import com.aiform.id995a.llm.ExtractionProgressListener;
 import com.aiform.id995a.llm.FieldRegionLocationGateway;
 import com.aiform.id995a.llm.LlmModelProfile;
 import com.aiform.id995a.llm.LlmModelRegistry;
 import com.aiform.id995a.llm.LlmProperties;
-import com.aiform.id995a.llm.ParallelLlmProperties;
 import com.aiform.id995a.llm.StructuredExtractionGateway;
 import com.aiform.id995a.llm.StructuredExtractionResult;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 import org.junit.jupiter.api.Test;
 
 class OcrDemoServiceReviewPathTest {
@@ -74,7 +71,6 @@ class OcrDemoServiceReviewPathTest {
     SelectionFieldCropRefinementService selectionService = mock(SelectionFieldCropRefinementService.class);
     DeclarationFooterFieldRefinementService footerService = mock(DeclarationFooterFieldRefinementService.class);
     SmudgedFieldValueFilterService smudgeService = mock(SmudgedFieldValueFilterService.class);
-    ParallelStructuredExtractionService parallelService = mock(ParallelStructuredExtractionService.class);
     when(addressService.refine(anyString(), any(), anyList(), any()))
         .thenReturn(new AddressFieldCropRefinementResult(addressReviewed, 1, 1));
     when(generalService.refine(anyString(), any(), anyList(), any()))
@@ -85,13 +81,8 @@ class OcrDemoServiceReviewPathTest {
         .thenReturn(new DeclarationFooterFieldRefinementResult(footerReviewed, 1, 1));
     when(smudgeService.filter(any()))
         .thenReturn(new SmudgedFieldValueFilterResult(filtered, 0));
-    when(parallelService.start(anyString(), anyList(), any(Boolean.class), any()))
-        .thenReturn(CompletableFuture.completedFuture(null));
-    when(parallelService.merge(any(), any()))
-        .thenAnswer(invocation -> invocation.getArgument(0));
-
     OcrDemoService service = new OcrDemoService(
-        mock(BaiduOcrPageRenderer.class),
+        mock(DocumentPageRenderer.class),
         gateway,
         new StructuredFieldEvidenceService(),
         addressService,
@@ -102,12 +93,9 @@ class OcrDemoServiceReviewPathTest {
         mock(TemplateDetectionService.class),
         mock(TemplateClassificationLogService.class),
         new LlmModelRegistry(
-            new LlmProperties(true, "https://apie.zhisuaninfo.com/v1", "test-key", "Qwen3.6-35B-A3B", 4096, 60, 4),
-            new DashScopeProperties("", "", "", false),
-            new ParallelLlmProperties(false, "", "", "", false)
+            new LlmProperties(true, "https://apie.zhisuaninfo.com/v1", "test-key", "Qwen3.6-35B-A3B", 4096, 60, 4)
         ),
-        mock(FieldRegionLocationGateway.class),
-        parallelService
+        mock(FieldRegionLocationGateway.class)
     );
 
     OcrDemoResponse response = service.recognizeRenderedForFdhReview(
